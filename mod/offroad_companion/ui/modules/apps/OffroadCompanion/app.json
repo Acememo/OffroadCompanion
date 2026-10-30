@@ -1,0 +1,20 @@
+{
+  "domElement": "<offroad-companion></offroad-companion>",
+  "name": "Offroad Companion",
+  "types": [
+    "ui.apps.categories.utility"
+  ],
+  "description": "Off-road racing on BeamNG.Earth: race courses (SCORE Baja, race.mx, OpenStreetMap circuits, your GPX/KML) with turn notes, VCPs, course signs and a dirt track with real terrain; street names and turn-by-turn directions anywhere.",
+  "css": {
+    "top": "80px",
+    "right": "20px",
+    "width": "360px",
+    "height": "620px"
+  },
+  "author": "Offroad Companion",
+  "version": "1.6.10",
+  "directive": "offroadCompanion",
+  "appName": "offroadCompanion",
+  "category": "BeamNG.Earth",
+  "isAuxiliary": false
+}

@@ -1,0 +1,149 @@
+{
+ "1": {
+  "cid": "86e4de1a4daa",
+  "heights": {
+   "auto": "c7a743bc155154da",
+   "extra": "da28e7dea9ccfa59",
+   "mild": "1f989dd18b73864e",
+   "on": "d06109f898c9eaf4"
+  },
+  "pieces": "0dceb24aced5db93",
+  "pieces_n": 77,
+  "profiles": "b022913fe92118e6",
+  "rocks": {
+   "auto": "95ef9562fd5cf7e9",
+   "auto_n": 709,
+   "plain": "f4d1e73cef376e7b",
+   "plain_n": 91
+  },
+  "seal": "T1-e642b3"
+ },
+ "2": {
+  "banks": "2b570bcf260bf92f",
+  "cid": "b6f5554f9011",
+  "heights": {
+   "auto": "c7a743bc155154da",
+   "extra": "da28e7dea9ccfa59",
+   "mild": "1f989dd18b73864e",
+   "on": "d06109f898c9eaf4"
+  },
+  "pieces": "4f6bafc851534ecd",
+  "pieces_n": 77,
+  "profiles": "b022913fe92118e6",
+  "rocks": {
+   "auto": "95ef9562fd5cf7e9",
+   "auto_n": 709,
+   "plain": "f4d1e73cef376e7b",
+   "plain_n": 91
+  },
+  "seal": "T2-ea6a63"
+ },
+ "3": {
+  "banks": "2b570bcf260bf92f",
+  "cid": "b200d88fea17",
+  "heights": {
+   "auto": "c7a743bc155154da",
+   "extra": "da28e7dea9ccfa59",
+   "mild": "1f989dd18b73864e",
+   "on": "d06109f898c9eaf4"
+  },
+  "pieces": "7fa6587a6f946b86",
+  "pieces_n": 77,
+  "profiles": "3a58cbc6d51b2fb0",
+  "rocks": {
+   "auto": "95ef9562fd5cf7e9",
+   "auto_n": 709,
+   "plain": "f4d1e73cef376e7b",
+   "plain_n": 91
+  },
+  "seal": "T3-bc2bb3",
+  "surfaces": [
+   "ce116a8db4e7ff34",
+   "9955c65c5e05656d"
+  ]
+ },
+ "4": {
+  "banks": "2b570bcf260bf92f",
+  "cid": "37ec6882af58",
+  "heights": {
+   "auto": "c407c3dee7f558fa",
+   "extra": "8ff477987ea5671a",
+   "mild": "e4d334c526fa4e1b",
+   "on": "045b25e1e127c5f7"
+  },
+  "pieces": "c819138a893ed48c",
+  "pieces_n": 77,
+  "profiles": "3a58cbc6d51b2fb0",
+  "rocks": {
+   "auto": "95ef9562fd5cf7e9",
+   "auto_n": 709,
+   "plain": "f4d1e73cef376e7b",
+   "plain_n": 91
+  },
+  "seal": "T4-1cb7c6",
+  "surfaces": [
+   "53ab4f3de04a0aae",
+   "95fb67b6fb14b4ee"
+  ]
+ },
+ "5": {
+  "banks": "2b570bcf260bf92f",
+  "cid": "0771a72efc29",
+  "heights": {
+   "auto": "26ee35f8f8b9bb08",
+   "extra": "4d3c3ffb81b59cfd",
+   "mild": "b6e2157d971727f7",
+   "on": "11b16d127ac7f871"
+  },
+  "pieces": "3872785dd9bb3846",
+  "pieces_n": 77,
+  "profiles": "3a58cbc6d51b2fb0",
+  "rocks": {
+   "auto": "95ef9562fd5cf7e9",
+   "auto_n": 709,
+   "plain": "f4d1e73cef376e7b",
+   "plain_n": 91
+  },
+  "ruts": {
+   "auto": "b38acf2fbf20bc24",
+   "extra": "b473d4d506de88b3",
+   "mild": "e12b164953686d12",
+   "on": "47f1f158478d54bc"
+  },
+  "seal": "T5-373ebc",
+  "surfaces": [
+   "53ab4f3de04a0aae",
+   "95fb67b6fb14b4ee"
+  ]
+ },
+ "6": {
+  "banks": "2b570bcf260bf92f",
+  "cid": "2cec4c55a8ed",
+  "heights": {
+   "auto": "f00c8875fe163ac5",
+   "extra": "f0972842f417fa76",
+   "mild": "b2c0798ec21b481f",
+   "on": "6220b354b14ebd46"
+  },
+  "pieces": "ab1225f222c55e18",
+  "pieces_n": 77,
+  "profiles": "3a58cbc6d51b2fb0",
+  "rocks": {
+   "auto": "95ef9562fd5cf7e9",
+   "auto_n": 709,
+   "plain": "f4d1e73cef376e7b",
+   "plain_n": 91
+  },
+  "ruts": {
+   "auto": "b38acf2fbf20bc24",
+   "extra": "b473d4d506de88b3",
+   "mild": "e12b164953686d12",
+   "on": "47f1f158478d54bc"
+  },
+  "seal": "T6-a6aa71",
+  "surfaces": [
+   "53ab4f3de04a0aae",
+   "95fb67b6fb14b4ee"
+  ]
+ }
+}
