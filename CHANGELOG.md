@@ -3,6 +3,15 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.6.11 (2026-10-30)
+
+- **BeamNG.Earth 1.7.3** is the version inside the .exe. A source install downloads 1.7.3-beta, and 1.7.2, 1.7.1,
+  1.7.0, 1.6.x and 1.5.x still work. BeamNG.Earth's development builds (1.7.2-beta.dev.37 and the like) count as the
+  release they come before.
+- Its faster world building and its fix for roads that never loaded on Windows (a lock file left behind) come with it.
+  Nothing in the companion needed changing for them.
+- The ground is the same as 1.6.9's (ground version 6).
+
 ## 1.6.10 (2026-10-30)
 
 - **New crowd sound.** The spectators now cheer and clap with mglennsound's "AF Crowd Cheer Clapping LOOP" from

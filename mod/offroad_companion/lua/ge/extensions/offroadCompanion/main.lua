@@ -33,8 +33,8 @@ M.CHECK_S = 0.2
 M.REROUTE_S = 8
 M.SETTINGS_FILE = '/settings/offroadCompanion.json'
 M.OLD_SETTINGS_FILE = '/settings/earthGps.json'   -- (the project was BeamNG.Earth GPS before 1.2.0)
-M.VERSION = '1.6.10'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
-M.BUILD = '2026-10-30 12:45'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
+M.VERSION = '1.6.11'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
+M.BUILD = '2026-10-30 21:45'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
 
 local settings = { lang = 'en', units = 'auto', ribbon = true, autoRoute = true, zoom = 600, paint = true, paintSize = 1.0,
                    clearCourse = true, clearRoute = true, streets = true, markers = 'checkpoints', ruts = 'auto', rough = 'auto',

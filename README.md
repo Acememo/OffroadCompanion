@@ -466,7 +466,7 @@ and BeamNG.drive started once.
    (you get `BeamNG.Earth\OffroadCompanion\...`). It is not a game mod: do not put it in `mods`.
 2. Run `OffroadCompanion\setup_offroad_companion.bat` once (Linux: `OffroadCompanion/setup_offroad_companion.sh`). It:
    - uses the BeamNG.Earth folder it is in (nothing is downloaded), when that is a version Offroad Companion works with
-     (1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1, 1.6.0 or 1.5.x); otherwise it downloads the source of **BeamNG.Earth 1.7.2-beta**, the version this
+     (1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1, 1.6.0 or 1.5.x); otherwise it downloads the source of **BeamNG.Earth 1.7.3-beta**, the version this
      release is made for, next to it, never simply the newest (a newer BeamNG.Earth may change what the course painter
      hooks into). If the download fails it prints the address of that release's zip to fetch by hand (then
      `setup_offroad_companion.bat --zip PATH`);
@@ -494,7 +494,7 @@ folder is renamed `companion (old - now OffroadCompanion)`: delete it when you l
 
 ### BeamNG.Earth 1.7, 1.6 and BeamMP
 
-Works with BeamNG.Earth 1.7.2 (the version the .exe has inside), 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1 and 1.6.0 (and 1.5.x). With 1.7:
+Works with BeamNG.Earth 1.7.3 (the version the .exe has inside), 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1 and 1.6.0 (and 1.5.x). With 1.7:
 
 - The cells the course runs through keep what 1.7 adds to their roads: OpenStreetMap's level crossing details (gates,
   lights or crossbucks where a road crosses a railway) and, when turned on (`BNE_GRADESEP=on`), its grade separations.
