@@ -509,8 +509,8 @@ Works with BeamNG.Earth 1.7.3 (the version the .exe has inside), 1.7.2, 1.7.1, 1
   bngEarthGroundOcGravel) so they follow it too.
 - 1.7.2 builds the road tiles' buildings and street furniture, the trees and the far buildings once per tile of a
   global grid, and the game keeps them across rebases and teleports near. When the course (or its size or terrain)
-  changes, the companion has BeamNG.Earth send the tiles round the car again, so no building or tree kept from
-  before stands on the new track. Without the course painter (BeamNG.Earth's own .exe), the in-game track is drawn
+  changes, the game drops its roads, buildings and trees round the car and asks BeamNG.Earth for them again, built for
+  the new course, so no building or tree kept from before stands on the new track. Without the course painter (BeamNG.Earth's own .exe), the in-game track is drawn
   on those tiles too, and drawn again after each rebase.
 - The cells the course runs through no longer give BeamNG.Earth's bridge finder (grade separation) the track when it
   reads their neighbours: it deadlocked the road builders where the map has short tunnels nearby (Ensenada).

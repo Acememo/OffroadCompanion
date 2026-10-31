@@ -3,6 +3,16 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.6.12 (2026-10-31)
+
+- **No more trees hanging in the sky.** Since 1.6.8, loading a course near the car had BeamNG.Earth send its trees
+  and far buildings again while the game still kept the old ones (BeamNG.Earth 1.7.2+ keeps them across rebases and
+  teleports). The new trees went into the old tiles, placed from where those were first made, and the old tiles away
+  from the car were never dropped, so far-off trees could hang in the air.
+  - Now the game itself drops its roads, buildings and trees round the car first, then asks for them again, built
+    for the new course.
+- The ground is the same as 1.6.9's (ground version 6).
+
 ## 1.6.11 (2026-10-30)
 
 - **BeamNG.Earth 1.7.3** is the version inside the .exe. A source install downloads 1.7.3-beta, and 1.7.2, 1.7.1,

@@ -154,8 +154,16 @@ check(lastHook().map.ov == nil, 'overview off')
 -- painting: the loaded course goes to the companion; it lost it, so the points go along; once painting, the roads
 -- around the car are sent again (BeamNG.Earth roads off and on)
 local roadsToggles = {}
+local earthNet = {}         -- (BeamNG.Earth's messages to its server, in order)
 package.loaded['beamngEarth/roads'] = { enabled = true }
-beamngEarth_core.setRoadsEnabled = function(on) roadsToggles[#roadsToggles + 1] = on end
+beamngEarth_core.setRoadsEnabled = function(on)
+  roadsToggles[#roadsToggles + 1] = on
+  if on then earthNet[#earthNet + 1] = 'roads_reset' end
+end
+local treesCleared = 0
+package.loaded['beamngEarth/trees'] = { geoPlacement = function() end, clear = function()
+  treesCleared = treesCleared + 1; earthNet[#earthNet + 1] = 'trees.clear' end }
+package.loaded['beamngEarth/net'] = { send = function(m) earthNet[#earthNet + 1] = m.type end }
 frames(2)
 -- no course painter in BeamNG.Earth's server (its .exe): the track is planned by the companion, drawn in the game
 local nearMsg = lastSent('paint_near')
@@ -188,6 +196,9 @@ check(lastHook().paint.mode == 'server' and require('offroadCompanion/tracks').s
   'a server painter takes over: the in-game track goes')
 frames(24)   -- (REFRESH_DELAY_S)
 check(#roadsToggles == 2 and roadsToggles[1] == false and roadsToggles[2] == true, 'roads around the car sent again')
+check(table.concat(earthNet, ',') == 'roads_reset,trees.clear,offroad_geo_reset',
+  'BeamNG.Earth 1.7.2+: its kept trees dropped too, then the server asked for them again: ' .. table.concat(earthNet, ','))
+package.loaded['beamngEarth/trees'], package.loaded['beamngEarth/net'] = nil, nil
 -- the car's place for the server's track prefetch: only to a companion that takes it
 local nPose = 0
 for _, m in ipairs(sent) do if m.type == 'pose' then nPose = nPose + 1 end end

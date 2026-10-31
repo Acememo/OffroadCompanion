@@ -33,8 +33,8 @@ M.CHECK_S = 0.2
 M.REROUTE_S = 8
 M.SETTINGS_FILE = '/settings/offroadCompanion.json'
 M.OLD_SETTINGS_FILE = '/settings/earthGps.json'   -- (the project was BeamNG.Earth GPS before 1.2.0)
-M.VERSION = '1.6.11'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
-M.BUILD = '2026-10-30 21:45'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
+M.VERSION = '1.6.12'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
+M.BUILD = '2026-10-31 16:15'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
 
 local settings = { lang = 'en', units = 'auto', ribbon = true, autoRoute = true, zoom = 600, paint = true, paintSize = 1.0,
                    clearCourse = true, clearRoute = true, streets = true, markers = 'checkpoints', ruts = 'auto', rough = 'auto',
@@ -303,13 +303,26 @@ local function gamePaint(car)
 end
 
 -- The roads around the car sent again (BeamNG.Earth: roads off and on, its roads_reset): the new course's tracks
--- appear near the car at once instead of after the next rebase.
+-- appear near the car at once instead of after the next rebase. BeamNG.Earth 1.7.2+ keeps its trees and far buildings
+-- as geotiles across rebases and teleports near (trees.lua geoPlacement): with the course painter in its server (it
+-- answers), the trees go too and the server is asked for both again (GEO_RESET, after roads_reset: earthpatch.py
+-- refresh_geo), so no tree or building kept from before stands on the new track. (1.6.8-1.6.11 had the server send
+-- them again into the trees the game kept: trees hung in the sky far off, the user 2026-10-31.)
+M.GEO_RESET = 'offroad_geo_reset'
 local function refreshRoads()
   local okR, roads = pcall(require, 'beamngEarth/roads')
   local c = earthCore()
   if not (okR and roads and roads.enabled and c and c.setRoadsEnabled) then return end
   pcall(c.setRoadsEnabled, false)
   pcall(c.setRoadsEnabled, true)
+  if not paint.painter then return end
+  local okT, trees = pcall(require, 'beamngEarth/trees')
+  local okN, net = pcall(require, 'beamngEarth/net')
+  if okT and type(trees) == 'table' and trees.geoPlacement and type(trees.clear) == 'function'
+      and okN and type(net) == 'table' and type(net.send) == 'function' then
+    pcall(trees.clear)
+    pcall(net.send, { type = M.GEO_RESET })
+  end
 end
 
 -- -- the GPS route cleared of blockages ----------------------------------------------------------------------------------

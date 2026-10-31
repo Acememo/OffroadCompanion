@@ -1618,8 +1618,14 @@ def _heartbeat():
     if not _is_server_main():       # (a worker: by now it knows it is one)
         return
     log.info("Offroad Companion course painter ready: dirt tracks along the course in %s", paintfile.course_path())
-    threading.Thread(target=_geo_refresher, name="offroad-georefresh", daemon=True).start()
+    geo_reset = False
     while True:
+        if not geo_reset:                   # (BeamNG.Earth's server module: imported by now, or on a later beat)
+            try:
+                geo_reset = _install_geo_reset()
+            except Exception as e:
+                geo_reset = True
+                log.warning("course painter: no geotile reset: %s: %s", type(e).__name__, e)
         st = _state
         c = st.current() if st else None
         if st is not None and c is not None and c.paint is not None:
@@ -1637,49 +1643,25 @@ def _heartbeat():
 
 
 # -- BeamNG.Earth 1.7.2's geotiles: what the game keeps across rebases and teleports, sent again for a new course ------
-# BeamNG.Earth 1.7.2 builds the road tiles' content (buildings, decks, street furniture), the vegetation and the far
-# buildings once per tile of a global grid ("g17_x_y") and the game keeps them across rebases and teleports near: a
-# place built before a course was loaded (or with another course, size or terrain) kept its buildings and trees on the
-# new track, and before 1.7.2 the next world shift (a teleport to the start) had built them all again. When the
-# course's ground changes, every game connected has its trackers of those made anew (as BeamNG.Earth does when its gas
-# stations setting changes), so the tiles round the car come again from the new ground, each replacing the one the
-# game kept (the content differs: its hash). Not before every process reads the new course (REFRESH_WAIT_S: a tile
-# built on the old one would be the same content and kept).
-REFRESH_WAIT_S = 2 * CHECK_S + 1.0
-REFRESH_POLL_S = 1.0
-_CONNS = None
-
-
-def _connections():
-    """BeamNG.Earth's connected games (earthd.Connection) of this server process: those made since the hook, and once
-    those made before it."""
-    global _CONNS
-    em = sys.modules.get("earthd")
-    if em is None or not hasattr(em, "Connection"):
-        return []
-    if _CONNS is None:
-        import gc
-        import weakref
-        _CONNS = weakref.WeakSet(o for o in gc.get_objects() if isinstance(o, em.Connection))
-        orig = em.Connection.__init__
-
-        def init(self, *a, **kw):
-            orig(self, *a, **kw)
-            _CONNS.add(self)
-        em.Connection.__init__ = init
-    return list(_CONNS)
+# BeamNG.Earth 1.7.2 builds the road tiles' content, the vegetation and the far buildings once per tile of a global grid
+# ("g17_x_y"), and the game keeps them across rebases and teleports near: a place built before a course was loaded (or
+# with another course, size or terrain) kept its buildings and trees on the new track. The game asks for them again
+# (main.lua refreshRoads, once every process reads the new course): it drops its roads (BeamNG.Earth's roads off and
+# on: roads_reset, the road tiles' trackers made anew) and its trees (trees.clear), then sends GEO_RESET, and this
+# server makes the vegetation's and far buildings' trackers anew, so everything round the car comes again from the new
+# ground into a game that has nothing of it.
+# (1.6.8 made the trackers anew from here, without the game dropping its tiles: a tile sent again went into the one the
+# game kept, its trees made at the old one's placement, and the tiles the old trackers had sent were never dropped:
+# trees hanging in the sky far off, the user 2026-10-31.)
+GEO_RESET = "offroad_geo_reset"
 
 
 def refresh_geo(conn):
-    """On the connection's event loop: its geotile trackers made anew (roads, vegetation, far buildings), so it is sent
-    the tiles round it again. Only what this game keeps across rebases (BeamNG.Earth 1.7.2+ geotiles): an anchor's own
-    tiles go with the next world shift as before. Returns what was made anew."""
-    em = sys.modules.get("earthd")
+    """On the connection's event loop, after the game dropped its trees and roads (GEO_RESET): its vegetation and far
+    buildings' trackers made anew (the roads': roads_reset, before it), so the tiles round it are sent again. Only the
+    geotile ones (BeamNG.Earth 1.7.2+): an anchor's own tiles go with the next world shift as before. Returns what was
+    made anew."""
     done = []
-    if getattr(conn, "road_geo", False) and em is not None and hasattr(em, "road_tracker"):
-        conn.roads.close()
-        conn.roads = em.road_tracker(conn)
-        done.append("roads")
     veg = getattr(conn, "veg", None)
     if veg is not None and getattr(veg, "geo", False):
         import vegetation as vegmod
@@ -1692,44 +1674,30 @@ def refresh_geo(conn):
     return done
 
 
-def _course_ground(st):
-    """The course's ground the game's kept tiles depend on: the course line's key and the painter's code ("-": none).
-    (Not the route followed: it changes with every reroute.)"""
-    plan = st.current() if st is not None else None
-    c = plan.paint if plan is not None else None
-    return "-" if c is None else f"{c.key}|{gps_code_id()}"
+def _install_geo_reset():
+    """BeamNG.Earth's connections (earthd.Connection, this server process) answer GEO_RESET (refresh_geo); every other
+    message as before."""
+    em = sys.modules.get("earthd")
+    if em is None or not hasattr(em, "Connection"):
+        return False                        # (not imported yet: asked again on the next beat)
+    if getattr(em.Connection.dispatch, "_earthgps", False):
+        return True
+    orig = em.Connection.dispatch
 
-
-def _geo_refresher():
-    seen = None
-    while True:
-        time.sleep(REFRESH_POLL_S)
-        try:
-            now = _course_ground(_state)
-            if seen is None:
-                seen = now
-                continue
-            if now == seen:
-                continue
-            time.sleep(REFRESH_WAIT_S)
-            if _course_ground(_state) != now:
-                continue                    # (changed again: the next round)
-            seen = now
-            for conn in _connections():
-                loop = getattr(conn, "loop", None)
-                if loop is None or loop.is_closed():
-                    continue
-
-                def run(c=conn):
-                    try:
-                        done = refresh_geo(c)
-                        if done:
-                            log.info("course painter: the course's ground changed: %s sent again", ", ".join(done))
-                    except Exception as e:
-                        log.warning("course painter: tiles not sent again: %s: %s", type(e).__name__, e)
-                loop.call_soon_threadsafe(run)
-        except Exception as e:
-            log.debug("course painter: geotile refresher: %s: %s", type(e).__name__, e)
+    def dispatch(self, msg, *a, **kw):
+        if isinstance(msg, dict) and msg.get("type") == GEO_RESET:
+            try:
+                done = refresh_geo(self)
+                if done:
+                    log.info("course painter: the game dropped its tiles for the course's ground: %s sent again",
+                             ", ".join(done))
+            except Exception as e:
+                log.warning("course painter: tiles not sent again: %s: %s", type(e).__name__, e)
+            return None
+        return orig(self, msg, *a, **kw)
+    dispatch._earthgps = True
+    em.Connection.dispatch = dispatch
+    return True
 
 
 def state():

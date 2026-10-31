@@ -188,16 +188,14 @@ class TestPure(unittest.TestCase):
         self.assertIsNone(St.prefetch_proc, "a worker starts no planner")
 
     def test_kept_geotiles_sent_again_for_a_new_course(self):
-        """BeamNG.Earth 1.7.2 keeps road, vegetation and far building geotiles in the game across rebases and teleports:
-        a new course's ground has every connected game's trackers of those made anew (as its gas stations switch
-        does), so the tiles round the car come again with the track and the clearing; an anchor's tiles are left to
-        the next world shift as before."""
+        """BeamNG.Earth 1.7.2 keeps vegetation and far building geotiles in the game across rebases and teleports. For
+        a new course the game drops its roads and trees and sends GEO_RESET (main.lua refreshRoads): BeamNG.Earth's
+        connection then makes its vegetation and far buildings' trackers anew, so they are sent again into a game that
+        has none of them (1.6.8-1.6.11 sent them again into the trees the game kept: trees in the sky, 2026-10-31).
+        Every other message goes to BeamNG.Earth as before; an anchor's own tiles are left to the next world shift."""
         import sys
-        import threading
-        import time as _t
         import types
         from gpsd import earthpatch as ep
-        made = []
 
         class Tr:
             def __init__(self, *a, **kw):
@@ -211,87 +209,47 @@ class TestPure(unittest.TestCase):
             def __init__(self, geo):
                 self.road_geo, self.far_geo = geo, geo
                 self.roads, self.veg = Tr(), Tr(geo=geo)
-                self.loop = self
-                self.far = 0
+                self.far, self.got = 0, []
 
             def make_far_trackers(self, geo):
                 self.far += 1
 
-            def is_closed(self):
-                return False
-
-            def call_soon_threadsafe(self, fn):
-                fn()
+            def dispatch(self, msg):
+                self.got.append(msg["type"])
+                return "theirs"
         earthd = types.ModuleType("earthd")
         earthd.Connection = Conn
-        earthd.road_tracker = lambda conn: made.append(conn) or Tr()
         veg = types.ModuleType("vegetation")
         veg.Tracker = Tr
         was = {k: sys.modules.get(k) for k in ("earthd", "vegetation")}
         sys.modules["earthd"], sys.modules["vegetation"] = earthd, veg
-        old_conns, old_wait, old_poll, old_state = ep._CONNS, ep.REFRESH_WAIT_S, ep.REFRESH_POLL_S, ep._state
-        real = ep._course_ground
         try:
-            ep._CONNS = None
             geo, plain = Conn(True), Conn(False)
             r0, v0 = geo.roads, geo.veg
-            self.assertEqual(ep.refresh_geo(geo), ["roads", "vegetation", "far buildings"])
-            self.assertTrue(r0.closed and v0.closed and geo.roads is not r0 and geo.veg.geo and geo.far == 1)
+            self.assertEqual(ep.refresh_geo(geo), ["vegetation", "far buildings"])
+            self.assertTrue(v0.closed and geo.veg is not v0 and geo.veg.geo and geo.far == 1)
             self.assertEqual((geo.veg.a, geo.veg.kw), ((100.0, 150.0), {"geo": True}), "the same reach")
-            p0 = plain.roads
+            self.assertIs(geo.roads, r0, "the roads: BeamNG.Earth's own roads_reset, just before")
+            p0 = plain.veg
             self.assertEqual(ep.refresh_geo(plain), [], "an anchor's tiles: left to the next world shift")
-            self.assertIs(plain.roads, p0)
-            # the refresher: only a change of the course's ground, once every process reads it
-            ep.REFRESH_WAIT_S, ep.REFRESH_POLL_S = 0.05, 0.02
-            ground = ["-"]
-
-            class St:
-                pass
-            ep._state = St()
-            ep._course_ground = lambda st: ground[0]
-            del made[:]
-            seen = [ep._connections()]          # (made before the hook: found once)
-            later = Conn(True)                  # (made after: through the hook)
-            threading.Thread(target=ep._geo_refresher, daemon=True).start()
-            _t.sleep(0.2)
-            n0 = len(made)
-            self.assertEqual(n0, 0, "no change, nothing sent again")
-            ground[0] = "course A"
-            until = _t.monotonic() + 10.0           # (a busy machine: polled, not one fixed wait)
-            while len(made) < 2 and _t.monotonic() < until:
-                _t.sleep(0.05)
-            _t.sleep(0.1)
-            self.assertGreaterEqual(len(made), 2, "a course loaded: sent again")
-            self.assertIn(later, made)
-            n1 = len(made)
-            _t.sleep(0.2)
-            self.assertEqual(len(made), n1, "once")
+            self.assertIs(plain.veg, p0)
+            # the message
+            self.assertTrue(ep._install_geo_reset())
+            self.assertTrue(ep._install_geo_reset(), "once")
+            c = Conn(True)
+            v1 = c.veg
+            self.assertEqual(c.dispatch({"type": "hello"}), "theirs")
+            self.assertEqual(c.got, ["hello"], "BeamNG.Earth's messages as before")
+            self.assertIsNone(c.dispatch({"type": ep.GEO_RESET}))
+            self.assertEqual(c.got, ["hello"], "ours answered here")
+            self.assertTrue(v1.closed and c.veg is not v1 and c.far == 1)
+            self.assertEqual(ep.GEO_RESET, "offroad_geo_reset", "main.lua's M.GEO_RESET")
         finally:
-            ep._course_ground = real
-            ep._CONNS, ep.REFRESH_WAIT_S, ep.REFRESH_POLL_S, ep._state = old_conns, old_wait, old_poll, old_state
             for k, v in was.items():
                 if v is None:
                     sys.modules.pop(k, None)
                 else:
                     sys.modules[k] = v
-
-    def test_the_course_ground_not_the_route(self):
-        from gpsd import earthpatch as ep
-
-        class C:
-            key = "abc|11|60|auto|auto||"
-
-        class P:
-            paint = C()
-
-        class St:
-            def __init__(self, p):
-                self.p = p
-
-            def current(self):
-                return self.p
-        self.assertEqual(ep._course_ground(St(None)), "-")
-        self.assertEqual(ep._course_ground(St(P())), C.key + "|" + ep.gps_code_id())
 
     def test_rut_contrast_and_runs(self):
         from gpsd import ruts
