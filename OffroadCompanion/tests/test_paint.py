@@ -434,6 +434,13 @@ class TestInsideEarth(unittest.TestCase):
             xs = np.arange(3150.0, 3451.0, 25.0)
             la, lo = ll(xs, np.zeros_like(xs))
             roads.append(("0ff7", np.stack([lo, la], 1), "trunk", "paved"))
+            # a motorway on a 40 m bridge over the course where it runs off the roads: over flat desert (a wash the
+            # 30 m elevation filled in: the user's Libramiento de Ensenada) and over the canyon (a real gap)
+            ys = np.arange(-200.0, 201.0, 10.0)
+            la, lo = ll(np.full_like(ys, 1800.0), ys)
+            roads.append(("0ff8", np.stack([lo, la], 1), "motorway", "paved", (0.45, 0.55)))
+            la, lo = ll(np.full_like(ys, 5500.0), ys)
+            roads.append(("0ff9", np.stack([lo, la], 1), "motorway", "paved", (0.45, 0.55)))
             keep = [r for r in roads if r[1][:, 0].max() >= lon0 and r[1][:, 0].min() <= lon1
                     and r[1][:, 1].max() >= lat0 and r[1][:, 1].min() <= lat1]
             f = mapgeom.build("roads", np.array([r[0] for r in keep]) if keep else np.array([], "<U4"),
@@ -688,6 +695,17 @@ class TestInsideEarth(unittest.TestCase):
         self.assertFalse([c for c in chunks if c.get("deck") or c.get("ctx")], "no deck")
         self.assertTrue(self.drawn_dirt(frame, tx, ty, cells, chunks), "the track")
         self.assertTrue(self.drawn_paved(frame, tx, ty, cells, chunks), "the road, at grade")
+
+    def test_motorway_bridge_over_the_course_judged_by_its_headroom(self):
+        """A motorway's bridge the course passes under off the roads: kept where the deck can stand high over the
+        course (a canyon), a crossing at grade where it cannot (a wash the elevation data filled in: the deck stood a
+        metre over the course, a wall across it; the user's Libramiento de Ensenada, 2026-10-31)."""
+        import roads as roadsmod
+        f = self.roads(*ll(1800, 0))
+        self.assertEqual([k for _, _, k in roadsmod.level_ranges(f, f.index("0ff8"))], [], "no headroom: at grade")
+        g = self.roads(*ll(5500, 0))
+        self.assertEqual([k for _, _, k in roadsmod.level_ranges(g, g.index("0ff9"))], ["bridge"],
+                         "over the canyon: the course passes under")
 
     def test_toll_plaza_kept(self):
         """A toll plaza on the course stays for BeamNG.Earth to draw its booths (its islands, their booths, its flat

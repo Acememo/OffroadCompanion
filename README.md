@@ -137,7 +137,9 @@ default), BeamNG.Earth's server leaves them out as the world streams in:
   2 m, each road's height is smoothed along it, and a deck climbs at most 6 % from its ends. So an overpass whose ends
   stand at the edge of a highway cutting (the Carretera Tijuana - Ensenada, the Libramiento de Ensenada) ends up a
   metre over the highway in the game, a wall of parapets, and is built as a crossing at ground level instead. A
-  real flyover with long spans stays;
+  real flyover with long spans stays. A motorway's bridge over the course where the course runs off the roads is
+  judged the same way: a deck that would stand less than 6.5 m over the course's ground (a slab ending in a wall
+  the course runs into) becomes a crossing at ground level; one high enough over a canyon stays;
 - **walls across the course**: retaining walls are cut where the course passes through them, and wherever one
   stands on the lanes of the road the course follows (a crossing road's wall reaching into the highway). Walls
   running alongside it stay.
@@ -313,7 +315,9 @@ inside of the hairpins. Besides the gates there is at most one crowd per 1.6 km 
 spot of each stretch. They stand in little groups a clear 3 m past the track's edge (its real width, as the course
 signs; canopies and parked trucks further), never on a road or a dirt track (the game's road map and OpenStreetMap's
 roads and tracks around you, which the companion fetches while a course is loaded), clear of every pass of the course (a tight hairpin's inside is its other leg: they step back past it, or stay home), face
-the course and turn to watch you go by. Nothing collides: a crowd never ends a run. Where they stand, how many, their
+the course and turn to watch you go by. Parked trucks and canopies only stand on open, nearly level ground: where a
+roof, a wall or a steep slope is under one, it moves a few metres along the line or is left out, so none sits on a
+building or hangs off a hillside. Nothing collides: a crowd never ends a run. Where they stand, how many, their
 poses and their clothes are all picked from the course's place, so everyone on the same course sees the same crowds.
 
 **Lots** lines the course the way a Baja race crowd does: people packed along both sides (behind an orange safety

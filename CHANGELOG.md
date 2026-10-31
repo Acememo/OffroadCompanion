@@ -3,6 +3,21 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.6.13 (2026-10-31)
+
+- **No more walls across the course from a motorway bridge.** Where the course runs off the roads under a motorway
+  bridge (the Libramiento de Ensenada near 31.909° N, 116.547° W), BeamNG.Earth could build the bridge's deck a metre
+  or two over the course's ground, a slab ending in a tall wall that the course ran into. Motorway bridges were left
+  alone, since only the short off-road bridges were flattened.
+  - Now a motorway bridge over the course is judged by its headroom, the same way as the low overpasses: one whose
+    deck would stand less than 6.5 m over the course becomes a crossing at ground level, and one high enough (over a
+    canyon) stays. Only bridges on the course are touched, and it is checked once when the roads are built.
+- **Parked trucks and canopies stand on the ground.** Before one is placed, the game's ground is checked under its
+  middle and four sides. If a roof or a wall is under it, or the ground drops more than about half a metre across it, it
+  moves a few metres along the line, or is left out. So none sits on a building or floats off a hillside. People,
+  fences and flags are placed as before.
+- The ground is the same as 1.6.9's (ground version 6).
+
 ## 1.6.12 (2026-10-31)
 
 - **No more trees hanging in the sky.** Since 1.6.8, loading a course near the car had BeamNG.Earth send its trees

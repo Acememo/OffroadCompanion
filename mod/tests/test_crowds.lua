@@ -683,5 +683,42 @@ streetmap.reset()
 crowds.clear()
 crowds.setLevel('some')
 
+-- 7. parked vehicles and canopies only on open, nearly level ground: not on a roof, not hanging off a slope
+do
+  local v, why = crowds.footprint({ 0, 0.1, 0, 0.2, 0 }, { 0, 0, 0, 0, 0 }, 0.45)
+  check(v == 'ok' and why > 0 and why < 0.1, 'level ground: stands there, a little into the low side')
+  check(select(2, crowds.footprint({ 6, 6, 6, 6, 6 }, { 0, 0, 0, 0, 0 }, 0.45)) == 'structure', 'a roof: no')
+  check(select(2, crowds.footprint({ 0, 0.9, 0, -0.2, 0 }, { 0, 0.9, 0, -0.2, 0 }, 0.45)) == 'slope', 'a slope: no')
+  check(crowds.footprint({}, nil, 0.45) == 'wait', 'the ground not there yet: wait')
+  check(crowds.footKind('pickup_red') == 'vehicle' and crowds.footKind('canopy_blue') == 'canopy'
+    and crowds.footKind('crowd_a') == nil, 'which need a footprint')
+  -- in the world: a block of buildings along the course's north side from 9 to 40 m out, 6 m tall
+  local function bld(x, y) return y >= 9 and y <= 40 end
+  castRayStatic = function(from) return bld(from.x, from.y) and from.z - 6 or from.z end
+  core_terrain = { getTerrainHeight = function() return 0 end }
+  crowds.clear()
+  crowds.setLevel('lots')
+  local crs3 = { e = e, track = { waypoints = wps }, length = L, closed = false, s = 0, spots = {},
+                 spotRanges = { { -1000, 30000 } }, spotsVersion = 1, urban = { step = 100, v = {} }, urbanOn = true,
+                 urbRanges = { { -1000, 30000 } } }
+  for k = -10, 300 do crs3.urban.v[k] = 0.8 end
+  local car3 = { x = 0, y = -30, z = 0 }
+  local oldAnchor = e.anchor
+  e.anchor = A
+  for _ = 1, 60 do crowds.update(crs3, A, car3) end
+  e.anchor = oldAnchor
+  local high, vehiclesSouth = 0, 0
+  for _, l in pairs(crowds._live()) do
+    if l.foot and l.z > 1 then high = high + 1 end
+    if l.foot and l.y < -5 then vehiclesSouth = vehiclesSouth + 1 end
+  end
+  check(high == 0, 'no vehicle or canopy on the roofs: ' .. high)
+  check(vehiclesSouth > 0, 'the open side has its camp: ' .. vehiclesSouth)
+  castRayStatic = function(from) return from.z - 0 end
+  core_terrain = nil
+  crowds.clear()
+  crowds.setLevel('some')
+end
+
 print(string.format('%d passed, %d failed', pass, fail))
 os.exit(fail == 0 and 0 or 1)

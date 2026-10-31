@@ -28,6 +28,14 @@ M.SCALE = { some = 1.0, lots = 1.7 }
 M.GATE_CLEAR_M = 300        -- no other crowd this near a gate's
 M.HAIRPIN_DEG = 110
 M.SPAWN_M, M.DESPAWN_M = 450, 650
+-- Parked vehicles and canopies stand only on open, nearly level ground (the user, 2026-10-31: pickups on rooftops in
+-- town and floating off a hillside): rays down at their middle and FOOT_R[kind] m out in four directions (the model's
+-- long side either way); a hit over BeamNG.Earth's terrain by more than ON_TOP_M is a roof or a wall, heights spread
+-- over FOOT_STEP_M a slope. Such a spot is tried SHIFTS_M along the line, else left empty. Once each, when made.
+M.FOOT_R = { vehicle = 2.7, canopy = 1.6 }
+M.FOOT_STEP_M = { vehicle = 0.45, canopy = 0.6 }
+M.ON_TOP_M = 0.6
+M.SHIFTS_M = { 0, 3.5, -3.5, 7, -7 }
 M.SURE_M = 300
 M.PER_UPDATE = 10
 M.WATCH_M = 140             -- spectators this near the car turn to watch it ...
@@ -598,6 +606,7 @@ end
 
 -- -- in the world ---------------------------------------------------------------------------------------------------
 local live = {}             -- key -> { id, x, y, z, yaw, base, fan, sure, light (its PointLight's id), lightKind }
+local nowhere = {}          -- key -> true: no room for it where it was planned (a roof, a wall, a slope: spotFor)
 local nLive = 0
 local nLights = 0
 local planned = { course = nil, anchor = nil, level = nil, list = {}, spotsV = nil, sidesV = nil, cheers = {} }
@@ -698,6 +707,7 @@ local function remove(key)
 end
 
 function M.clear()
+  nowhere = {}
   for key in pairs(live) do remove(key) end
   live, nLive, nLights = {}, 0, 0
 end
@@ -708,10 +718,81 @@ function M.setLevel(v)
   return v
 end
 
-local function make(m, z)
+-- Pure: what a footprint's ground says. hits: the rays' heights (middle first; nil where a ray found nothing yet),
+-- terr: the terrain's heights under them (nil where unknown). -> 'ok', z (sunk a little into the low side, never
+-- floating far) | 'wait' (the ground not there yet) | 'no', why ('structure' | 'slope').
+function M.footprint(hits, terr, step)
+  local lo, hi = math.huge, -math.huge
+  for i = 1, #hits do
+    local h = hits[i]
+    if h == nil then return 'wait' end
+    local t = terr and terr[i]
+    if t and h - t > M.ON_TOP_M and h - t < 200 then return 'no', 'structure' end
+    if h < lo then lo = h end
+    if h > hi then hi = h end
+  end
+  if #hits == 0 then return 'wait' end
+  if hi - lo > step then return 'no', 'slope' end
+  return 'ok', lo + 0.4 * (hi - lo)
+end
+
+-- Which kind of footprint a model needs checked (nil: none).
+local isVehicle = {}
+for _, n in ipairs(M.VEHICLES) do isVehicle[n] = true end
+function M.footKind(model)
+  if isVehicle[model] then return 'vehicle' end
+  if type(model) == 'string' and model:match('^canopy_') then return 'canopy' end
+  return nil
+end
+
+local function terrainZ(x, y)
+  local ct = rawget(_G, 'core_terrain')
+  if not (ct and ct.getTerrainHeight) then return nil end
+  local ok, h = pcall(ct.getTerrainHeight, vec3(x, y, 0))
+  if ok and type(h) == 'number' then return h end
+  return nil
+end
+
+-- The ground for o at (x, y): M.footprint's answer for its footprint kind.
+local function footGround(kind, x, y, yaw, zHint)
+  local r = M.FOOT_R[kind]
+  local pts = { { x, y } }
+  for k = 0, 3 do
+    local a = (yaw or 0) + k * math.pi / 2
+    pts[#pts + 1] = { x + r * math.cos(a), y + r * math.sin(a) }
+  end
+  local hits, terr = {}, {}
+  for i, p in ipairs(pts) do
+    hits[i] = markers.groundZ(p[1], p[2], zHint)
+    terr[i] = terrainZ(p[1], p[2])
+    if hits[i] == nil then return 'wait' end
+  end
+  return M.footprint(hits, terr, M.FOOT_STEP_M[kind])
+end
+
+-- Where o can stand: x, y, z | nil (wait) | false (nowhere: left empty). Along the line by SHIFTS_M (its yaw).
+local function spotFor(o, zHint)
+  local kind = M.footKind(o.model)
+  if not kind then
+    local z = markers.groundZ(o.x, o.y, zHint)
+    if z then return o.x, o.y, z end
+    return nil
+  end
+  local waiting = false
+  for _, d in ipairs(M.SHIFTS_M) do
+    local x, y = o.x + d * math.cos(o.yaw or 0), o.y + d * math.sin(o.yaw or 0)
+    local verdict, z = footGround(kind, x, y, o.yaw, zHint)
+    if verdict == 'ok' then return x, y, z end
+    if verdict == 'wait' then waiting = true end
+  end
+  if waiting then return nil end
+  return false
+end
+
+local function make(m, z, x, y)
   serial = serial + 1
   for _, shape in ipairs(shapeOf[m.model] and { shapeOf[m.model] } or markers.candidates(m.model)) do
-    local id = markers.make(shape, m.x, m.y, z, m.yaw, 'egpsCrowd_' .. serial)
+    local id = markers.make(shape, x or m.x, y or m.y, z, m.yaw, 'egpsCrowd_' .. serial)
     if id then shapeOf[m.model] = shape; return id end
   end
   error('no model for ' .. tostring(m.model))
@@ -807,6 +888,7 @@ function M.update(crs, anchor, car)
     local want = {}
     for _, o in ipairs(list) do want[o.key] = true end
     for key in pairs(live) do if not want[key] then remove(key) end end
+    if not keep then nowhere = {} end                -- (placed anew: judged again)
     planned = { course = crs, anchor = anchor, level = M.level, list = list, spotsV = pv, sidesV = sv,
                 window = planned.window, cheers = cheers, at = now }
   elseif planned.sidesV ~= sv then
@@ -847,8 +929,15 @@ function M.update(crs, anchor, car)
         -- (made far away: the ground there may have been the far tiles'; measured again on the real one)
         local gz = markers.groundZ(l.x, l.y, car.z or l.z)
         local ob = scenetree.findObjectById(l.id)
+        local kind = l.foot and M.footKind(o.model)
+        local verdict, fz = nil, nil
+        if kind and ob then verdict, fz = footGround(kind, l.x, l.y, l.yaw, car.z or l.z) end
+        if verdict == 'ok' then gz = fz end
         if not ob then live[o.key], nLive = nil, nLive - 1; dropLight(l)
-        elseif gz then
+        elseif verdict == 'no' then
+          remove(o.key)                                -- (made far away; on the real ground a roof or a slope)
+          nowhere[o.key] = true
+        elseif gz and verdict ~= 'wait' then
           if l.moved or math.abs(gz - l.z) > 0.15 then
             pcall(markers.place, ob, l.x, l.y, gz, l.yaw); l.z = gz; dropLight(l)
           end
@@ -856,14 +945,16 @@ function M.update(crs, anchor, car)
         end
       end
     end
-    if not live[o.key] and d2 < M.SPAWN_M * M.SPAWN_M and not M.onRoad(roads, o) then due[#due + 1] = { o = o, d2 = d2 } end
+    if not live[o.key] and not nowhere[o.key] and d2 < M.SPAWN_M * M.SPAWN_M and not M.onRoad(roads, o) then
+      due[#due + 1] = { o = o, d2 = d2 }
+    end
   end
   -- the road map changed (the car moved on): anything standing on a road now goes
   if roads and roads.version ~= roadsV then
     roadsV = roads.version
     for _, o in ipairs(planned.list) do
       local l = live[o.key]
-      if l and (M.onRoad(roads, o) or math.abs(l.x - o.x) > 0.3 or math.abs(l.y - o.y) > 0.3) then
+      if l and (M.onRoad(roads, o) or math.abs((l.px or l.x) - o.x) > 0.3 or math.abs((l.py or l.y) - o.y) > 0.3) then
         remove(o.key)                                  -- (made again where it now stands, next time)
       end
     end
@@ -874,12 +965,15 @@ function M.update(crs, anchor, car)
   for _, dd in ipairs(due) do
     if made >= per then break end
     local o = dd.o
-    local z = markers.groundZ(o.x, o.y, car.z or 0)
-    if z then
-      local ok, id = pcall(make, o, z)
+    local x, y, z = spotFor(o, car.z or 0)
+    if x == false then
+      -- (a roof, a wall, a slope: left empty; judged on the far tiles' coarse ground: again when nearer)
+      if dd.d2 < M.SURE_M * M.SURE_M then nowhere[o.key] = true end
+    elseif x then
+      local ok, id = pcall(make, o, z, x, y)
       if ok then
-        live[o.key] = { id = id, x = o.x, y = o.y, z = z, yaw = o.yaw, base = o.yaw, fan = o.fan,
-                        sure = dd.d2 < M.SURE_M * M.SURE_M }
+        live[o.key] = { id = id, x = x, y = y, z = z, yaw = o.yaw, base = o.yaw, fan = o.fan, px = o.x, py = o.y,
+                        foot = M.footKind(o.model) ~= nil, sure = dd.d2 < M.SURE_M * M.SURE_M }
         nLive, made = nLive + 1, made + 1
       else
         M.failed, M.failedAt = tostring(id), os.clock()

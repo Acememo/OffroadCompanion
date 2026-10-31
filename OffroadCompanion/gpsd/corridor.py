@@ -10,7 +10,8 @@ Three things BeamNG.Earth builds from map data can stand in a race course's way:
                      with parapet walls the course runs into) is made a ground road there: no deck, no parapets, the
                      ground graded to it like any road, so the course crosses at grade. A course passing under a
                      bridge along a road (an underpass) keeps it;
-  low overpasses     a short bridge over the road the course is on, too low to pass under (HEADROOM_M), is a
+  low overpasses     a short bridge over the road the course is on, or a motorway's the course passes under off the
+                     roads (a wash under the highway), too low to pass under (HEADROOM_M), is a
                      junction at grade instead. Its ends are judged on the ground as BeamNG.Earth grades it: the road
                      below graded flat across its core and blended up 1:2 to the natural ground, so the ends of an
                      overpass over a highway in a cutting sit at the highway's height and its deck a metre over it
@@ -404,7 +405,14 @@ def bridges_to_flatten(roadsmod, f, lines, ground_fn=None, flatten_max_m=FLATTEN
                     if headroom(pl, q, arc, total, P, elev_fn, below) >= HEADROOM_M + HEADROOM_MARGIN_M:
                         continue
         if not under and skip_offroad:
-            continue
+            # a motorway's bridge the course passes under off the roads (a wash under the highway): kept when its deck
+            # can stand high enough over the course's ground there, else a crossing at grade. On 30 m elevation a
+            # narrow wash is half filled in, and the deck stood a metre over it: a wall across the course (the user's
+            # Libramiento de Ensenada, 2026-10-31, a truck wedged against the deck's end)
+            if elev_fn is None or min(arc, total - arc) <= AT_GRADE_REACH_M:
+                continue
+            if headroom(pl, q, arc, total, P, elev_fn) >= HEADROOM_M + HEADROOM_MARGIN_M:
+                continue
         out.append(i)
     return out
 
