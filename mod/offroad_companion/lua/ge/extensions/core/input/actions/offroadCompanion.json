@@ -1,0 +1,3 @@
+{
+"offroadCompanion_toggleApp": {"cat": "gameplay", "order": 95, "ctx": "tlua", "onDown": "if offroadCompanion_main then offroadCompanion_main.toggleApp() end", "title": "Offroad Companion: hide or show the app", "desc": "Hides the Offroad Companion app, leaving a small button to bring it back, or shows it again. Unbound by default: bind a key here if you like."}
+}

@@ -3,6 +3,30 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.0 (2026-11-01)
+
+- **Ground version 7: more variety along the track, only where the place has it.**
+  - **Sand traps**: deep soft sand where a dry wash crosses or runs along the course (most of them), on desert canyon
+    floors and by the sea (some), now and then on open flat desert. The track sinks into the sand about 25 cm, its
+    floor churned, the sand thrown up beside it. Never on lakes, rarely on mapped dirt roads.
+  - **Rock sections** in canyons and on rocky hillsides: rock underfoot, stronger ledges and lumps, lower whoops,
+    loose gravel at the edges and more boulders beside the track.
+  - **Gravel** on alluvial fans (a desert track on a steady 2.5-12 % grade), in green-country creek beds, on broken
+    ground on the way into the rocks and on dirt roads in the hills: gravel underfoot, a little smoother, a low
+    windrow of gravel along the edges.
+  - **Rock crawls** (Auto): about 7 in 10 DANGER waypoints that sit in a canyon become a 70-160 m staircase of
+    tilted rock shelves, with 30-70 cm boulders in the track, a clear line weaving between them and bigger boulders
+    beside it. The waypoint's ditch or kicker gives way to it.
+  - Sand traps, rock sections and crawls show the ground itself: the dirt track is not painted over them.
+  - Each stretch decides from its place on the Earth, so everyone on the same course gets the same sections. Ground
+    versions 1-6 are unchanged; replays keep their own ground.
+- **The Big map button shows without a course too.** With no course, the turn notes and the street stay, and the
+  route's buttons are hidden.
+- **Hide the app.** A **▾** at the end of the tabs folds the app into a small "Offroad Companion" button in its top
+  right corner, the way the Race Control app does; click it to bring the app back. A key can be bound to it under
+  Options, Controls, "Offroad Companion: hide or show the app" (none by default). While it is hidden, the game sends
+  it no updates, and it stays hidden until you show it.
+
 ## 1.6.13 (2026-10-31)
 
 - **No more walls across the course from a motorway bridge.** Where the course runs off the roads under a motorway

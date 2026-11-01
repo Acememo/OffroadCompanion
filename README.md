@@ -47,9 +47,13 @@ which is also why BeamNG.Earth has a server). Offroad Companion was called "Beam
   directions to each one.
 - Buttons for road directions to the start, teleport to the start, back to the course.
 - Over the map's **+ / -**: how far the map reaches ahead of the car, and the radius of the ring around the car.
-- **Big** (beside **Course** on the map): a bigger map while you drive a course. The turn notes, the course's name,
-  race mile, time and progress bar stay; the rest under the map (done / to go, the next VCPs, the buttons, the street)
-  is hidden until you press it again. The app remembers it.
+- **Big** (top right of the map, with or without a course): a bigger map. The turn notes stay, and on a course its
+  name, race mile, time and progress bar; the rest under the map (done / to go, the next VCPs, the buttons; with no
+  course, the route's buttons) is hidden until you press it again. The app remembers it.
+- **Hide** (the **▾** at the end of the tabs): the app folds away to a small **Offroad Companion** button in its top
+  right corner; click it to bring the app back. You can also bind a key to it: Options, Controls, **Offroad
+  Companion: hide or show the app** (no key by default). While hidden the app costs nothing: the game sends it no
+  updates. It stays hidden the next time until you show it.
 - **Turn notes** (Settings): the box with the arrow, the distance and the call at the top of the app (**Top**), at its
   bottom (**Bottom**), or down its whole left or right side (**Left** / **Right**: the arrow above the text, one column;
   the map, the course strip and the tabs beside it).
@@ -176,7 +180,7 @@ The ruts lie on the track's own surface, over crests and dips. Ruts need BeamNG.
 source (`run_offroad_companion`); where the imagery has not been downloaded yet, they appear the next time that
 ground loads.
 
-### Track terrain: whoops, washes, berms, banked corners, ruts, rocks
+### Track terrain: whoops, washes, berms, banked corners, ruts, rocks, sand traps, rock crawls
 
 The elevation data is 30 m, so a desert track laid on it is a smooth sheet, and you can cut across anywhere. With
 **Track terrain** (Settings) on **Auto** (the default since 1.6.1) or **Rough**, BeamNG.Earth's server adds a desert race course's relief to the
@@ -206,6 +210,29 @@ ground's small bumps, the banked corner's edge) stood on it as saw teeth and lon
 Now nothing is narrower than about 6 m or changes over less than about 3 m: whoops a little longer, the broken ground
 in long swells, the windrows and the turns' sand as wide soft mounds, the banked corner a smooth bowl with its lip just
 past the edge, and the tallest places easing into their limit instead of flattening off.
+
+**Ground version 7** adds sections where the track changes with the ground it crosses, the way a Baja course does.
+Each comes only where the place has it, and where it may come, each stretch of 130-180 m decides from its place on
+the Earth whether it does, easing in and out:
+
+- **sand traps**: where a dry wash crosses or runs along the course (most of them), on a desert canyon's floor and by
+  the sea (some), and now and then on open, flat, bare desert. The track sinks into deep soft sand (about 25 cm),
+  its floor churned into soft swells, the sand thrown up beside it, all sand underfoot. Never on a lake, rarely on a
+  mapped dirt road;
+- **rock sections**: in canyons and on rocky hillsides: the track runs over rock, its ledges and lumps stronger, the
+  whoops lower, loose gravel at its edges and more boulders beside it. Never in a wash or on a lake;
+- **gravel**: on the alluvial fans at the foot of the mountains (a desert track climbing or falling a steady 2.5-12 %
+  grade), in creek beds in green country, on broken ground on the way into the rocks, and on dirt roads in the hills:
+  gravel underfoot, the track a little smoother, a low windrow of gravel along its edges;
+- **rock crawls** (**Auto** only, where the course file's DANGER waypoints count): about 7 in 10 DANGER waypoints
+  that sit in a canyon become a rock crawl 70-160 m long. The track is a staircase of tilted rock shelves, each step
+  up or down over about 3 m, with boulders of 30-70 cm in the track and a line weaving between them that is always
+  clear, and bigger boulders beside it. The waypoint's own ditch or kicker gives way to it.
+
+A sand trap, a rock section and a crawl show the ground itself: the dirt track is not painted over them, so you see
+the place's own sand or rock. Gravel keeps the dirt track's look. The heights follow **Track terrain** (none on
+**Flat**; a sand trap is never deeper than on **Rough**); the sand, rock and gravel underfoot are there on any
+setting, since they are the place's ground.
 
 None on asphalt (it fades out over about 30 m where the course crosses or joins a paved road), and dry or salt lakes
 (mapped as intermittent or salt water) stay mostly smooth. **Mild** is about half as high, **Extra** about 1.6
@@ -252,7 +279,8 @@ mapped and measured there, never at random:
   desert (the ground rising on both sides) and on beaches (within 45 m of the sea);
 - **mud** on the banks of rivers, streams, lakes and ponds that hold water all year (6 m back from the water), and in
   wetlands;
-- **gravel** in creek beds in green country, and where the track runs over rocky ground;
+- **gravel** in creek beds in green country, and where the track runs over rocky ground (from ground version 7 also
+  the gravel sections, with **rock** in the rock sections and crawls and **sand** in the sand traps: see above);
 - **hard dirt** on graded dirt roads the course follows, on dry lake beds (playas are packed hard) and on tracks
   through green country;
 - **loose dirt** on a desert track's sides and piled on the outside of its turns; its racing line is packed.
@@ -381,7 +409,8 @@ the course's place on the Earth. So that it stays that way:
 - data that has not arrived yet (tree heights, dry lakes put off while BeamNG.Earth was busy) is waited for, never
   taken as "none"; ground near the car whose plan is not ready yet is asked again within seconds;
 - the ground has a version (`OffroadCompanion/gpsd/terrain.py`; version 2 added the cut banks on hillsides, version 3 the sand, mud, gravel and loose or packed dirt along the course, version 4 the plants on the track, the
-  track round the trees and the gentler washes; a replay
+  track round the trees and the gentler washes, version 5 the banked corners and rutted sections, version 6 the
+  rounder shapes, version 7 the sand traps, rock sections, gravel and rock crawls; a replay
   recorded on version 1 still gets version 1's ground). A change to the code that would move a single bump makes a
   new version and keeps the old one as it was; a golden test (`tests/test_terrain.py`) fails on any change to an
   existing version's ground;
@@ -566,6 +595,7 @@ players' origin (when its shared generation is on); afterwards it does again.
   course waypoints.
 - **Make track**: record, tap or add points, then Save and load (see above).
 - `+` / `−` on the map zoom it; the map turns with the car. Streets and names can be hidden in Settings.
+- **▾** (end of the tabs) hides the app to a small button; a key can be bound to it (Options, Controls).
 - **Size**: resize the app in the game's UI editor. Text, buttons and the map scale with its width. When it is too
   short for what is open, it shrinks a little to fit; below that the part under the map scrolls, while the
   direction box, the map and the tabs always stay whole.
@@ -614,6 +644,7 @@ OffroadCompanion/gpsd/overpass.py     the Overpass servers: in turn, the last go
 OffroadCompanion/gpsd/geocode.py      the app's search: coordinates, Photon, Nominatim on Enter
 OffroadCompanion/gpsd/ruts.py         wheel ruts where the track blends into the ground (imagery contrast)
 OffroadCompanion/gpsd/relief.py       the track's relief: whoops, washes, berms, ledges, boulders (global hashes)
+OffroadCompanion/gpsd/variety.py      the track's sections: sand traps, rock sections, gravel, rock crawls
 OffroadCompanion/gpsd/terrain.py      the ground's version and seal (the rule for changing the ground: in its docstring)
 OffroadCompanion/gpsd/spots.py        where spectators gather: the jumps (relief's kickers, bit for bit) and paved crossings
 OffroadCompanion/gpsd/urban.py        how urban the course is along it (towns from OpenStreetMap): the Lots crowds' size

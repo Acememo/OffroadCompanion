@@ -33,8 +33,8 @@ M.CHECK_S = 0.2
 M.REROUTE_S = 8
 M.SETTINGS_FILE = '/settings/offroadCompanion.json'
 M.OLD_SETTINGS_FILE = '/settings/earthGps.json'   -- (the project was BeamNG.Earth GPS before 1.2.0)
-M.VERSION = '1.6.13'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
-M.BUILD = '2026-10-31 16:40'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
+M.VERSION = '1.7.0'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
+M.BUILD = '2026-11-01 12:30'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
 
 local settings = { lang = 'en', units = 'auto', ribbon = true, autoRoute = true, zoom = 600, paint = true, paintSize = 1.0,
                    clearCourse = true, clearRoute = true, streets = true, markers = 'checkpoints', ruts = 'auto', rough = 'auto',
@@ -851,6 +851,14 @@ end
 
 -- Search: through the Offroad Companion (Photon with a longer wait, OpenStreetMap's Nominatim when submitted: Enter or
 -- the button) when it can; else BeamNG.Earth's own search (one Photon request at a time on its server).
+-- The bindable key (lua/ge/extensions/core/input/actions/offroadCompanion.json): the app hides to a small button, or comes
+-- back (the app keeps the state; while hidden it asks for nothing, so nothing is sent to it)
+function M.toggleApp()
+  local gh = rawget(_G, 'guihooks')
+  if gh and gh.trigger then gh.trigger('OffroadCompanionToggle', {}) end
+  return true
+end
+
 function M.uiSearch(q, submitted)
   if link.connected() and companion.features and companion.features.geocode then
     local car = where()

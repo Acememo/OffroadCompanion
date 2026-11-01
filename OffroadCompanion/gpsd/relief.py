@@ -89,6 +89,7 @@ DITCH_BANK_M = (7.0, 9.0)
 # of the course's place against a chance that grows with the corner's tightness and the ground's roughness (none on
 # Flat or Mild; on Rough about a third of the tightest corners, on Extra most), eased in and out with the corner itself, so a corner banks smoothly and everyone gets the same.
 BANKS_TV = 5
+VARIETY_TV = 7              # (variety.py: sand traps, rock sections, gravel, rock crawls; its own VARIETY_TV the same)
 BANK_BIN_M = 150.0
 BANK_TURN = (3.0, 14.0)     # deg per sample (10 m): a gentle bend (~190 m radius) .. a tight corner (~40 m)
 BANK_ROUGH = (0.7, 1.4)     # the ground's roughness (relief's power): none up to Mild (0.55) .. Extra (1.6) over the top
@@ -133,6 +134,28 @@ def bank_weight(course, s, turn, power):
     # comes and goes over a stretch, never in a few metres
     w = _smooth((p - h(b0)) / BANK_SOFT + 0.5) * (1 - t) + _smooth((p - h(b0 + 1)) / BANK_SOFT + 0.5) * t
     return w * (p > 0) * tight
+
+
+def _sections(course, s, p, bin_m, salt, soft=BANK_SOFT):
+    """0 .. 1 per point: whether its stretch (bin_m long) is in, against the chance p there (0 .. 1 per point), each
+    stretch's own yes or no hashed from the course's place at its middle (salt), eased at the chance's edge and blended
+    from one stretch's middle to the next: bank_weight's rule for any kind of section (terrain 7: variety.py). Pure."""
+    s = np.asarray(s, np.float64)
+    p = np.asarray(p, np.float64)
+    lat = getattr(course, "_np_lat", None)
+    if lat is None:
+        course._np_lat = lat = np.asarray(course.lat, np.float64)
+        course._np_lon = np.asarray(course.lon, np.float64)
+    lon = course._np_lon
+    u = s / bin_m - 0.5
+    b0 = np.floor(u).astype(np.int64)
+    t = _smooth(u - b0)
+
+    def h(b):
+        mid = np.clip(((b + 0.5) * bin_m / STEP).astype(np.int64), 0, len(lat) - 1)
+        return _hash(np.round(lat[mid] * 1e4).astype(np.int64), np.round(lon[mid] * 1e4).astype(np.int64), salt)
+    w = _smooth((p - h(b0)) / soft + 0.5) * (1 - t) + _smooth((p - h(b0 + 1)) / soft + 0.5) * t
+    return w * (p > 0)
 
 
 def bank_dz(x, hw, slope):
@@ -360,6 +383,8 @@ def window_profile(course, k, pieces, road_fn, elev_fn, water_fn=None, land_fn=N
         return [round(float(u), nd) for u in v[s0:s1]]
     prof = {"algo": ALGO, "a": a, "b": b, "hw": out(hw, 2), "ctr": out(ctr, 1), "rough": out(rough), "rock": out(rock),
             "turn": out(turn, 2), "lake": out(lake)}
+    if getattr(course, "tv", 1) >= VARIETY_TV:     # (terrain 7: the grade along the course, for the alluvial fans)
+        prof["grade"] = out(_mean(np.abs(np.gradient(zc)) / STEP if n > 1 else np.zeros(n), 3), 4)
     from . import surfaces
     if getattr(course, "tv", 1) >= surfaces.FROM_TV:
         prof.update(surfaces.window_facts(lat, lon, x, y, tx, ty, pl, canyon, road, s0, s1, land_fn, waters_fn,
@@ -368,7 +393,8 @@ def window_profile(course, k, pieces, road_fn, elev_fn, water_fn=None, land_fn=N
 
 
 # -- the relief at points -------------------------------------------------------------------------------------------
-FACT_FIELDS = ("hw", "ctr", "rough", "rock", "turn", "lake", "canyon", "road", "arid", "wetl", "cover", "grass")   # (the last four: from
+FACT_FIELDS = ("hw", "ctr", "rough", "rock", "turn", "lake", "canyon", "road", "arid", "wetl", "cover", "grass",
+               "grade", "washn", "sean")      # (the last three: from terrain version 7, variety.py)   # (the last four: from
                                                                                                 # terrain version 3)
 
 
@@ -560,7 +586,16 @@ def course_auto(course):
                               (1.0 - _ramp(sv, sd + HAZARD_ROCK_M[1], sd + HAZARD_ROCK_M[1] + 20)))
     rv = fbm(gx / ROCK_ZONE_M, gy / ROCK_ZONE_M, 9, 2)
     fields = AUTO_ROCK_P * _ramp(rv, *ROCK_ZONE) ** 1.5
-    course._auto = got = {"level": level, "rock": rock, "rocks": np.maximum(fields, 0.6 * rock), "hazard": hz}
+    # (terrain 7: the DANGER waypoints that are rock crawls where they are in a canyon: variety.py)
+    from . import variety
+    crawl = []
+    for sd in getattr(course, "dangers", None) or ():
+        i = min(len(lat) - 1, int(round(sd / STEP)))
+        qa, qo = int(round(lat[i] * 1e5)), int(round(lon[i] * 1e5))
+        if float(_hash(qa, qo, 33)) < variety.CRAWL_P:
+            crawl.append((sd, float(_hash(qa, qo, 34))))
+    course._auto = got = {"level": level, "rock": rock, "rocks": np.maximum(fields, 0.6 * rock), "hazard": hz,
+                          "crawl": crawl}
     return got
 
 
@@ -631,13 +666,17 @@ def bank_dz_v6(x, hw, slope):
                     np.where(x < xc, _ease(x, xb, xc, low, top), _ease(x, xc, xd, top, 0.0)))
 
 
-def _shape_v6(course, s, d, ad, hw, rock, f, gx, gy, power, wash_on):
+def _shape_v6(course, s, d, ad, hw, rock, f, gx, gy, power, wash_on, var=None):
     """Terrain 6's relief before the clamp and the DANGER hazards (relief()): every shape at least ~3 lattice cells
-    wide (the note on SMOOTH_TV)."""
+    wide (the note on SMOOTH_TV). var (terrain 7: variety.py): the sections' weights per point {sand, rock, gravel,
+    crawl}; None: terrain 6's ground exactly."""
     on = 1.0 - _smooth((ad - hw - EDGE_M) / FADE_M)
     # whoops: the same sections and heights, a little longer
     zone = _ramp(fbm(gx / WHOOP_ZONE_M, gy / WHOOP_ZONE_M, 1, 2), *WHOOP_ZONE)
     amp = (WHOOP_A[0] + (WHOOP_A[1] - WHOOP_A[0]) * zone) * (1.0 - 0.6 * rock)
+    if var is not None:
+        from . import variety as vy
+        amp = amp * (1.0 - vy.ROCK_WHOOPS * var["rock"] - vy.GRAVEL_WHOOPS * var["gravel"])
     skew = 0.35 * (2.0 * vnoise(gx / SKEW_M, gy / SKEW_M, 2) - 1.0)
     sp = s + d * skew
     wave = 0.5 * (1.0 - np.cos(2 * np.pi * sp / WHOOP_L1_V6)) * (0.72 + 0.28 * np.sin(2 * np.pi * sp / WHOOP_L2_V6 + 0.8))
@@ -651,15 +690,38 @@ def _shape_v6(course, s, d, ad, hw, rock, f, gx, gy, power, wash_on):
     # worn in, a windrow along the edges, sand on the outside of the turns: wide soft mounds
     inner = 1.0 - _smooth((ad - hw + WEAR_V6_EDGE) / WEAR_V6_EDGE)
     h -= WEAR_M * inner
-    h += EDGE_BERM_M * np.exp(-((ad - hw - EDGE_V6[0]) / EDGE_V6[1]) ** 2)
+    if var is None:
+        h += EDGE_BERM_M * np.exp(-((ad - hw - EDGE_V6[0]) / EDGE_V6[1]) ** 2)
+    else:                               # (gravel's windrow at the edges; a sand trap's sand in place of the dirt's)
+        h += (EDGE_BERM_M * (1.0 - var["sand"]) + vy.GRAVEL_EDGE * var["gravel"]) * \
+            np.exp(-((ad - hw - EDGE_V6[0]) / EDGE_V6[1]) ** 2)
     # (in a banked corner the bowl's lip is the sand pushed out: no second mound on it)
     bw = bank_weight(course, s, f["turn"], power) * (1.0 - rock) * (1.0 - f["lake"])
+    if var is not None:                 # (no bowl on rock or in a crawl)
+        bw = bw * (1.0 - var["rock"]) * (1.0 - var["crawl"])
     outside = np.where(f["turn"] > 0, d < 0, d > 0)
     tb = TURN_V6[2] * _ramp(np.abs(f["turn"]), 1.5, TURN_FULL_DEG) * (1.0 - 0.5 * rock) * (1.0 - bw)
+    if var is not None:
+        tb = tb * (1.0 - var["sand"])
     h += np.where(outside, tb * np.exp(-((ad - hw - TURN_V6[0]) / TURN_V6[1]) ** 2), 0.0)
     # washes across the course and kickers (a kicker's back softer)
     h += _bin_features(course, s, rock) * wash_on
     h = h * power
+    if var is not None:
+        # sand traps: the track sunk into soft sand, churned, the sand thrown beside it
+        ws = var["sand"]
+        if ws.any():
+            churn = (fbm(gx / vy.SAND_CHURN_M, gy / vy.SAND_CHURN_M, 71, 1) - 0.5) * 2.0
+            sunk = 1.0 - _smooth((ad - hw + vy.SAND_FLOOR_IN[0]) / vy.SAND_FLOOR_IN[1])   # (edge to edge, eased)
+            h += ws * np.minimum(power, 1.0) * (-vy.SAND_SINK * sunk + vy.SAND_CHURN * churn * sunk
+                               + vy.SAND_BERM * np.exp(-((ad - hw - vy.SAND_BERM_AT[0]) / vy.SAND_BERM_AT[1]) ** 2))
+        # rock sections: stronger ledges and rocky lumps
+        wr = var["rock"]
+        if wr.any():
+            v2 = fbm(gx / vy.ROCK_LEDGE_M, gy / vy.ROCK_LEDGE_M, 73, 2) * 4.0
+            step2 = (np.floor(v2) + _smooth((v2 - np.floor(v2) - 0.3) / 0.7)) / 4.0 - 0.5
+            lump = (fbm(gx / vy.ROCK_BUMP_M, gy / vy.ROCK_BUMP_M, 75, 2) - 0.5) * 2.0
+            h += wr * power * (vy.ROCK_LEDGE * step2 + vy.ROCK_BUMP * lump) * on
     # banked corners: a smooth bowl
     if bw.any():
         x = np.where(f["turn"] > 0, -d, d)
@@ -667,10 +729,16 @@ def _shape_v6(course, s, d, ad, hw, rock, f, gx, gy, power, wash_on):
         h += bank_dz_v6(x, hw, slope)
     # rutted sections: the worn floor, the thrown dirt beside it, chopped up in swells of a few metres
     rw = rut_weight(gx, gy, hw, power, f["road"]) * (1.0 - f["lake"])
+    if var is not None:                 # (rock does not rut; in a sand trap the churn in place of their chop)
+        rw = rw * (1.0 - var["rock"]) * (1.0 - var["crawl"]) * (1.0 - vy.SAND_RUTS * var["sand"])
     if rw.any():
         chop = (fbm(gx / RUT_V6[2], gy / RUT_V6[2], 43, 1) - 0.5) * 2.0
         h += rw * (-RUT_SINK * inner + RUT_BERM * np.exp(-((ad - hw - RUT_V6[0]) / RUT_V6[1]) ** 2)
                    + RUT_CHOP * chop * inner)
+    if var is not None and var["crawl"].any():     # (a rock crawl: shelves of rock, the track's own relief faded)
+        wc = var["crawl"]
+        h = h * (1.0 - vy.CRAWL_FLATTEN * wc) + wc * vy.crawl_dz(s, d, ad, hw, gx, gy) * f["rough"] * \
+            (1.0 - 0.85 * f["lake"])
     h = _soft_clamp(h, *CLAMP)                      # (no flat-topped plateau with a crease round it)
     return np.where(np.abs(h) < 1e-5, 0.0, h)     # (the wide mounds' far tails: the ground away from the track as it is)
 
@@ -710,9 +778,16 @@ def relief(course, profiles, lat, lon, scale=1.0, auto=False, near=None):
     ad = np.abs(d)
     wash_on = 1.0 - _smooth((ad - hw - WASH_PAST_M) / WASH_FADE_M)
     if getattr(course, "tv", 1) >= SMOOTH_TV:
-        h = _shape_v6(course, s, d, ad, hw, rock, f, gx, gy, power, wash_on)
+        var = None
+        if getattr(course, "tv", 1) >= VARIETY_TV:
+            from . import variety
+            vs, vr, vg = variety.weights(course, s, f)
+            vc = variety.crawl_weight(course, s, f) if auto else np.zeros(len(s))
+            var = {"sand": vs * (1.0 - vc), "rock": vr * (1.0 - vc), "gravel": vg * (1.0 - vc), "crawl": vc}
+        h = _shape_v6(course, s, d, ad, hw, rock, f, gx, gy, power, wash_on, var)
         if auto and A["hazard"]:
-            h += _hazards(A["hazard"], s, getattr(course, "tv", 1)) * wash_on * f["rough"] * (1.0 - 0.85 * f["lake"])
+            hz = _hazards(A["hazard"], s, getattr(course, "tv", 1)) * wash_on * f["rough"] * (1.0 - 0.85 * f["lake"])
+            h += hz if var is None else hz * (1.0 - var["crawl"])     # (a crawl in place of its ditch or kicker)
         dz[idx] = np.clip(h, *CLAMP)
         return dz.reshape(shape)
     on = 1.0 - _smooth((ad - hw - EDGE_M) / FADE_M)                      # the track and a little past its edges
@@ -776,7 +851,13 @@ def ruts_at(course, profiles, lat, lon, scale=1.0, auto=False, near=None):
         power = power * _per_sample(course_auto(course)["level"], s)
     gx, gy = global_xy(lat[idx], lon[idx])
     on = np.abs(d - f["ctr"]) <= f["hw"] + 0.5
-    out[idx] = rut_weight(gx, gy, f["hw"], power, f["road"]) * (1.0 - f["lake"]) * on
+    rw = rut_weight(gx, gy, f["hw"], power, f["road"]) * (1.0 - f["lake"]) * on
+    if getattr(course, "tv", 1) >= VARIETY_TV:     # (none on rock: _shape_v6's)
+        from . import variety
+        _vs, vr, _vg = variety.weights(course, s, f)
+        vc = variety.crawl_weight(course, s, f) if auto else np.zeros(len(s))
+        rw = rw * (1.0 - vr * (1.0 - vc)) * (1.0 - vc)
+    out[idx] = rw
     return out
 
 
@@ -788,10 +869,18 @@ def rocks(course, profiles, bounds, auto=False):
     lon0, lat0, lon1, lat1 = bounds
     out = {k: [] for k in ("lon", "lat", "size", "yaw", "rank", "scale")}
     A = course_auto(course) if auto else None
+    v7 = getattr(course, "tv", 1) >= VARIETY_TV
+    if v7:
+        from . import variety
     for k, p in sorted(profiles.items()):
         if not p:
             continue
         a, b = p["a"], p["b"]
+        if v7 and b > a:            # (terrain 7: more boulders in rock sections, the crawls' own)
+            sv = np.arange(a, b) * STEP
+            fv = _Facts({k: p}).at(sv)
+            _vs, vrock, _vg = variety.weights(course, sv, fv)
+            vcrawl = variety.crawl_weight(course, sv, fv) if auto else np.zeros(len(sv))
         for i in range(a, b):
             j = i - a
             rk, ru, lk = p["rock"][j], p["rough"][j], p["lake"][j]
@@ -799,7 +888,9 @@ def rocks(course, profiles, bounds, auto=False):
             if A is not None:
                 rk = max(rk, float(A["rock"][i]))
                 pf = float(A["rocks"][i]) * (1.0 + 0.8 * rk)              # (more where the ground is rocky)
-            if ru < 0.5 or lk > 0.5 or (rk < ROCK_FROM and pf <= 0.0):
+            wr = float(vrock[j]) if v7 else 0.0
+            wc = float(vcrawl[j]) if v7 else 0.0
+            if ru < 0.5 or lk > 0.5 or (rk < ROCK_FROM and pf <= 0.0 and wr < 0.3 and wc < 0.4):
                 continue
             la0, lo0, la1, lo1 = course.lat[i], course.lon[i], course.lat[i + 1], course.lon[i + 1]
             if max(lo0, lo1) < lon0 - 0.001 or min(lo0, lo1) > lon1 + 0.001 or \
@@ -816,6 +907,8 @@ def rocks(course, profiles, bounds, auto=False):
             qa, qo = int(round(la0 * 1e5)), int(round(lo0 * 1e5))
             slots = []          # (salt base: the canyons' as before, auto's its own), side, offset, size
             pr = ROCK_P * (rk - ROCK_FROM) / (1.0 - ROCK_FROM) if rk >= ROCK_FROM else 0.0
+            if wr >= 0.3:
+                pr = max(pr, variety.ROCK_BOULDER_P * wr)
             for slot in range(4):                       # canyons and hillsides: two each side, close in
                 if _hash(qa, qo, 40 + slot) < pr:
                     o = hw + 0.9 + 3.6 * float(_hash(qa, qo, 50 + slot)) ** 1.5
@@ -828,8 +921,13 @@ def rocks(course, profiles, bounds, auto=False):
                     u = h(2, slot)
                     size = 0.25 + (0.3 + 0.12 * (o - hw)) * u + (0.8 * u ** 6 if o - hw > 3.0 else 0.0)
                     slots.append((300 + slot, 1.0 if slot < 4 else -1.0, o, min(2.2, size)))   # (salts 360+ on)
+            along = {}
+            if wc >= 0.4:
+                for slot, side, o, size, t_ in variety.crawl_rocks(course, p, i, j, la0, lo0, la1, lo1, wc):
+                    slots.append((slot, side, o, size))
+                    along[slot] = t_
             for slot, side, o, size in slots:
-                t = float(_hash(qa, qo, 60 + slot)) * L
+                t = (along[slot] if slot in along else float(_hash(qa, qo, 60 + slot))) * L
                 lat_ = ctr + side * o                   # (beside the road's middle)
                 x, y = tx * t - ty * lat_, ty * t + tx * lat_
                 la, lo = pl.ll(x, y)

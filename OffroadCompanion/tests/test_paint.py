@@ -580,6 +580,68 @@ class TestInsideEarth(unittest.TestCase):
         self.assertTrue(all(ids[k] <= ids[k + 1] for k in range(len(ids) - 1)), "ids stay sorted")
         self.assertEqual(len(f.en), len(f.lonlat))
 
+    def test_sand_rock_and_crawls_drawn_as_the_ground(self):
+        """Terrain 7: a stretch of track in a sand trap, a rock section or a crawl is a "rock" surface road (BeamNG.Earth
+        draws no dirt decal over it: the ground itself shows), the rest "dirt"; the same stretches variety.bare
+        says. (Here also a sand trap from x 1000 to 1400 by hand.)"""
+        from gpsd import relief as rf, variety
+        st = self.earthpatch.state()
+        c = st.current().paint
+        self.assertGreaterEqual(c.tv, variety.VARIETY_TV)
+        orig = variety.weights
+
+        def weights(course, s, f):
+            ws, wr, wg = orig(course, s, f)
+            return np.where((s > 1003) & (s < 1397), 1.0, ws), wr, wg
+        keys = self.mapcells.cells_for_bbox(*ll(-100, -100), *ll(6100, 100))
+        kinds = {}
+        # (the road tiles' builders only read the relief windows already planned: the ground's blocks plan them)
+        profs = {k: st.relief_window(self.md, c, k, "demand") for k in range(c.nwin)}
+        self.assertTrue(all(profs.values()))
+        variety.weights = weights
+        try:
+            with st.lock:
+                st.merged.clear()
+            for key in keys:
+                base = st.orig_cell(self.md, key, ("roads",), "demand").layers.get("roads")
+                f = st.roads_for(self.md, key, base, "demand")
+                if f is None or f is base:
+                    continue
+                sr = f.rules["surface"]
+                for i in range(len(f)):
+                    fid = str(f.ids[i])
+                    if fid.startswith(cr.ID_PREFIX) and fid not in kinds:
+                        j = np.flatnonzero(np.asarray(sr.feature) == i)
+                        ring = f.parts(i)[0][0]
+                        kinds[fid] = (str(np.asarray(sr.value)[j[0]]) if len(j) else None, ring)
+            self.assertTrue(kinds)
+            self.assertTrue({k for k, _ in kinds.values()} <= {"dirt", "rock"})
+            rock = 0
+            for fid, (kind, ring) in kinds.items():
+                idx, d, s = rf.nearest(c, profs, ring[1:-1, 1] if len(ring) > 2 else ring[:1, 1],
+                                       ring[1:-1, 0] if len(ring) > 2 else ring[:1, 0])
+                b = variety.bare(c, profs, s)
+                self.assertTrue(np.all(b == (kind == "rock")), fid)
+                x, _ = xy(ring[:, 1], ring[:, 0])
+                if kind == "rock" and np.all((x > 990) & (x < 1410)):
+                    rock += 1
+            self.assertGreater(rock, 0, "the sand trap drawn as the ground")
+            # the ground's photo: BeamNG.Earth paints its roads into it, the track as dirt; not over the sand trap
+            import surface
+            if hasattr(surface, "_road_segments"):
+                frame = self.geodesy.EnuFrame(*ll(1200, 0), 0.0)
+                cells = [self.md.cell(k, layers=("roads",)).layers["roads"]
+                         for k in self.mapcells.cells_for_bbox(*ll(900, -100), *ll(1500, 100))]
+                got = surface._road_segments(frame, -300.0, -300.0, 600.0, 600, 600, cells)
+                segs = got[0] if got is not None else np.zeros((0, 4))
+                ex = (segs[:, 0] + segs[:, 2]) / 2 - 300.0          # (pixels of 1 m, east of x 1200)
+                self.assertTrue(len(ex) and not np.any((ex > -180) & (ex < 180)), "no dirt painted over it")
+                self.assertTrue(np.any(ex < -200) or np.any(ex > 200), "the dirt track either side")
+        finally:
+            variety.weights = orig
+            with st.lock:
+                st.merged.clear()
+
     def test_cells_keep_earths_extras(self):
         """BeamNG.Earth 1.7 hangs per-cell extras on a decoded roads layer (OpenStreetMap's railway nodes for the level
         crossings, the grade separations' hook): the layer made with the track keeps them, the latter for its own

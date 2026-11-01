@@ -72,6 +72,15 @@ LAKE_SUBTYPES = ("lake", "pond", "reservoir", "water")
 SEA_SUBTYPES = ("ocean", "sea")
 SKIP_CLASSES = ("drain", "ditch", "fish_pass", "fountain", "swimming_pool", "reflecting_pool")
 M_PER_DEG = 111320.0
+# (terrain 7: the track's sections, variety.py: sand traps, rock sections, gravel, rock crawls)
+VARIETY_TV = 7
+WASH_NEAR_M = (3.0, 15.0)   # the course line this near a dry wash's edge: in it .. not by it
+SEA_NEAR_M = (20.0, 60.0)
+
+
+def _ramp_(v, lo, hi):
+    t = np.clip((np.asarray(v, np.float64) - lo) / (hi - lo), 0.0, 1.0)
+    return t * t * (3 - 2 * t)
 
 # the ground models these surfaces need beyond BeamNG.Earth's (surface.MATERIALS): TerrainMaterials the mod's level
 # file defines (levels/beamng_earth/art/terrains/offroad_companion.materials.json). Named bngEarth...: BeamNG.Earth 1.7.1
@@ -208,6 +217,10 @@ def window_facts(lat, lon, x, y, tx, ty, pl, canyon, road, s0, s1, land_fn=None,
                                "ll": [[round(float(a), 7), round(float(b), 7)] for a, b in p]})
         ws.sort(key=lambda d: (d["k"], d["ll"][0], len(d["ll"])))
         facts["waters"] = ws
+        if tv >= VARIETY_TV:                # (terrain 7: how near the course line runs to a dry wash, to the sea)
+            dist = water_distances(ws, lat, lon)
+            facts["washn"] = out(_mean(1.0 - _ramp_(dist["wash"], *WASH_NEAR_M), 1))
+            facts["sean"] = out(_mean(1.0 - _ramp_(dist["sea"], *SEA_NEAR_M), 1))
     return facts
 
 
@@ -326,10 +339,35 @@ def course_surfaces(idx, lat, lon, course, profiles, mats, near=None):
     new[beach] = M["SAND"]
     bank = ((dist["bank"] <= BANK_M) | (f["wetl"] >= WETLAND)) & ~rock
     new[bank] = M["MUD"]
+    if getattr(course, "tv", 1) >= VARIETY_TV:
+        new = _variety(new, M, course, ad, hw, f, s[sel] if np.ndim(s) else s, rock)
     if getattr(course, "tv", 1) >= COVER_TV:
         new = _cover(new, here, M, track, arid, ad, hw, f, s[sel] if np.ndim(s) else s, rock)
     out[pts] = new
     return out.reshape(shape)
+
+
+def _variety(new, M, course, ad, hw, f, s, rock):
+    """Terrain 7's sections (variety.py) on the ground: a sand trap's sand over the track and past its edges, a rock
+    section's rock over the track with loose gravel at its edges, gravel over the track, a crawl's rock; never on mud or
+    BeamNG.Earth's own steep rock (it stays). Pure."""
+    from . import variety
+    s = np.broadcast_to(np.asarray(s, np.float64), np.shape(ad))
+    ws, wr, wg = variety.weights(course, s, f)
+    auto = getattr(course, "rough", "on") == "auto"
+    wc = variety.crawl_weight(course, s, f) if auto else np.zeros(len(s))
+    free = (new != M["MUD"]) & ~rock
+    on = variety.BARE_W
+    g = free & (wg * (1 - wc) >= on) & (ad <= hw + variety.GRAVEL_REACH_M)
+    new[g] = M["GRAVEL"]
+    r = free & (wr * (1 - wc) >= on)
+    new[r & (ad <= hw + variety.ROCK_EDGE_M)] = M["GRAVEL"]
+    new[r & (ad <= hw)] = M["ROCK"]
+    sd = free & (ws * (1 - wc) >= on) & (ad <= hw + variety.SAND_REACH_M)
+    new[sd] = M["SAND"]
+    c = free & (wc >= on) & (ad <= hw + variety.CRAWL_REACH_M)
+    new[c] = M["ROCK"]
+    return new
 
 
 def _lanes(s):

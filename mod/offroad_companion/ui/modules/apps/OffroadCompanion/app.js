@@ -1,7 +1,7 @@
 // Offroad Companion (the in-game app; lua/ge/extensions/offroadCompanion/main.lua): turn-by-turn road navigation and race-course guidance.
 // The game's UI browser cannot make web requests, so everything goes through the game's Lua (bngApi.engineLua);
 // the Lua side pushes 'OffroadCompanionUpdate' five times a second while this app is on screen.
-var EGPS_APP_BUILD = '2026-10-31 16:40'   // (main.lua M.BUILD: the same, or the game kept an older copy of one of them)
+var EGPS_APP_BUILD = '2026-11-01 12:30'   // (main.lua M.BUILD: the same, or the game kept an older copy of one of them)
 angular.module('beamng.apps')
 .directive('offroadCompanion', ['$sce', function ($sce) {
   'use strict'
@@ -64,7 +64,7 @@ angular.module('beamng.apps')
     restrict: 'E',
     scope: {},
     template:
-'<div class="bngApp egps" ng-class="[{\'egps-off\': !d.earth, ovbig: d.map.ov && ovv.big, mapbig: mapBigOn()}, \'notes-\' + (ui.notes || \'top\')]">' +
+'<div class="bngApp egps" ng-class="[{\'egps-off\': !d.earth, ovbig: d.map.ov && ovv.big, mapbig: mapBigOn(), nocourse: !d.course, hid: ui.hidden}, \'notes-\' + (ui.notes || \'top\')]">' +
 '<style>' +
 '.egps{--bg:rgba(20,27,43,.86);--line:#2A3550;--cyan:#27D9FF;--sand:#E8B44A;--red:#FF4D3D;--green:#5BE38A;--ink:#EEF2F8;--mute:#93A0B8;' +
 '  --s:1;position:relative;width:100%;height:100%;display:flex;flex-direction:column;background:var(--bg);color:var(--ink);border-radius:calc(10px*var(--s));' +
@@ -168,9 +168,22 @@ angular.module('beamng.apps')
 '.egps.ovbig .lower{display:none}' +
 /* (Big on the map around the car: the turn notes and the course's top line and progress bar stay, the rest goes) */
 '.egps.mapbig .lower .strip>.sub,.egps.mapbig .lower .strip>.ahead,.egps.mapbig .lower .strip>.row:not(:first-child),.egps.mapbig .lower .where{display:none}' +
+/* (Big with no course: the street and the route's line stay, the rest under the map goes) */
+'.egps.mapbig.nocourse .lower .where{display:block}.egps.mapbig.nocourse .lower .where>.row{display:none}' +
+/* hidden (the Hide button, or the bindable key): only a small pill to bring it back, the game seen through the rest */
+'.egps .pill{display:none}' +
+'.egps.hid{background:transparent;border-color:transparent;pointer-events:none}' +
+'.egps.hid>*:not(.pill):not(style){display:none!important}' +
+'.egps.hid .pill{display:inline-flex;align-items:center;gap:calc(8px*var(--s));position:absolute;top:0;right:0;pointer-events:auto;' +
+'  background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:calc(6px*var(--s)) calc(14px*var(--s));' +
+'  font-weight:700;letter-spacing:.08em;font-size:calc(12px*var(--s));color:var(--ink);text-transform:uppercase;white-space:nowrap}' +
+'.egps.hid .pill:hover{background:#2B3B5A}' +
+'.egps .pill i{width:calc(9px*var(--s));height:calc(9px*var(--s));border-radius:2px;background:var(--sand);display:inline-block}' +
+'.egps .tabs button.hideBtn{flex:0 0 calc(34px*var(--s));color:var(--mute);font-size:calc(15px*var(--s));line-height:1}' +
 '.egps .mapbtns{position:absolute;right:calc(8px*var(--s));top:calc(8px*var(--s));display:flex;gap:calc(4px*var(--s))}' +
 '.egps .mapbtns button{padding:calc(2px*var(--s)) calc(8px*var(--s));font-size:calc(12px*var(--s))}' +
 '</style>' +
+'<button class="pill" ng-click="toggleHidden()" title="Show the Offroad Companion (or the key you bind: Options, Controls, Offroad Companion: hide or show the app)"><i></i>Offroad Companion</button>' +
 
 /* -- roadbook box: corner call on a course, else the next maneuver, else idle -- */
 '<div class="call" ng-class="{zone: call.zone, warn: call.warn}">' +
@@ -206,9 +219,9 @@ angular.module('beamng.apps')
 '    <button ng-click="ovBig()" ng-class="{on: ovv.big}" title="A bigger map: the strips below hidden while it is open">Big</button>' +
 '  </div>' +
 '  <div class="north" ng-if="d.map.ov && ovv.eff" ng-click="ovNorth()" title="North (click: north up)"><span ng-style="{transform: \'rotate(\' + (-ovv.eff) + \'deg)\'}">N</span></div>' +
-'  <div class="mapbtns" ng-if="d.course && d.editor.mode !== \'plan\' && !tab">' +
-'    <button ng-if="!d.map.ov" ng-click="mapBig()" ng-class="{on: mapv.big}" title="A bigger map: the turn notes and the course\'s race mile, time and progress stay, the rest below is hidden">Big</button>' +
-'    <button ng-class="{on: d.map.ov}" ng-click="overview()" title="{{ d.map.ov ? \'Back to the map around the car\' : \'The whole course\' }}">{{ d.map.ov ? \'Back\' : \'Course\' }}</button></div>' +
+'  <div class="mapbtns" ng-if="d.editor.mode !== \'plan\' && !tab">' +
+'    <button ng-if="!d.map.ov" ng-click="mapBig()" ng-class="{on: mapv.big}" title="A bigger map: the turn notes stay, and the course\'s race mile, time and progress (or, with no course, the street and the route), the rest below is hidden">Big</button>' +
+'    <button ng-if="d.course" ng-class="{on: d.map.ov}" ng-click="overview()" title="{{ d.map.ov ? \'Back to the map around the car\' : \'The whole course\' }}">{{ d.map.ov ? \'Back\' : \'Course\' }}</button></div>' +
 '  <div class="osm" ng-if="hasStreets">&copy; OpenStreetMap</div>' +
 '  <div class="mapMode" ng-if="d.editor.mode === \'plan\' && !tab">Tap to add a point &middot; drag to move the map</div>' +
 '  <button class="centre" ng-if="d.editor.mode === \'plan\' && panned() && !tab" ng-click="centre()">Centre</button>' +
@@ -279,6 +292,7 @@ angular.module('beamng.apps')
 '  <button ng-class="{sel: tab===\'courses\'}" ng-click="setTab(\'courses\')">Courses</button>' +
 '  <button ng-class="{sel: tab===\'make\'}" ng-click="setTab(\'make\')" title="Make track"><span class="lg">Make track</span><span class="sm">Track</span></button>' +
 '  <button ng-class="{sel: tab===\'settings\'}" ng-click="setTab(\'settings\')">Settings</button>' +
+'  <button class="hideBtn" ng-click="toggleHidden()" title="Hide the app: a small button stays to bring it back (or bind a key: Options, Controls, Offroad Companion: hide or show the app)">&#x25BE;</button>' +
 '</div>' +
 
 /* -- drawers -- */
@@ -347,8 +361,8 @@ angular.module('beamng.apps')
 '      <button ng-class="{on: ui.ruts === \'auto\'}" ng-click="choose(\'ruts\', \'auto\')" title="Only where the track blends into the ground (light desert sand)">Auto</button>' +
 '      <button ng-class="{on: ui.ruts === \'on\'}" ng-click="choose(\'ruts\', \'on\')" title="All along the dirt track">Always</button>' +
 '      <button ng-class="{on: ui.ruts === \'off\'}" ng-click="choose(\'ruts\', \'off\')">Off</button></span></div>' +
-'    <div class="set" ng-if="ui.paint === \'on\'"><span title="Whoops, washes, kickers, sand berms on the outside of turns, broken ground and rock ledges along the course on dirt (never on asphalt; dry and salt lakes stay smooth), with boulders beside it in canyons. The same on every computer for the same course and place">Track terrain</span><span class="seg">' +
-'      <button ng-class="{on: ui.rough === \'auto\'}" ng-click="choose(\'rough\', \'auto\')" title="Changes along the course: fast smooth stretches, mild, rough and very rough sections, extra rough with a ditch, a kicker or a rock garden at the DANGER markers, and boulder fields here and there. Picked from the place, so the same for everyone">Auto</button>' +
+'    <div class="set" ng-if="ui.paint === \'on\'"><span title="Whoops, washes, kickers, sand berms on the outside of turns, broken ground and rock ledges along the course on dirt (never on asphalt; dry and salt lakes stay smooth), with boulders beside it in canyons; sand traps in the washes, rock sections in the canyons and on rocky hillsides, gravel on the alluvial fans, only where the place has them. The same on every computer for the same course and place">Track terrain</span><span class="seg">' +
+'      <button ng-class="{on: ui.rough === \'auto\'}" ng-click="choose(\'rough\', \'auto\')" title="Changes along the course: fast smooth stretches, mild, rough and very rough sections, extra rough with a ditch, a kicker or a rock garden at the DANGER markers (in a canyon often a rock crawl), and boulder fields here and there. Picked from the place, so the same for everyone">Auto</button>' +
 '      <button ng-class="{on: ui.rough === \'mild\'}" ng-click="choose(\'rough\', \'mild\')">Mild</button>' +
 '      <button ng-class="{on: ui.rough === \'on\'}" ng-click="choose(\'rough\', \'on\')">Rough</button>' +
 '      <button ng-class="{on: ui.rough === \'extra\'}" ng-click="choose(\'rough\', \'extra\')">Extra</button>' +
@@ -612,8 +626,18 @@ angular.module('beamng.apps')
       try { mapv.big = window.localStorage.getItem('offroadCompanion.mapBig') === '1' } catch (e) {}
       scope.mapBigOn = function () {
         var d = scope.d || {}
-        return !!(mapv.big && d.course && !(d.map && d.map.ov) && !scope.tab && !(d.editor && d.editor.mode && d.editor.mode !== 'off'))
+        return !!(mapv.big && !(d.map && d.map.ov) && !scope.tab && !(d.editor && d.editor.mode && d.editor.mode !== 'off'))
       }
+      // Hidden (the user, 2026-11-01): the Hide button or the bindable key (OffroadCompanionToggle) leaves only a pill
+      // to bring it back; while hidden the game sends it nothing (uiMounted false), kept for next time
+      try { scope.ui.hidden = window.localStorage.getItem('offroadCompanion.hidden') === '1' } catch (e) {}
+      scope.toggleHidden = function () {
+        scope.ui.hidden = !scope.ui.hidden
+        try { window.localStorage.setItem('offroadCompanion.hidden', scope.ui.hidden ? '1' : '0') } catch (e) {}
+        if (scope.ui.hidden) { scope.tab = null; hello(false) } else hello(true, true)
+        ;(window.requestAnimationFrame || setTimeout)(function () { fit(); safeDraw() })
+      }
+      scope.$on('OffroadCompanionToggle', function () { scope.$evalAsync(scope.toggleHidden) })
       scope.mapBig = function () {
         mapv.big = !mapv.big
         try { window.localStorage.setItem('offroadCompanion.mapBig', mapv.big ? '1' : '0') } catch (e) {}
@@ -1350,6 +1374,7 @@ angular.module('beamng.apps')
       })
 
       var hello = function (on, fresh) {
+        if (scope.ui.hidden) on = false
         lua('if offroadCompanion_main then offroadCompanion_main.uiMounted(' + on + (fresh ? ', true' : '') + ') end')
       }
       hello(true, true)                   // (fresh: the streets are sent again for this new app)

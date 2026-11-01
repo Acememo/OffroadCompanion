@@ -145,5 +145,46 @@
    "53ab4f3de04a0aae",
    "95fb67b6fb14b4ee"
   ]
+ },
+ "7": {
+  "banks": "2b570bcf260bf92f",
+  "cid": "d3d7649bdb01",
+  "heights": {
+   "auto": "76ba2e7de619110c",
+   "extra": "1c82de6ec4029c60",
+   "mild": "5d85e7b81d9732e4",
+   "on": "87e92742a91605a5"
+  },
+  "pieces": "ffa807601f9c0dc0",
+  "pieces_n": 77,
+  "profiles": "b5cc263c96484c87",
+  "rocks": {
+   "auto": "a2ae826a4291ab41",
+   "auto_n": 734,
+   "plain": "fb8f7e3caf1fc588",
+   "plain_n": 116
+  },
+  "ruts": {
+   "auto": "b38acf2fbf20bc24",
+   "extra": "6a4f7b1e62c51dbd",
+   "mild": "e12b164953686d12",
+   "on": "47f1f158478d54bc"
+  },
+  "seal": "T7-b259c2",
+  "surfaces": [
+   "cdb43e2c7cc27c75",
+   "45e3a151ce9206bc"
+  ],
+  "variety": {
+   "auto": "be376e4bd895d117",
+   "extra": "cbd8ca6565244d53",
+   "mild": "cdb0b281534c33f5",
+   "on": "8300a94a975b638a",
+   "pieces": "49ab39d2eb9cae8f",
+   "profiles": "0f902bdcb776032a",
+   "rocks": "4c128ed422ee34cb",
+   "ruts": "f712334f2c2f3f5e",
+   "surfaces": "271b26bd4b3ab201"
+  }
  }
 }

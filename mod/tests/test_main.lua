@@ -566,5 +566,17 @@ do
   beamngEarth_settings = nil
 end
 
+-- the bindable key hides or shows the app (the action file names main.toggleApp)
+do
+  local n0 = #hooks
+  check(M.toggleApp() and hooks[#hooks] and hooks[#hooks].name == 'OffroadCompanionToggle' and #hooks == n0 + 1,
+    'the key: the app told to hide or show')
+  local f = io.open('../offroad_companion/lua/ge/extensions/core/input/actions/offroadCompanion.json')
+  local txt = f and f:read('*a') or ''
+  if f then f:close() end
+  check(txt:find('offroadCompanion_main.toggleApp()', 1, true) and txt:find('"ctx": "tlua"', 1, true),
+    'the action file calls it')
+end
+
 print(string.format('%d passed, %d failed', pass, fail))
 os.exit(fail == 0 and 0 or 1)

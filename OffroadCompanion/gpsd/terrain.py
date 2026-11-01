@@ -21,14 +21,16 @@ data). Pure Python.
 """
 import hashlib
 
-VERSION = 6                 # (2: natural cut banks beside the track where BeamNG.Earth stood a bare step: banks.py;
+VERSION = 7                 # (2: natural cut banks beside the track where BeamNG.Earth stood a bare step: banks.py;
                             # 3: the ground's surfaces along the course, sand, mud, loose and packed dirt: surfaces.py;
                             # 4: the track round the trees, courseroads.weave_shifts; grass and scrub on the track
                             # where the land around has them, the wheel paths bare: surfaces.py; washes rarer and
                             # shallower, a flat floor between eased banks, the DANGER ditches too: relief.dip;
                             # 5: banked corners on rough ground, rutted sections: relief.bank_weight, rut_weight;
-                            # 6: every shape at least ~3 cells of the game's 2 m lattice wide, no creases: relief.SMOOTH_TV)
-VERSIONS = (1, 2, 3, 4, 5, 6)        # the versions this code can still make
+                            # 6: every shape at least ~3 cells of the game's 2 m lattice wide, no creases: relief.SMOOTH_TV;
+                            # 7: the track's sections where the place has them, sand traps, rock sections, gravel, rock
+                            # crawls at some canyon DANGER waypoints: variety.py)
+VERSIONS = (1, 2, 3, 4, 5, 6, 7)     # the versions this code can still make
 
 
 def seal(cid, paint=True, clear=True, rough="on", ruts="auto", dangers=(), tv=VERSION, earth=None):

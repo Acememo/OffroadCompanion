@@ -25,7 +25,7 @@ from collections import OrderedDict
 
 import numpy as np
 
-from . import banks, corridor, courseroads, paintfile, relief, ruts, surfaces, terrain
+from . import banks, corridor, courseroads, paintfile, relief, ruts, surfaces, terrain, variety
 
 log = logging.getLogger("earthd.offroad")
 
@@ -788,12 +788,28 @@ class _State:
                 x0, y0, x1, y1 = courseroads.piece_box(p)
                 if x1 >= bounds[0] and x0 <= bounds[2] and y1 >= bounds[1] and y0 <= bounds[3]:
                     ps.append(p)
+        if ps and getattr(course, "tv", 1) >= variety.VARIETY_TV:
+            # (terrain 7: a sand trap, a rock section or a crawl drawn as the ground itself, no dirt decal: its stretch
+            # of track a "rock" surface road. The relief windows only as already planned: never waits on the ground)
+            profs = {k: self.relief_window(md, course, k, "peek") for k in course.windows_in(bounds)}
+            if all(profs.values()):
+                ps, done = variety.split_bare(course, profs, ps)
+                complete = complete and done
+            else:
+                complete = False
         if not ps:
             out = base
         else:
             lat_c, lon_c = key.center()
             out = merge(self.mapgeom, base, ps, bounds, self.geodesy.EnuFrame(lat_c, lon_c, 0.0),
                                     course.name)
+            dirt = [p for p in ps if p.get("surface") != "rock"]
+            if len(dirt) < len(ps) and out is not None:
+                # (BeamNG.Earth paints its roads into the ground's photo by their kind, a "rock" road as dirt: the photo
+                # gets the layer without those stretches, so the place's own sand or rock shows: _photo_roads)
+                out.__dict__[PHOTO_KEY] = merge(self.mapgeom, base, dirt, bounds,
+                                                self.geodesy.EnuFrame(lat_c, lon_c, 0.0), course.name) \
+                    if dirt else base
         if out is not base0:
             _carry(base0, out, md, key)
         if complete:                            # (a window that failed is tried again later: not kept)
@@ -957,7 +973,7 @@ def merge(mapgeom, base, ps, key_bounds, frame, name):
             vals = np.asarray(values, np.float32) if kind == "f" else np.asarray(values)
             rules[name_] = mapgeom.RuleTable(feat, vals, np.zeros(ne, np.float32), np.ones(ne, np.float32))
     with_rows("width", [p["w"] for p in ps], "f")
-    with_rows("surface", ["dirt"] * ne, "U")
+    with_rows("surface", [p.get("surface") or "dirt" for p in ps], "U")
     out.attrs, out.rules = attrs, rules
     if not np.all(out.ids[:-1] <= out.ids[1:]):          # (never with Overture's ids: ours sort after them)
         raise ValueError("road ids out of order after adding the course")
@@ -1033,6 +1049,27 @@ def install_surfaces(st):
             return out
     paint_lots._earthgps = True
     surfacemod.paint_lots = paint_lots
+    # (terrain 7) the roads painted into the ground's photo: a cell's roads layer with the course's sand traps, rock
+    # sections and crawls left out (roads_for: PHOTO_KEY), so the photo there is the place's own
+    orig_segs = getattr(surfacemod, "_road_segments", None)
+    if orig_segs is not None and not getattr(orig_segs, "_earthgps", False):
+        def _road_segments(frame, x0, y0, size, w, h, feats_list, *a, **kw):
+            try:
+                feats_list = [_photo_roads(f) for f in feats_list]
+            except Exception:
+                pass
+            return orig_segs(frame, x0, y0, size, w, h, feats_list, *a, **kw)
+        _road_segments._earthgps = True
+        surfacemod._road_segments = _road_segments
+
+
+PHOTO_KEY = "_egps_photo"
+
+
+def _photo_roads(f):
+    """The roads layer f as the ground's photo is to show it (without the stretches drawn as the ground itself)."""
+    d = getattr(f, "__dict__", None)
+    return d.get(PHOTO_KEY, f) if d else f
 
 
 def install():

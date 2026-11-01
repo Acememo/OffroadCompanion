@@ -115,10 +115,39 @@ def fingerprint(tv):
         out["banks"] = banks_fingerprint(tv)
     if tv >= 3:                     # the ground's surfaces (surfaces.py), on test_surfaces' course
         out["surfaces"] = surfaces_fingerprint(tv)
+    if tv >= 7:                     # the track's sections (variety.py), on test_variety's course
+        out["variety"] = variety_fingerprint(tv)
     if tv >= 5:                     # where the drawn ruts braid (relief.ruts_at), on the track
         out["ruts"] = {mode: _h(np.round(rf.ruts_at(c, profs, gla, glo, scale) * 1000).astype(int).tolist())
                        for mode, scale in MODES.items()}
         out["ruts"]["auto"] = _h(np.round(rf.ruts_at(c, profs, gla, glo, 1.0, auto=True) * 1000).astype(int).tolist())
+    return out
+
+
+def variety_fingerprint(tv):
+    sys.path.append(HERE)
+    import test_variety as tv_
+    from gpsd import surfaces, variety
+    ll, _xy, c, profs, pcs, _g, land = tv_.world(tv)
+    gx, gy = np.meshgrid(np.arange(0.0, 7200.0, 1.9), np.arange(-24.0, 24.0, 1.7))
+    la, lo = ll(gx.ravel(), gy.ravel())
+    out = {"profiles": _h(profs)}
+    for mode, scale in MODES.items():
+        c.rough = mode
+        out[mode] = _h(np.round(rf.relief(c, profs, la, lo, scale) * 1000).astype(int).tolist())
+    c.rough = "auto"
+    out["auto"] = _h(np.round(rf.relief(c, profs, la, lo, 1.0, auto=True) * 1000).astype(int).tolist())
+    cls_ = np.asarray(land(la, lo))
+    idx = np.where(cls_ == 30, tv_.MATS["GRASS"], tv_.MATS["LOOSE"]).astype(np.uint8)
+    idx = np.where(np.abs(gy.ravel()) <= 3.5, tv_.MATS["DIRT"], idx).astype(np.uint8)
+    out["surfaces"] = _h(surfaces.course_surfaces(idx, la, lo, c, profs, tv_.MATS).astype(int).tolist())
+    ps, _done = variety.split_bare(c, profs, [p for k in sorted(pcs) for p in pcs[k]])
+    out["pieces"] = _h(ps)
+    b = (tv_.LON0 - 0.3, tv_.LAT0 - 0.3, tv_.LON0 + 0.3, tv_.LAT0 + 0.3)
+    r = rf.rocks(c, profs, b, auto=True)
+    out["rocks"] = _h([[round(float(v), 7) if k in ("lon", "lat") else round(float(v), 3) for v in r[k]]
+                       for k in sorted(r)])
+    out["ruts"] = _h(np.round(rf.ruts_at(c, profs, la, lo, 1.0, auto=True) * 1000).astype(int).tolist())
     return out
 
 
