@@ -93,13 +93,20 @@ BeamNG.Earth already draws, nothing is added: the course just uses that road.
 The track's width follows the **terrain clearance**: at every 10 m the painter measures how far the ground stays
 level with the track (and free of trees) on each side, out to 16 m.
 
-| Terrain | Room | Track |
-|---|---|---|
-| Open, flat desert | 30+ m | 9 m, a wide graded course road |
-| Wash or canyon floor about 10 m wide | about 10 m | 4–5 m |
-| 30 % hillside, or between trees | a few metres | 3–4 m, a shelf cut into the slope |
+| Terrain | Room | Track (ground version 8) | Before |
+|---|---|---|---|
+| Open desert, a little relief or a few bushes | 22+ m | 10 m, a wide graded course road | 6–9 m |
+| Wash or canyon floor about 10 m wide | about 10 m | 6 m | 4–5 m |
+| 30 % hillside, or between trees | a few metres | 4–5 m, a shelf cut into the slope | 3–4 m |
 
 Widths change gradually along the course. The **Track size** setting (Narrower / Auto / Wider) scales them all.
+
+**Rounded turns** (ground version 8): a course file's points are often hundreds of metres apart, and the track turned
+on the spot at each one, a straight line from point to point. Now each corner is an arc, the way a driven trail takes
+it: as wide as the corner allows (up to a 250 m radius) while staying within 12 m of the course's own corner and using
+at most half of each straight leading in and out. A sharp hairpin keeps its point (a wider loop would cut off its
+tip). A course recorded with points close together is already smooth and stays as it is. The signs, crowds and turn
+notes count along the course file's own line and are told where the track went, so they stand beside it.
 
 The track goes into BeamNG.Earth's own road data, so it gets everything a mapped dirt road gets: the dirt road
 surface, the ground graded flat under it, the dirt feel under the tyres, and trees kept off it.
@@ -210,6 +217,8 @@ ground's small bumps, the banked corner's edge) stood on it as saw teeth and lon
 Now nothing is narrower than about 6 m or changes over less than about 3 m: whoops a little longer, the broken ground
 in long swells, the windrows and the turns' sand as wide soft mounds, the banked corner a smooth bowl with its lip just
 past the edge, and the tallest places easing into their limit instead of flattening off.
+
+**Ground version 8** keeps version 7's terrain and sections, with the wider tracks and rounded turns above.
 
 **Ground version 7** adds sections where the track changes with the ground it crosses, the way a Baja course does.
 Each comes only where the place has it, and where it may come, each stretch of 130-180 m decides from its place on
@@ -410,7 +419,7 @@ the course's place on the Earth. So that it stays that way:
   taken as "none"; ground near the car whose plan is not ready yet is asked again within seconds;
 - the ground has a version (`OffroadCompanion/gpsd/terrain.py`; version 2 added the cut banks on hillsides, version 3 the sand, mud, gravel and loose or packed dirt along the course, version 4 the plants on the track, the
   track round the trees and the gentler washes, version 5 the banked corners and rutted sections, version 6 the
-  rounder shapes, version 7 the sand traps, rock sections, gravel and rock crawls; a replay
+  rounder shapes, version 7 the sand traps, rock sections, gravel and rock crawls, version 8 the wider tracks and rounded turns; a replay
   recorded on version 1 still gets version 1's ground). A change to the code that would move a single bump makes a
   new version and keeps the old one as it was; a golden test (`tests/test_terrain.py`) fails on any change to an
   existing version's ground;

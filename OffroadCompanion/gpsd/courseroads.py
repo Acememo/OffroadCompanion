@@ -64,6 +64,25 @@ R_MERC = 6378137.0
 
 assert CONTEXT >= SMOOTH_MEDIAN + SMOOTH_MEAN + 1 and CONTEXT > MIN_RUN + 2 * GAP_FILL + JOIN_MAX
 
+# (terrain 8; the user, 2026-11-04, screenshots of a track the width of an ATV and of turns made of straight lines from
+# point to point: "it shouldn't be this narrow on the majority of the track ... some turns need to be a bit more curvy
+# and less like lines going through points")
+CURVES_TV = 8
+# Rounded turns: a course file's points are often 50-300 m apart, and the line between them turned on the spot at each
+# one. From terrain 8 each such corner is an arc, as a driven trail takes it: as wide as the corner allows (CURVE_R_MAX)
+# while staying within CURVE_DEV_M of the course's corner and using at most CURVE_ARM of each straight leading in and
+# out; a hairpin keeps its point. The samples keep their distance along the course (the game's course, signs, crowds
+# and turn notes count along the course file's own line) and move sideways onto the arc: Course.bend, m left of the
+# course file's line, which the game is told with the track's middle (earth_gpsd course_sides).
+CURVE_R_MAX = 250.0
+CURVE_DEV_M = 12.0
+CURVE_ARM = 0.5
+CURVE_MIN_DEG = 2.0
+# Wider tracks: the room beside the course (clearance) gives the width; from terrain 8 a track has the full width with
+# less room (WIDTH_ROOM_V8: open desert with a little relief, a few bushes within 10 m), and is wider at both ends.
+WIDTH_MIN_V8, WIDTH_MAX_V8 = 4.0, 10.0
+WIDTH_ROOM_V8 = (4.0, 22.0)     # m of room: the narrowest .. the full width from
+
 
 # -- the course -----------------------------------------------------------------------------------------------------
 def course_id(points, scale, tv=None):
@@ -105,8 +124,83 @@ def resample(points, step=STEP_M):
     return lat, lon
 
 
+def rounded(points, lat, lon):
+    """(lat, lon, bend) of the samples lat / lon (resample(points)) moved sideways onto the course's corners rounded to
+    arcs (CURVE_* above), bend m left of the course's own line (0 away from a corner). Pure."""
+    pts = []
+    for la, lo in points:
+        la, lo = float(la), float(lo)
+        if not pts or haversine(pts[-1][0], pts[-1][1], la, lo) > 0.01:
+            pts.append((la, lo))
+    n = len(lat)
+    bend = [0.0] * n
+    lat, lon = list(lat), list(lon)
+    m = len(pts)
+    if m < 3 or n < 3:
+        return lat, lon, bend
+    cum = [0.0]
+    for (a1, o1), (a2, o2) in zip(pts, pts[1:]):
+        cum.append(cum[-1] + haversine(a1, o1, a2, o2))
+    arcs = [None] * m
+    for v in range(1, m - 1):
+        pl = Plane(pts[v][0], pts[v][1])
+        ax, ay = pl.xy(pts[v - 1][0], pts[v - 1][1])
+        bx, by = pl.xy(pts[v + 1][0], pts[v + 1][1])
+        a, b = math.hypot(ax, ay), math.hypot(bx, by)
+        if a < 1e-6 or b < 1e-6:
+            continue
+        u0 = (-ax / a, -ay / a)                     # (in along the arm before, out along the arm after)
+        u1 = (bx / b, by / b)
+        dot = max(-1.0, min(1.0, u0[0] * u1[0] + u0[1] * u1[1]))
+        delta = math.acos(dot)
+        if delta < math.radians(CURVE_MIN_DEG) or delta > math.radians(179.0):
+            continue
+        half = delta / 2.0
+        r = CURVE_R_MAX
+        dev = 1.0 / math.cos(half) - 1.0
+        if r * dev > CURVE_DEV_M:
+            r = CURVE_DEV_M / dev
+        t = r * math.tan(half)
+        lim = CURVE_ARM * min(a, b)
+        if t > lim:
+            t = lim
+            r = t / math.tan(half)
+        if t < 0.5:
+            continue
+        side = 1.0 if u0[0] * u1[1] - u0[1] * u1[0] > 0 else -1.0     # (+ a left turn: the centre on the left)
+        cx, cy = -u0[0] * t - u0[1] * r * side, -u0[1] * t + u0[0] * r * side
+        arcs[v] = (pl, cx, cy, r, t, u0, u1)
+    total = cum[-1]
+    for k in range(n):
+        s = min(k * STEP_M, total) if k < n - 1 else total
+        j = min(max(bisect.bisect_right(cum, s) - 1, 0), m - 2)
+        L = cum[j + 1] - cum[j]
+        u = s - cum[j]
+        got = None
+        if arcs[j] is not None and u < arcs[j][4]:
+            pl, cx, cy, r, t, u0, u1 = arcs[j]
+            px, py, d = u1[0] * u, u1[1] * u, u1          # (on the arm after vertex j, u past it)
+            got = (pl, px, py, cx, cy, r, d)
+        elif j + 1 < m - 1 and arcs[j + 1] is not None and L - u < arcs[j + 1][4]:
+            pl, cx, cy, r, t, u0, u1 = arcs[j + 1]
+            px, py, d = -u0[0] * (L - u), -u0[1] * (L - u), u0     # (on the arm before vertex j + 1)
+            got = (pl, px, py, cx, cy, r, d)
+        if got is None:
+            continue
+        pl, px, py, cx, cy, r, d = got
+        ex, ey = px - cx, py - cy
+        e = math.hypot(ex, ey)
+        if e < 1e-9:
+            continue
+        qx, qy = cx + r * ex / e, cy + r * ey / e
+        bend[k] = d[0] * (qy - py) - d[1] * (qx - px)
+        lat[k], lon[k] = pl.ll(qx, qy)
+    return lat, lon, bend
+
+
 class Course:
-    """A course ready to paint: samples, windows and their boxes (lon0, lat0, lon1, lat1)."""
+    """A course ready to paint: samples, windows and their boxes (lon0, lat0, lon1, lat1). From terrain CURVES_TV its
+    samples lie on the course's corners rounded (rounded(): bend, m left of the file's line, per sample)."""
 
     def __init__(self, points, scale=1.0, name="Course", tv=None):
         self.name, self.scale = name or "Course", float(scale)
@@ -116,6 +210,9 @@ class Course:
         self.tv_asked = tv
         self.cid = course_id(points, self.scale, self.tv)
         self.lat, self.lon = resample(points)
+        self.bend = [0.0] * len(self.lat)
+        if self.tv >= CURVES_TV:
+            self.lat, self.lon, self.bend = rounded(points, self.lat, self.lon)
         self.n = len(self.lat)
         self.nwin = max(1, int(math.ceil((self.n - 1) / WINDOW)))
         self.boxes = []
@@ -445,12 +542,16 @@ def shifted_sides(shift, zc, zl, zr, cc, cl, cr):
     return nzc, nzl, nzr, (ncl if cl is not None else None), (ncr if cr is not None else None)
 
 
-def widths(room, scale=1.0):
+def widths(room, scale=1.0, tv=1):
     """Track width per sample from the room: WIDTH_MIN on a ledge, WIDTH_MAX on open ground, times scale, smoothed
-    and stepped in WIDTH_Q. Pure (only the CONTEXT samples either side reach a sample)."""
+    and stepped in WIDTH_Q (terrain CURVES_TV on: WIDTH_*_V8). Pure (only the CONTEXT samples either side reach a
+    sample)."""
     full = 2 * (SIDE_M + SIDE_STEP_M / 2)
     lo = 2 * SIDE_STEP_M
-    w = [WIDTH_MIN + (WIDTH_MAX - WIDTH_MIN) * min(1.0, max(0.0, (r - lo) / (full - lo))) for r in room]
+    w0, w1 = WIDTH_MIN, WIDTH_MAX
+    if tv >= CURVES_TV:
+        (lo, full), w0, w1 = WIDTH_ROOM_V8, WIDTH_MIN_V8, WIDTH_MAX_V8
+    w = [w0 + (w1 - w0) * min(1.0, max(0.0, (r - lo) / (full - lo))) for r in room]
     n = len(w)
     med = []
     for i in range(n):
@@ -548,7 +649,7 @@ def window_pieces(course, k, road_segs_fn, elev_fn, canopy_fn=None):
         if any(shift):
             zc, zl, zr, cl, cr = shifted_sides(shift, zc, zl, zr, cc, cl, cr)
     room = clearance(zc, zl, zr, cl, cr)
-    w = widths(room, course.scale)
+    w = widths(room, course.scale, getattr(course, "tv", 1))
     # where a run bends onto a road: the point moved, the width from the track's toward the road's, the height there
     LAT, LON = list(course.lat), list(course.lon)
     OFF = [0.0] * course.n

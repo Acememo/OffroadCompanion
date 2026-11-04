@@ -713,9 +713,13 @@ class TestInsideEarth(unittest.TestCase):
         def width_at(x0):
             ws = [w for x, w in seen.values() if x.min() <= x0 <= x.max()]
             return min(ws) if ws else None
-        self.assertEqual(width_at(1000), cr.WIDTH_MAX, "open desert: wide")
-        self.assertLessEqual(width_at(4000), 4.0, "hillside: narrow")
-        self.assertTrue(4.0 <= width_at(5600) <= 6.5, f"canyon floor: medium ({width_at(5600)})")
+        v8 = self.earthpatch.state().current().paint.tv >= cr.CURVES_TV        # (terrain 8: wider tracks)
+        self.assertEqual(width_at(1000), cr.WIDTH_MAX_V8 if v8 else cr.WIDTH_MAX, "open desert: wide")
+        self.assertLessEqual(width_at(4000), 6.0 if v8 else 4.0, "hillside: narrow")
+        lo, hi = (5.0, 8.5) if v8 else (4.0, 6.5)
+        self.assertTrue(lo <= width_at(5600) <= hi, f"canyon floor: medium ({width_at(5600)})")
+        self.assertLessEqual(width_at(4000), width_at(5600))
+        self.assertLess(width_at(5600), width_at(1000))
 
     def drawn_dirt(self, frame, tx, ty, cells, chunks):
         """The dirt track as this BeamNG.Earth draws it in a road tile: its DecalRoad pieces (up to 1.5.5), or (1.6:
@@ -759,7 +763,8 @@ class TestInsideEarth(unittest.TestCase):
         dirt = self.drawn_dirt(frame, tx, ty, cells, chunks)
         self.assertTrue(dirt, "the dirt track drawn in the tile")
         # (1.8 tapers a road's width over its last metres where it meets a road of another width: roads.road_tapers)
-        self.assertTrue(np.median(dirt) <= 4.0 and all(w <= 4.5 for w in dirt), dirt)
+        hill = 6.0 if self.earthpatch.state().current().paint.tv >= cr.CURVES_TV else 4.0     # (terrain 8: wider)
+        self.assertTrue(np.median(dirt) <= hill and all(w <= hill + 0.5 for w in dirt), dirt)
         # the ground graded flat across the track on the 30 % hillside: a shelf
         g = grading.Grader(frame, self.md, elev)
         la, lo = ll(np.full(5, 4000.0), np.array([-1.0, -0.5, 0.0, 0.5, 1.0]))

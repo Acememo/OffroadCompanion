@@ -491,7 +491,10 @@ class Server:
             for j, (h, cc) in enumerate(zip(prof.get("hw") or [], prof.get("ctr") or [])):
                 i = a + j
                 if i0 <= i <= i1:
-                    hw[i - i0], ctr[i - i0] = h, cc
+                    # (terrain 8: the samples on the course's rounded corners, bend m left of the file's line: the
+                    # game counts from that line)
+                    bend = course.bend[i] if i < len(getattr(course, "bend", ())) else 0.0
+                    hw[i - i0], ctr[i - i0] = h, (round(cc + bend, 2) if cc is not None else cc)
             for j, (ru, rk) in enumerate(zip(prof.get("rough") or [], prof.get("rock") or [])):
                 i = a + j
                 if e0 <= i <= e1:

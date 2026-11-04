@@ -170,9 +170,10 @@ class TestPainter(unittest.TestCase):
         painted = sorted(xs)
         self.assertFalse([x for x in painted if 2020 < x < 2980], "no track on the mapped dirt road")
         self.assertTrue(any(4150 < x < 4250 for x in painted), "painted across the residential road")
-        self.assertEqual(xs[min(xs, key=lambda x: abs(x - 1000))], cr.WIDTH_MAX)
-        self.assertLessEqual(xs[min(xs, key=lambda x: abs(x - 4000))], 4.0)
-        self.assertLessEqual(xs[min(xs, key=lambda x: abs(x - 5600))], 6.5)
+        v8 = cr.Course(pts).tv >= cr.CURVES_TV          # (terrain 8: wider tracks)
+        self.assertEqual(xs[min(xs, key=lambda x: abs(x - 1000))], cr.WIDTH_MAX_V8 if v8 else cr.WIDTH_MAX)
+        self.assertLessEqual(xs[min(xs, key=lambda x: abs(x - 4000))], 6.0 if v8 else 4.0)
+        self.assertLessEqual(xs[min(xs, key=lambda x: abs(x - 5600))], 8.5 if v8 else 6.5)
         self.assertTrue(all(len(pc["z"]) == len(pc["ll"]) for pc in got))
         # asked again: nothing new, nothing pending
         again = p.near(pts, 1.0, "Test", lat, lon, have, radius=4000)

@@ -3,6 +3,19 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.2 (2026-11-04)
+
+- **Ground version 8: wider tracks.** A track gets its full width (now 10 m) with much less room around it: open
+  desert with a little relief or a few bushes within 10 m is enough. A wash or canyon floor about 10 m wide now gets
+  about 6 m instead of 4-5 m, and the narrowest shelf on a hillside 4-5 m instead of 3-4 m. **Track size** still
+  scales them all.
+- **Rounded turns.** Course files' points are often hundreds of metres apart, and the track turned on the spot at each
+  one: straight lines from point to point. Each corner is now an arc, as wide as the corner allows (up to a 250 m
+  radius) while staying within 12 m of the course's corner. A sharp hairpin keeps its point. Courses recorded with
+  close points stay as they are. The signs, crowds and turn notes are told where the track went, so they stay beside
+  it.
+- Ground versions 1-7 are unchanged; replays keep their own ground.
+
 ## 1.7.1 (2026-11-04)
 
 - **BeamNG.Earth 1.8.1** is the version inside the .exe. A source install downloads 1.8.1-beta; 1.8.0, 1.7.x, 1.6.x

@@ -711,6 +711,29 @@ class TestCourseSides(unittest.TestCase):
             self.assertIn("error", srv.do_course_sides({"id": 8, "s0": 0, "s1": 10}))
 
 
+class TestCourseSidesBend(unittest.TestCase):
+    def test_the_track_round_a_corner_told_from_the_files_line(self):
+        """Terrain 8 rounds the course's corners: the game counts along the course file's own line, so the track's
+        middle it is told is the planned one plus the sample's bend (m left of the file's line)."""
+        import earth_gpsd
+        from gpsd import courseroads, paintfile
+        d = tempfile.mkdtemp(prefix="egps-bend-")
+        with mock_env(EARTHGPS_DIR=d):
+            srv = earth_gpsd.Server(FakeFetcher({}), d)
+            pl = courseroads.Plane(31.0, -115.5)
+            pts = [list(pl.ll(0, 0)), list(pl.ll(500, 0)), list(pl.ll(500, 500))]
+            srv.plan["course"] = {"kind": "course", "points": pts, "scale": 1.0}
+            c = courseroads.Course([tuple(p) for p in pts], 1.0)
+            self.assertGreaterEqual(c.tv, courseroads.CURVES_TV)
+            paintfile.write_json(os.path.join(paintfile.windows_dir(c.cid), "r000000.json"),
+                                 {"algo": 4, "a": 0, "b": 100, "hw": [4.5] * 101, "ctr": [1.0] * 101})
+            r = srv.do_course_sides({"id": 1, "s0": 0, "s1": 990})
+            i = max(range(c.n), key=lambda k: c.bend[k])
+            self.assertGreater(c.bend[i], 2.0)
+            self.assertAlmostEqual(r["ctr"][i - r["i0"]], 1.0 + c.bend[i], places=1)
+            self.assertEqual(r["ctr"][0], 1.0, "away from the corner: as planned")
+
+
 class TestJumpPose(unittest.TestCase):
     def test_a_teleport_destination_goes_through_at_once(self):
         import earth_gpsd
