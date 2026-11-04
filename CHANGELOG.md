@@ -3,6 +3,28 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.1 (2026-11-04)
+
+- **BeamNG.Earth 1.8.1** is the version inside the .exe. A source install downloads 1.8.1-beta; 1.8.0, 1.7.x, 1.6.x
+  and 1.5.x still work.
+- **Road plans with the track stay with their course.** 1.8 keeps a place's road plans across updates and shares them
+  between the players of a BeamMP server and in baked packs. Plans that carry a course's track are now kept and
+  shared only for the same ground code, so a player with another course, or none, never gets them. BeamNG.Earth's own
+  plans are never used for a course either. 1.8's experimental world bundles are not used while a course is loaded.
+- **Roads beside the course come out as BeamNG.Earth makes them.** The cells the track runs through now take a road's
+  lanes and bridges from its home cell, as 1.8 does elsewhere, so they agree with the cells around them (1.8 fixed
+  bridges drawn twice at two heights this way). Their road details are kept under an id of their own.
+- **No fences or props across the course.** 1.8 places mapped chain-link fences, noise walls, containers, barns,
+  billboards, towers, picnic tables and bus shelters. Where the course crosses a fence or noise wall there is now a
+  gap, like a ranch gate, and the other props within 6 m of the course line (plus their size) are left out.
+- **The track's ruts follow 1.8's dirt strip.** 1.8 draws dirt roads as rutted strips again, the course's track
+  included. The wheel ruts now follow that strip, and sand traps, rock sections and crawls still show the ground
+  itself.
+- **No texture rebuilds from the mod's dates.** The mod's files are now dated in the past in every time zone, as
+  BeamNG.Earth 1.8.1 does with its own. Dated in the future west of UTC, the game could rebuild the ground's textures
+  at every new block. Server owners: replace `Resources/Client/offroad_companion.zip` with this release's.
+- The ground is the same as 1.7.0's (ground version 7).
+
 ## 1.7.0 (2026-11-01)
 
 - **Ground version 7: more variety along the track, only where the place has it.**

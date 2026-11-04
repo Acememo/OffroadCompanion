@@ -807,11 +807,13 @@ class _State:
             if len(dirt) < len(ps) and out is not None:
                 # (BeamNG.Earth paints its roads into the ground's photo by their kind, a "rock" road as dirt: the photo
                 # gets the layer without those stretches, so the place's own sand or rock shows: _photo_roads)
-                out.__dict__[PHOTO_KEY] = merge(self.mapgeom, base, dirt, bounds,
-                                                self.geodesy.EnuFrame(lat_c, lon_c, 0.0), course.name) \
-                    if dirt else base
+                photo = merge(self.mapgeom, base, dirt, bounds, self.geodesy.EnuFrame(lat_c, lon_c, 0.0),
+                              course.name) if dirt else base
+                if photo is not base0:
+                    _carry(base0, photo, md, key, share_tag(self) + "-photo")
+                out.__dict__[PHOTO_KEY] = photo
         if out is not base0:
-            _carry(base0, out, md, key)
+            _carry(base0, out, md, key, share_tag(self))
         if complete:                            # (a window that failed is tried again later: not kept)
             with self.lock:
                 self.merged[mk] = out
@@ -824,17 +826,26 @@ class _State:
 # What BeamNG.Earth hangs on a decoded roads layer that is about the cell, not its rows, and goes on with the roads
 # layer made with the course's track (1.7: OpenStreetMap's railway nodes, for the level crossings' gates and lights).
 # Memos of the layer's rows (_lonlat_boxes, _bridge_ends, _gs_rows, ...) stay behind: the new layer has more rows.
-CARRY = ("_rail_nodes", "_rails_built", "_lanes_built")
+CARRY = ("_rail_nodes", "_rails_built", "_lanes_built",
+         "_bnge_neighbours")    # (1.8: the eight cells round it, BeamNG.Earth's own layers: a road's lanes and bridge
+#                                 ranges from its copy in its home cell, roads.home_copy; the same for a layer with the
+#                                 track as for BeamNG.Earth's own, or a road's bridge came out twice at two heights)
 
 
-def _carry(base, out, md, key):
+def _carry(base, out, md, key, tag="-"):
     """BeamNG.Earth's per-cell extras of the roads layer base onto out (the layer with the course's track): CARRY as
-    they are, and its grade separations (1.7, gradesep: a hook working on the layer's own rows) made for out."""
+    they are, its grade separations (1.7, gradesep: a hook working on the layer's own rows) made for out, and (1.8)
+    its cell id (_bnge_cell: the cell, the layer, the map data's versions), the layer's name marked with the GPS
+    ground's tag: BeamNG.Earth keeps a cell's road facts by it (roads._FACTS_MEM, its revisit cache), which must never
+    be those of the layer without the track, or of another course's."""
     if base is None or out is None:
         return
     for k in CARRY:
         if k in base.__dict__:
             out.__dict__[k] = base.__dict__[k]
+    cid = base.__dict__.get("_bnge_cell")
+    if isinstance(cid, tuple) and len(cid) >= 3:
+        out.__dict__["_bnge_cell"] = (cid[0], f"{cid[1]}+egps-{tag}") + tuple(cid[2:])
     if "_bnge_gradesep" in base.__dict__:
         try:
             import gradesep
@@ -1161,12 +1172,18 @@ def install():
                 # BeamNG.Earth 1.6 paints the carriageways into the ground's photo (roads.ROADS_IN_GROUND): the tile
                 # has no dirt pieces of its own any more, so the ruts follow the dirt roads' centrelines as the
                 # tile would have laid them
-                track = dirt_chunks(roadsmod, frame, tx, ty, cells, elev, *a, **kw) \
-                    if getattr(roadsmod, "ROADS_IN_GROUND", False) else chunks
+                # (1.8: a dirt or gravel road gets a rutted strip of its own over the ground again, roads.DIRT_STRIPS:
+                # the ruts follow the track's strip, BeamNG.Earth's own pieces, its bends rounded as it rounds them)
+                mats = track_materials(roadsmod)
+                strips = [ch for ch in chunks if ch.get("m") in mats and not ch.get("deck")] \
+                    if getattr(roadsmod, "DIRT_STRIPS", False) else []
+                track = strips or (dirt_chunks(roadsmod, frame, tx, ty, cells, elev, *a, **kw)
+                                   if getattr(roadsmod, "ROADS_IN_GROUND", False) else chunks)
                 def rutted(xy):         # (terrain 5: the rutted sections, relief.ruts_at)
                     la, lo, _ = frame.enu_to_geodetic(xy[:, 0], xy[:, 1], np.zeros(len(xy)))
                     return st.ruts_at(np.atleast_1d(la), np.atleast_1d(lo))
                 extra = ruts.rut_chunks(track, frame, st.imagery(), c.ruts, _course_in_frame(c, frame, track),
+                                        track_material=mats,
                                         rutted_fn=rutted if getattr(c, "tv", 1) >= relief.RUTS_TV else None) \
                     if track else []
                 if extra:
@@ -1188,6 +1205,12 @@ def install():
         roadmesh.layer_of = layer_of
     except Exception:                       # (an older BeamNG.Earth: DecalRoads, render priority orders them)
         pass
+    # BeamNG.Earth 1.8's mapped props on the road tiles (fences, noise walls, containers, barns, billboards, towers,
+    # picnic tables, bus shelters): none in the course's way (corridor.props_off)
+    try:
+        install_props(st)
+    except Exception as e:                  # (no blockworker._tile_parts: BeamNG.Earth before 1.7)
+        log.debug("course painter: no props hook (%s: %s)", type(e).__name__, e)
     # the ground's surfaces along the course (surfaces.py, terrain version 3): sand, mud, loose and packed dirt, gravel
     # in BeamNG.Earth's per-sample ground models of the physics block, after its land cover, roads and lots
     try:
@@ -1365,6 +1388,18 @@ def install_revisit(st):
         return orig(kind, *parts, ("egps", tag))
     key._earthgps = True
     rv.key = key
+    # (1.8: the items kept across updates, by their output's format: a cell's road plans (the track's among them) by
+    # the GPS ground too; its road facts are by their layer's cell id, which a layer with the track has its own of)
+    of = getattr(rv, "format_key", None)
+    if of is not None and not getattr(of, "_earthgps", False):
+        def format_key(kind, fmt, *parts):
+            tag = share_tag(st)
+            if tag == "-" or kind != "plans":
+                return of(kind, fmt, *parts)
+            return of(kind, fmt, *parts, ("egps", tag))
+        format_key._earthgps = True
+        format_key._orig = of
+        rv.format_key = format_key
     return True
 
 
@@ -1380,7 +1415,13 @@ def _fault():
 
 
 def install_plancache(st):
-    """Hooks plancache.for_grader (BeamNG.Earth 1.6.1+): each GPS ground's road plans in a folder of their own."""
+    """Hooks plancache.for_grader (BeamNG.Earth 1.6.1+): each GPS ground's road plans in a folder of their own (beside
+    BeamNG.Earth's, the signature its last part as BeamNG.Earth names it: 1.8's world bundles export a folder by that
+    name). 1.8 keeps a cell's plans across updates in its revisit cache (format_key, not key: install_revisit's) and
+    shares them with the BeamMP server's other players (mpshare: matched by PlanCache._bake_expect) and baked packs
+    (bakepack: by the same expect): both get the GPS ground's tag, so plans with one course's track never come back
+    for another course or none, nor BeamNG.Earth's own for a course. A pinned world bundle (1.8, BNGE_WORLD_BUNDLE:
+    plans made elsewhere, BeamNG.Earth's own) is not used while a course is painted: its cells are planned here."""
     import plancache as pc
     orig = pc.for_grader
     if getattr(orig, "_earthgps", False):
@@ -1388,11 +1429,27 @@ def install_plancache(st):
 
     def for_grader(cache_dir, grader, widths, wet):
         got = orig(cache_dir, grader, widths, wet)
-        if got is not None and getattr(got, "dir", None):
-            got.dir = os.path.join(got.dir, "egps-" + share_tag(st))
+        tag = share_tag(st)
+        if got is None or tag == "-":
+            return got
+        if not getattr(got, "dir", None):       # (a pinned bundle's: another machine's plans, without the track)
+            return None
+        head, sig = os.path.split(got.dir)
+        frames, base = os.path.basename(head), os.path.dirname(head)
+        got.dir = os.path.join(base, "egps-" + tag, frames, sig)
         return got
     for_grader._earthgps = True
     pc.for_grader = for_grader
+    be = getattr(getattr(pc, "PlanCache", None), "_bake_expect", None)
+    if be is not None and not getattr(be, "_earthgps", False):
+        def _bake_expect(self):
+            out = be(self)
+            tag = share_tag(st)
+            if tag != "-":
+                out = dict(out, egps=tag)
+            return out
+        _bake_expect._earthgps = True
+        pc.PlanCache._bake_expect = _bake_expect
     return True
 
 
@@ -1455,6 +1512,59 @@ def _followed_roads(roads, course_xy):
 
 
 DIRT_KINDS = ("dirt", "gravel")
+
+
+def install_props(st):
+    """Hooks blockworker._tile_parts (a road tile's parts, in the road tiles' processes): its props (P.props: Forest
+    rows in the tile's frame) without those standing in the course's way (props_off_course)."""
+    import blockworker as bw
+    orig = bw._tile_parts
+    if getattr(orig, "_earthgps", False):
+        return True
+
+    def _tile_parts(mark, frame, *a, **kw):
+        P = orig(mark, frame, *a, **kw)
+        try:
+            if getattr(P, "props", None):
+                n = len(P.props)
+                P.props = props_off_course(st, frame, P.props)
+                if len(P.props) < n:
+                    with st.lock:
+                        st.stats["props_off"] = st.stats.get("props_off", 0) + n - len(P.props)
+        except Exception as e:              # (never break BeamNG.Earth's tile: its props as they were)
+            st.stats["errors"] += 1
+            log.warning("course painter: props: %s: %s", type(e).__name__, e)
+        return P
+    _tile_parts._earthgps = True
+    bw._tile_parts = _tile_parts
+    return True
+
+
+def props_off_course(st, frame, rows):
+    """rows (a road tile's prop rows in frame) without corridor.props_off's near any line the plan clears."""
+    plan = st.current()
+    if plan is None or not plan.clearing or not rows:
+        return rows
+    xy = np.array([[float(r[1]), float(r[2])] for r in rows if len(r) >= 3], np.float64)
+    if not len(xy):
+        return rows
+    la, lo, _ = frame.enu_to_geodetic(xy[:, 0], xy[:, 1], np.zeros(len(xy)))
+    la, lo = np.atleast_1d(la), np.atleast_1d(lo)
+    bounds = (float(lo.min()), float(la.min()), float(lo.max()), float(la.max()))
+    for c in plan.clearing:
+        lines = []
+        for ln in corridor.course_lines(c, bounds, 60.0):
+            e, n, _ = frame.geodetic_to_enu(ln[:, 1], ln[:, 0], np.zeros(len(ln)))
+            lines.append(np.stack([np.asarray(e), np.asarray(n)], axis=1))
+        if lines:
+            rows = corridor.props_off(rows, lines, c.clear_m)
+    return rows
+
+
+def track_materials(roadsmod):
+    """The materials the dirt track's pieces are drawn with in this BeamNG.Earth: Johnson Valley's dirt road, and (1.8)
+    its dirt and gravel strips (roads.DIRT_MATERIALS)."""
+    return frozenset(("m_dirt_road",) + tuple(getattr(roadsmod, "DIRT_MATERIALS", ())))
 
 
 def dirt_chunks(roadsmod, frame, tx, ty, cells, elev, urban_fn=None, walks=None, bridges=None, widths=None, *a,

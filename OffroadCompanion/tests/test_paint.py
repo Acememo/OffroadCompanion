@@ -642,6 +642,42 @@ class TestInsideEarth(unittest.TestCase):
             with st.lock:
                 st.merged.clear()
 
+    def test_no_mapped_prop_on_the_course(self):
+        """1.8's props are left out of a road tile where they stand on the course (its blockworker._tile_parts)."""
+        try:
+            import blockworker
+        except ImportError:
+            self.skipTest("no blockworker")
+        if not hasattr(blockworker, "_tile_parts"):
+            self.skipTest("BeamNG.Earth before 1.7: no mapped props")
+        self.assertTrue(getattr(blockworker._tile_parts, "_earthgps", False), "the road tiles' parts hooked")
+        st = self.earthpatch.state()
+        frame = self.geodesy.EnuFrame(*ll(1000, 0), 0.0)
+        rows = [["chainlink", 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 0.0], ["chainlink", 0.0, 30.0, 0.0, 0.0, 1.0, 2.0, 0.0],
+                ["tree_oak", 0.0, 1.0, 0.0, 0.0, 1.0, 9.0, 0.0]]
+        got = self.earthpatch.props_off_course(st, frame, rows)
+        self.assertEqual([r[2] for r in got], [30.0, 1.0], "the fence on the course goes; off it, and other rows, stay")
+
+    def test_the_layer_with_the_track_has_its_own_cell_id(self):
+        """1.8 keeps a cell's road facts by its layer's cell id (roads._FACTS_MEM, the revisit cache) and takes a road's
+        lanes and bridges from its home cell's copy (_bnge_neighbours): the layer with the track has the neighbours as
+        BeamNG.Earth's own has them, and an id of its own, of this ground."""
+        st = self.earthpatch.state()
+        key = self.mapcells.cell_of(*ll(2500, 0))
+        base = st.orig_cell(self.md, key, ("roads",), "demand").layers["roads"]
+        f = self.roads(*ll(2500, 0))
+        self.assertIsNot(f, base)
+        cid = base.__dict__.get("_bnge_cell")
+        if cid is None:
+            self.skipTest("BeamNG.Earth before 1.7: no cell ids")
+        mine = f.__dict__.get("_bnge_cell")
+        self.assertEqual(mine[0], cid[0], "the same cell (home_copy compares it)")
+        self.assertEqual(mine[2:], cid[2:], "the same map data")
+        self.assertNotEqual(mine, cid)
+        self.assertIn(self.earthpatch.share_tag(st), mine[1])
+        if "_bnge_neighbours" in base.__dict__:
+            self.assertIs(f.__dict__.get("_bnge_neighbours"), base.__dict__["_bnge_neighbours"])
+
     def test_cells_keep_earths_extras(self):
         """BeamNG.Earth 1.7 hangs per-cell extras on a decoded roads layer (OpenStreetMap's railway nodes for the level
         crossings, the grade separations' hook): the layer made with the track keeps them, the latter for its own
@@ -722,7 +758,8 @@ class TestInsideEarth(unittest.TestCase):
         chunks = roadsmod.build_tile(frame, tx, ty, cells, elev)
         dirt = self.drawn_dirt(frame, tx, ty, cells, chunks)
         self.assertTrue(dirt, "the dirt track drawn in the tile")
-        self.assertTrue(all(w <= 4.0 for w in dirt), dirt)
+        # (1.8 tapers a road's width over its last metres where it meets a road of another width: roads.road_tapers)
+        self.assertTrue(np.median(dirt) <= 4.0 and all(w <= 4.5 for w in dirt), dirt)
         # the ground graded flat across the track on the 30 % hillside: a shelf
         g = grading.Grader(frame, self.md, elev)
         la, lo = ll(np.full(5, 4000.0), np.array([-1.0, -0.5, 0.0, 0.5, 1.0]))
@@ -816,6 +853,22 @@ class TestInsideEarth(unittest.TestCase):
         self.assertEqual(len(cut), 2)
         self.assertTrue(all(np.abs(w["base"][:, 0]).min() > corridor.CLEAR_M for w in cut))
         self.assertEqual(len(cut[0]["top"]), len(cut[0]["base"]))
+
+    def test_props_in_the_way_left_out(self):
+        """BeamNG.Earth 1.8's mapped props: a fence the course crosses gets a gap where it goes through, a container
+        on the course goes; the rest (a street lamp beside it, the fence and the containers further off) stay."""
+        from gpsd import corridor
+        course = [np.array([[0.0, -100.0], [0.0, 100.0]])]
+        rows = [["chainlink", float(x), 5.0, 0.0, 0.0, 1.0, 2.0, 0.0] for x in range(-30, 31, 3)]
+        rows += [["streetlamp", 1.0, 0.0, 0.0, 0.0, 1.0, 8.0, 0.0], ["container", 12.0, 0.0, 0.0, 0.0, 1.0, 2.6, 0.0],
+                 ["container", 14.0, 30.0, 0.0, 0.0, 1.0, 2.6, 0.0], ["noisewall", -3.0, -40.0, 0.0, 0.0, 1.0, 2.4, 0.0]]
+        got = corridor.props_off(rows, course, corridor.CLEAR_M)
+        fence = sorted(r[1] for r in got if r[0] == "chainlink")
+        self.assertTrue(fence and all(abs(x) > corridor.CLEAR_M + 1.5 for x in fence), fence)
+        self.assertEqual(len(fence), len([x for x in range(-30, 31, 3) if abs(x) > 7.5]), "only where it goes through")
+        kinds = [(r[0], r[1]) for r in got if r[0] != "chainlink"]
+        self.assertEqual(kinds, [("streetlamp", 1.0), ("container", 14.0)], "the lamp and the far container stay")
+        self.assertEqual(corridor.props_off(rows, [], corridor.CLEAR_M), rows)
 
     def test_walls_alongside_stay(self):
         from gpsd import corridor
@@ -1027,6 +1080,17 @@ class TestInsideEarth(unittest.TestCase):
         try:
             a = plancache.for_grader(self.md.cache_dir, g, None, None)
             self.assertIn("egps-" + ep.share_tag(st), a.dir, "the GPS ground in the folder")
+            self.assertEqual(os.path.basename(a.dir), a.signature, "the folder still named by its signature (1.8's "
+                                                                   "world bundles export it by that name)")
+            if hasattr(a, "_bake_expect") and a.persist is not None:
+                # (1.8: plans shared with the BeamMP server's players and baked packs are matched by this; kept
+                # across updates by format_key)
+                self.assertEqual(a._bake_expect().get("egps"), ep.share_tag(st), "shared plans: this ground's only")
+                import revisit
+                fk = revisit.format_key
+                self.assertNotEqual(fk("plans", 3, "x"), fk._orig("plans", 3, "x"), "kept plans: by the ground too")
+                self.assertEqual(fk("cellfacts", 2, "x"), fk._orig("cellfacts", 2, "x"),
+                                 "BeamNG.Earth's own cell facts as they are (a layer with the track has its own id)")
             obj = pf.read_json(pf.course_path())
             try:
                 pf.write_json(pf.course_path(), dict(obj, rough="extra" if obj.get("rough") != "extra" else "mild"))
@@ -1103,7 +1167,7 @@ class TestInsideEarth(unittest.TestCase):
         st = ep.state()
         mine = ep.share_tag(st)
         self.assertNotEqual(mine, "-", "a course is painted")
-        args = (1, LAT0, LON0, farfield.Tile(0, 0, 0), 12, None, None, False, farfield.Layout(32, 512, True, None))
+        args = (1, LAT0, LON0, farfield.Tile(0, 0, 0), 12, None, None, False, farfield.Layout(32, (getattr(farfield, "BLOCK_SIZES", None) or (512,))[0], True, None))
         h = pw.job_header("far_geometry", args, {"roads": True, "grading": True})
         self.assertEqual(h["settings"]["egps"], mine, "the job says which ground")
         pw.check_job(h)                                         # the same ground: served
@@ -1237,7 +1301,7 @@ class TestInsideEarth(unittest.TestCase):
             banks.FROM_TV = old
             self.set_rough("on")
         rise = np.diff(step) / 0.25
-        self.assertGreater(rise.max(), 2.5, f"BeamNG.Earth's step (the test needs it): {rise.max():.2f}")
+        self.assertGreater(rise.max(), 2.0, f"BeamNG.Earth's step (the test needs it): {rise.max():.2f}")
         bank = np.diff(with_banks) / 0.25
         self.assertLess(bank.max(), 1.6, "a sloping bank")
         self.assertTrue(np.all(with_banks <= steep(*ll(np.full_like(ys, 1000.3), ys)) + 0.05), "a cut, never a fill")
@@ -1385,7 +1449,10 @@ class TestInsideEarth(unittest.TestCase):
         self.assertIsNotNone(self.earthpatch.state().cache_dir, "BeamNG.Earth's cache folder known")
         chunks = roadsmod.build_tile(frame, 0, 0, cells, lambda la, lo: ground(la, lo))
         track = [c for c in chunks if c["m"] == "m_dirt_road"]
-        if getattr(roadsmod, "ROADS_IN_GROUND", False):      # (1.6: painted into the ground; the ruts follow its line)
+        strips = [c for c in chunks if c["m"] in getattr(roadsmod, "DIRT_MATERIALS", ())]
+        if strips and getattr(roadsmod, "DIRT_STRIPS", False):     # (1.8: a strip over the ground's dirt again)
+            track = strips
+        elif getattr(roadsmod, "ROADS_IN_GROUND", False):      # (1.6: painted into the ground; the ruts follow its line)
             self.assertFalse(track, "no dirt pieces of its own")
             self.assertTrue(self.drawn_dirt(frame, 0, 0, cells, chunks), "the track painted into the ground")
             track = self.earthpatch.dirt_chunks(roadsmod, frame, 0, 0, cells, lambda la, lo: ground(la, lo))

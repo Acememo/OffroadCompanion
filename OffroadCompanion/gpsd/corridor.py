@@ -18,7 +18,11 @@ Three things BeamNG.Earth builds from map data can stand in a race course's way:
                      (the user's Carretera Tijuana - Ensenada, 2026-10-21);
   retaining walls    BeamNG.Earth's walls beside roads cut into the ground are left out where the course runs into
                      them (crossing them within CLEAR_M + WALL_PAD_M) and wherever one stands on the road the course
-                     follows (a crossing road's wall reaching into a highway's lanes); walls alongside it stay.
+                     follows (a crossing road's wall reaching into a highway's lanes); walls alongside it stay;
+  props              (BeamNG.Earth 1.8) its mapped props on the road tiles that stand in the way: a chain-link fence
+                     or noise wall the course crosses (a gap where it goes through, the way a ranch gate is), yard
+                     containers, barns, billboards, cell and water towers, picnic tables and bus shelters within
+                     CLEAR_M (+ the prop's own half size, PROP_PAD_M) of the course line: props_off.
 
 Pure given its inputs (feature tables, the course's lines); new tables are made, the cell's own are never changed.
 """
@@ -80,6 +84,32 @@ def course_lines(course, bounds, pad_m):
         out.append(run)
     return [np.stack([np.asarray(course.lon[a:b + 1]), np.asarray(course.lat[a:b + 1])], axis=1)
             for a, b in out if b > a]
+
+
+# (1.8's mapped props: fences.py, worldprops.py, picnic.py, shelters.py) group -> its half size (m) past CLEAR_M
+PROP_PAD_M = {"chainlink": 1.5, "noisewall": 2.5, "container": 6.5, "barn": 7.0, "billboard": 3.0, "celltower": 3.0,
+              "watertower": 6.0, "picnictable": 1.5, "picnicgrill": 1.0, "busshelter": 2.5}
+
+
+def props_off(rows, lines, clear_m):
+    """BeamNG.Earth's prop rows ([group, x, y, z, ...] in a frame) without those of PROP_PAD_M's groups within
+    clear_m (+ their pad) of the lines ((n, 2) each, the same frame); the rest as they are, in order. Pure."""
+    rows = list(rows or ())
+    lines = [np.asarray(ln, np.float64) for ln in lines if len(ln) >= 2]
+    if not rows or not lines:
+        return rows
+    pick = [i for i, r in enumerate(rows) if len(r) >= 3 and str(r[0]) in PROP_PAD_M]
+    if not pick:
+        return rows
+    p = np.array([[float(rows[i][1]), float(rows[i][2])] for i in pick], np.float64)
+    a = np.concatenate([ln[:-1] for ln in lines])
+    b = np.concatenate([ln[1:] for ln in lines])
+    d = np.full(len(p), np.inf)
+    for j in range(0, len(a), 512):
+        d = np.minimum(d, _seg_dist(p, a[j:j + 512], b[j:j + 512]).min(axis=1))
+    pad = np.array([PROP_PAD_M[str(rows[i][0])] for i in pick])
+    drop = {pick[k] for k in np.flatnonzero(d <= clear_m + pad)}
+    return [r for i, r in enumerate(rows) if i not in drop]
 
 
 def _seg_dist(p, a, b):

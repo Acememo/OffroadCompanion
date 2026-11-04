@@ -499,7 +499,7 @@ and BeamNG.drive started once.
    (you get `BeamNG.Earth\OffroadCompanion\...`). It is not a game mod: do not put it in `mods`.
 2. Run `OffroadCompanion\setup_offroad_companion.bat` once (Linux: `OffroadCompanion/setup_offroad_companion.sh`). It:
    - uses the BeamNG.Earth folder it is in (nothing is downloaded), when that is a version Offroad Companion works with
-     (1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1, 1.6.0 or 1.5.x); otherwise it downloads the source of **BeamNG.Earth 1.7.3-beta**, the version this
+     (1.8.1, 1.8.0, 1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1, 1.6.0 or 1.5.x); otherwise it downloads the source of **BeamNG.Earth 1.8.1-beta**, the version this
      release is made for, next to it, never simply the newest (a newer BeamNG.Earth may change what the course painter
      hooks into). If the download fails it prints the address of that release's zip to fetch by hand (then
      `setup_offroad_companion.bat --zip PATH`);
@@ -525,9 +525,30 @@ game, and the course is not cleared of buildings and walls.
 your settings, replays, saved tracks, planned ground and remembered folders carry over, and the old `companion`
 folder is renamed `companion (old - now OffroadCompanion)`: delete it when you like. Ground codes stay the same.
 
-### BeamNG.Earth 1.7, 1.6 and BeamMP
+### BeamNG.Earth 1.8, 1.7, 1.6 and BeamMP
 
-Works with BeamNG.Earth 1.7.3 (the version the .exe has inside), 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1 and 1.6.0 (and 1.5.x). With 1.7:
+Works with BeamNG.Earth 1.8.1 (the version the .exe has inside), 1.8.0, 1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1
+and 1.6.0 (and 1.5.x). With 1.8:
+
+- The ground near the car is a 1 m lattice (2 m before); the track's relief, sand, rock and gravel are made for it as
+  they were, the same ground on every version.
+- 1.8 keeps a place's road plans across updates and shares them with the other players on a BeamMP server (and in
+  baked packs): plans with a course's track are kept and shared only for the same ground code, so another course, or
+  no course, never gets them, nor a course BeamNG.Earth's own. 1.8's experimental world bundles
+  (`BNGE_WORLD_BUNDLE`) are not used while a course is loaded (they have no track).
+- The cells the course runs through keep 1.8's per-cell road details as BeamNG.Earth's own do (a road's lanes and
+  bridges taken from its copy in its home cell), under an id of their own, so they never mix with the cells without
+  the track.
+- 1.8 draws dirt and gravel roads as rutted strips again: the course's track gets one too, and the wheel ruts follow
+  it. Sand traps, rock sections and rock crawls get none (the ground itself shows there).
+- 1.8's mapped props never stand in the course: where it crosses a mapped chain-link fence or noise wall there is a gap
+  (like a ranch gate), and yard containers, barns, billboards, cell and water towers, picnic tables and bus shelters
+  within 6 m of the course line (plus their size) are left out.
+- The mod's files are dated in the past in every time zone (as BeamNG.Earth 1.8.1 does with its own): dated in the
+  future west of UTC, the game could take its ground materials for new and pack the ground's textures again at every
+  block.
+
+With 1.7:
 
 - The cells the course runs through keep what 1.7 adds to their roads: OpenStreetMap's level crossing details (gates,
   lights or crossbucks where a road crosses a railway) and, when turned on (`BNE_GRADESEP=on`), its grade separations.

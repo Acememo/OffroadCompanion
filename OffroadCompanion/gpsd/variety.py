@@ -40,7 +40,7 @@ SAND_SINK, SAND_BERM, SAND_CHURN = 0.24, 0.24, 0.13     # m (at most: not past R
 #                                                         thrown beside it, its churn
 SAND_BERM_AT = (2.6, 2.6)   # the thrown sand's middle past the edge, its width (Gaussian)
 SAND_FLOOR_IN = (2.0, 4.5)  # the sunk floor full to this far inside the edge, easing up over this
-SAND_RUTS = 0.7             # the rutted sections' heights this much lower in a sand trap (the drawn ruts stay)
+SAND_RUTS = 0.7             # the rutted sections' heights this much lower in a sand trap (the churn instead)
 SAND_CHURN_M = 9.0          # the churned floor's swells (one octave: ~3 cells of the 2 m lattice and more)
 SAND_REACH_M = 2.5          # the sand reaches this far past the track's edge
 # rock sections

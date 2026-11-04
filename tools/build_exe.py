@@ -228,6 +228,14 @@ def pyinstaller(work, earth, staged, ico, ver, earth_ver, boot=None):
     with open(os.path.join(work, "CODE_ID"), "w", encoding="ascii") as f:
         f.write(peerwork.source_id(server))
     cmd += ["--add-data", f"{os.path.join(work, 'CODE_ID')}{SEP}."]
+    import revisit                                   # (1.8: the revisit cache's own fingerprint, as its build writes it:
+    if hasattr(revisit, "source_id"):                # the modules its items are made with; else CODE_ID, all of it)
+        with open(os.path.join(work, "REVISIT_ID"), "w", encoding="ascii") as f:
+            f.write(revisit.source_id(server))
+        cmd += ["--add-data", f"{os.path.join(work, 'REVISIT_ID')}{SEP}."]
+    for name in ("LICENSE", "CREDITS.md"):          # (BeamNG.Earth's licence and data credits, as its own .exe has them)
+        if os.path.isfile(os.path.join(earth, name)):
+            cmd += ["--add-data", f"{os.path.join(earth, name)}{SEP}."]
     vf, mf = version_files(work, ver, earth_ver)
     cmd += ["--version-file", vf, "--manifest", mf]
     for m in mods + ["launcher", "install", "apppaths", "bmplaunch"]:

@@ -228,18 +228,20 @@ def _seg_dist(p, a, b):
 
 
 def rut_chunks(chunks, frame, imagery, mode="auto", course_xy=(), track_material="m_dirt_road", rutted_fn=None):
-    """Rut strips (chunks in BeamNG.Earth's road-tile form) along the dirt pieces among chunks that lie on the
+    """Rut strips (chunks in BeamNG.Earth's road-tile form) along the dirt pieces among chunks (track_material: their
+    material, or a set of them) that lie on the
     course (course_xy: its line(s) in the frame, (k, 2) each): the dirt track laid for it, or a dirt road it
     follows. (A road tile's pieces carry no feature id but on bridge decks, so the course is found by place.)
     rutted_fn(xy (k, 2) frame m) -> (k,) rut weight (relief.ruts_at): its rutted sections get ruts whatever the contrast,
     braided (Off: none anywhere)."""
     if mode == "off" or not len(course_xy):
         return []
+    mats = {track_material} if isinstance(track_material, str) else set(track_material)
     ca = np.concatenate([c[:-1] for c in course_xy if len(c) >= 2])
     cb = np.concatenate([c[1:] for c in course_xy if len(c) >= 2])
     out = []
     for c in chunks:
-        if c.get("deck") or c.get("m") != track_material:
+        if c.get("deck") or c.get("m") not in mats:
             continue
         n = np.asarray(c.get("n") or [], np.float64)
         if n.ndim != 2 or len(n) < 2:
