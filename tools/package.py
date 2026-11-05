@@ -5,7 +5,12 @@
     OffroadCompanion-source-<version>.zip         everything (README, CHANGELOG, LICENSE, OffroadCompanion, mod, tools)
     offroad_companion.zip                          the game mod alone (its name is the game's mod name: never versioned)
 
-    python3 tools/package.py
+    python3 tools/package.py [--earth DIR]
+
+--earth: the BeamNG.Earth source the .exe is built with (default: $EARTH_ROOT). Its BeamMP drop-in goes into the BeamMP
+server zip too (Resources/Client/beamng_earth.zip and its plugin, as BeamNG.Earth's own BeamMP zip has them), so a
+server always sends the BeamNG.Earth game mod that matches the .exe's server: an older one there left every player's
+dirt roads orange (2026-11-05: BeamNG.Earth 1.8's dirt strips use materials only its 1.8 game mod defines).
 """
 import os
 import shutil
@@ -49,7 +54,45 @@ def add_tree(z, src, arc, skip=(), past=False):
                 z.write(full, name)
 
 
+def earth_beammp(z, earth):
+    """BeamNG.Earth's BeamMP drop-in from its source folder earth, into the open zip z, as its own packager makes it
+    (tools/package.py there: its files, dated in the past); its version, or None when earth has none."""
+    import importlib.util
+    import io
+    spec = importlib.util.spec_from_file_location("bne_package", os.path.join(earth, "tools", "package.py"))
+    ep = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ep)
+    if not hasattr(ep, "tree_files") or not os.path.isdir(os.path.join(earth, "beammp", "Server")):
+        return None
+    mod = io.BytesIO()
+    with zipfile.ZipFile(mod, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as m:
+        for rel in ep.tree_files("mod/beamng_earth"):
+            src = os.path.join(earth, "mod", "beamng_earth", rel)
+            info = zipfile.ZipInfo(rel, past_stamp(os.path.getmtime(src)))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            with open(src, "rb") as f:
+                m.writestr(info, f.read())
+    info = zipfile.ZipInfo("Resources/Client/beamng_earth.zip", past_stamp(os.path.getmtime(os.path.join(earth,
+                                                                                                       "VERSION"))))
+    info.compress_type = zipfile.ZIP_STORED
+    info.external_attr = 0o644 << 16
+    z.writestr(info, mod.getvalue())
+    for rel in ep.tree_files("beammp/Server"):
+        z.write(os.path.join(earth, "beammp", "Server", rel), f"Resources/Server/{rel}")
+    for src, name in (("beammp/README.md", "BeamNG.Earth-README.md"), ("LICENSE", "LICENSE-Earth.txt"),
+                      ("CREDITS.md", "CREDITS-Earth.md")):
+        if os.path.isfile(os.path.join(earth, src)):
+            z.write(os.path.join(earth, src), name)
+    with open(os.path.join(earth, "VERSION"), encoding="utf-8") as f:
+        return f.read().strip()
+
+
 def main():
+    import argparse
+    ap = argparse.ArgumentParser(description="the release zips")
+    ap.add_argument("--earth", default=os.environ.get("EARTH_ROOT"),
+                    help="BeamNG.Earth's source (its BeamMP drop-in goes into the BeamMP server zip)")
+    args = ap.parse_args()
     v = version()
     shutil.rmtree(DIST, ignore_errors=True)
     os.makedirs(DIST)
@@ -77,6 +120,11 @@ def main():
         with open(mod_zip, "rb") as f:
             z.writestr(info, f.read())      # (dated in the past too: past_stamp)
         z.write(os.path.join(ROOT, "tools", "beammp_readme.md"), "OffroadCompanion-README.md")
+        ev = earth_beammp(z, args.earth) if args.earth else None
+    if args.earth and not ev:
+        print(f"warning: no BeamNG.Earth BeamMP drop-in in {args.earth}: the BeamMP zip has Offroad Companion only")
+    elif ev:
+        print(f"BeamMP server zip: with BeamNG.Earth {ev}'s client mod and plugin")
     out.append(p)
     p = os.path.join(DIST, f"OffroadCompanion-source-{v}.zip")
     with zipfile.ZipFile(p, "w", zipfile.ZIP_DEFLATED) as z:

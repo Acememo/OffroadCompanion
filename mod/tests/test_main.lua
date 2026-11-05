@@ -578,5 +578,35 @@ do
     'the action file calls it')
 end
 
+-- BeamNG.Earth's game mod older than its server: told (orange dirt roads, 2026-11-05)
+do
+  M.STALE_CHECK_S = 0
+  local hello = nil
+  beamngEarth_core.serverHello = function() return hello end
+  local mats, files = {}, {}
+  scenetree = scenetree or {}
+  local oldFind = scenetree.findObject
+  scenetree.findObject = function(name) return mats[name] end
+  FS = { fileExists = function(_, path) return files[path] == true end }
+  check(M._earthModStale() == nil, 'no BeamNG.Earth server yet: nothing said')
+  hello = { appVersion = '1.7.3-beta' }
+  check(M._earthModStale() == nil, 'a 1.7 server draws no strips: nothing said')
+  hello = { appVersion = '1.8.1-beta' }
+  local got = M._earthModStale()
+  check(got and got.server == '1.8.1-beta' and got.mp == false, 'a 1.8 server, the mod without its strips: said')
+  MPCoreNetwork = { isMPSession = function() return true end }
+  got = M._earthModStale()
+  check(got and got.mp == true, 'on BeamMP: said so (the server\'s copy)')
+  MPCoreNetwork = nil
+  files[M.DIRT_MATERIALS_FILE] = true
+  check(M._earthModStale() == nil, 'the 1.8 game mod mounted: nothing said')
+  files[M.DIRT_MATERIALS_FILE] = nil
+  mats[M.DIRT_MATERIAL] = {}
+  check(M._earthModStale() == nil, 'its material there: nothing said')
+  check(M._versionAtLeast('1.10.0', 1, 8) and not M._versionAtLeast('1.7.9', 1, 8) and not M._versionAtLeast(nil, 1, 8),
+    'versions compared as numbers')
+  scenetree.findObject, FS, beamngEarth_core.serverHello = oldFind, nil, nil
+end
+
 print(string.format('%d passed, %d failed', pass, fail))
 os.exit(fail == 0 and 0 or 1)

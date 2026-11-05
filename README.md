@@ -601,8 +601,13 @@ What changed with 1.6:
   turns yours back on in the game, and starting `run_offroad_companion` does too, as BeamNG.Earth does for its own.
 
 **BeamMP.** In a BeamMP session the game loads only the mods the server sends, so for Offroad Companion the server needs
-it too: unzip `OffroadCompanion-BeamMP-Server-<version>.zip` into the BeamMP server's folder (it adds
-`Resources/Client/offroad_companion.zip`, next to BeamNG.Earth's own). Each player who wants the dirt track, the
+it too: unzip `OffroadCompanion-BeamMP-Server-<version>.zip` into the BeamMP server's folder, replacing what is there.
+It adds `Resources/Client/offroad_companion.zip` and BeamNG.Earth's own BeamMP files for the BeamNG.Earth version inside
+the .exe (`Resources/Client/beamng_earth.zip`, its plugin `Resources/Server/BeamNGEarth`), so the server always sends
+the BeamNG.Earth game mod the players' servers match. An older `beamng_earth.zip` on the server (a 1.7 one with 1.8
+players) turns everyone's dirt roads, the track included, solid orange: the game's missing-material texture, since
+BeamNG.Earth 1.8 draws dirt roads with materials only its 1.8 game mod defines. The app says so in red under the map
+when it happens, with what to replace. Each player who wants the dirt track, the
 terrain and the cleared course runs `run_offroad_companion` (instead of the BeamNG.Earth app) and the BeamMP
 launcher. BeamNG.Earth switches to its own BeamMP app layout when you join: add **Offroad Companion** to it once from
 the UI apps menu.
@@ -703,7 +708,8 @@ mod/offroad_companion/lua/ge/extensions/offroadCompanion/
 mod/offroad_companion/ui/modules/apps/OffroadCompanion/   the app (AngularJS, like BeamNG.Earth's HUD apps)
 ```
 
-Release zips: `python3 tools/package.py` (named after `OffroadCompanion/VERSION`, which is also the game app's
+Release zips: `python3 tools/package.py --earth PATH` (PATH the BeamNG.Earth source the .exe is built with: its
+BeamMP files go into the BeamMP server zip; named after `OffroadCompanion/VERSION`, which is also the game app's
 `M.VERSION`: raise both for a release). Then the .exe: `python tools/build_exe.py --earth PATH --bootloader run.exe`
 with a Windows Python 3.12 that has pyinstaller and BeamNG.Earth's `server/requirements.txt` (on Windows, or under
 Wine), PATH the BeamNG.Earth source folder of the version the release is made for. It is built like BeamNG.Earth's

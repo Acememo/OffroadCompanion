@@ -3,6 +3,19 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.3 (2026-11-05)
+
+- **Orange dirt roads on BeamMP, explained and prevented.** BeamNG.Earth 1.8 draws dirt roads, the course's track
+  included, as rutted strips with materials that only its 1.8 game mod defines. An older BeamNG.Earth game mod (1.7)
+  still works with a 1.8 server but lacks them, so the game shows its orange missing-material texture. On a BeamMP
+  server every player gets the server's `Resources/Client/beamng_earth.zip`, so an old copy there does it to everyone
+  running the Offroad Companion .exe 1.7.1 or newer.
+  - The BeamMP server zip now also carries BeamNG.Earth's own BeamMP files (`Resources/Client/beamng_earth.zip` and its
+    plugin) for the BeamNG.Earth version inside the .exe. Unzipping it on the server keeps both mods matched.
+  - The app shows a red line under the map when the game's BeamNG.Earth mod is older than its server, saying what to
+    replace (on BeamMP: the server's `beamng_earth.zip`; in single player: the old copy in your mods folder).
+- The ground is the same as 1.7.2's (ground version 8).
+
 ## 1.7.2 (2026-11-04)
 
 - **Ground version 8: wider tracks.** A track gets its full width (now 10 m) with much less room around it: open

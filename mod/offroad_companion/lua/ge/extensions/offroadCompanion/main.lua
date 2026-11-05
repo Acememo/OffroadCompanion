@@ -33,8 +33,8 @@ M.CHECK_S = 0.2
 M.REROUTE_S = 8
 M.SETTINGS_FILE = '/settings/offroadCompanion.json'
 M.OLD_SETTINGS_FILE = '/settings/earthGps.json'   -- (the project was BeamNG.Earth GPS before 1.2.0)
-M.VERSION = '1.7.2'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
-M.BUILD = '2026-11-04 16:30'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
+M.VERSION = '1.7.3'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
+M.BUILD = '2026-11-05 15:00'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
 
 local settings = { lang = 'en', units = 'auto', ribbon = true, autoRoute = true, zoom = 600, paint = true, paintSize = 1.0,
                    clearCourse = true, clearRoute = true, streets = true, markers = 'checkpoints', ruts = 'auto', rough = 'auto',
@@ -303,7 +303,7 @@ local function gamePaint(car)
 end
 
 -- The roads around the car sent again (BeamNG.Earth: roads off and on, its roads_reset): the new course's tracks
--- appear near the car at once instead of after the next rebase. BeamNG.Earth 1.7.2+ keeps its trees and far buildings
+-- appear near the car at once instead of after the next rebase. BeamNG.Earth 1.7.3+ keeps its trees and far buildings
 -- as geotiles across rebases and teleports near (trees.lua geoPlacement): with the course painter in its server (it
 -- answers), the trees go too and the server is asked for both again (GEO_RESET, after roads_reset: earthpatch.py
 -- refresh_geo), so no tree or building kept from before stands on the new track. (1.6.8-1.6.11 had the server send
@@ -701,6 +701,49 @@ local function check(dt)
   if trackReq and clock - trackReq.at > M.TRACK_WAIT_S then trackReq, trackError = nil, 'the companion did not answer' end
 end
 
+-- BeamNG.Earth's game mod older than its server (the user, 2026-11-05: a friend's dirt roads, the course's track
+-- among them, solid orange with the engine's missing-material texture). From 1.8 BeamNG.Earth's server draws dirt and
+-- gravel roads as rutted strips with materials its 1.8 game mod defines (dirtroad.materials.json); a 1.7 game mod
+-- speaks the same protocol and works otherwise, without them. On BeamMP every player gets the server's
+-- Resources/Client/beamng_earth.zip (and their own mods are turned off), so an old copy there does it to everyone
+-- whose BeamNG.Earth app is 1.8. {server = its version, mp = on BeamMP} when so, else nil; checked every few seconds.
+M.DIRT_MATERIAL = 'bne_dirt_variation_01'
+M.DIRT_MATERIALS_FILE = '/levels/beamng_earth/art/shapes/beamngEarth/dirtroad.materials.json'
+M.STALE_CHECK_S = 5
+local stale = { at = -math.huge, got = nil }
+
+local function versionAtLeast(v, major, minor)
+  local a, b = tostring(v or ''):match('^%s*(%d+)%.(%d+)')
+  a, b = tonumber(a), tonumber(b)
+  if not a then return false end
+  return a > major or (a == major and b >= minor)
+end
+M._versionAtLeast = versionAtLeast
+
+local function earthModStale()
+  if clock - stale.at < M.STALE_CHECK_S then return stale.got end
+  stale.at, stale.got = clock, nil
+  local core = earthCore()
+  local h = core and core.serverHello and core.serverHello() or nil
+  if not h then return nil end                  -- (no BeamNG.Earth server yet: nothing to compare)
+  local sv = h.appVersion
+  if sv == nil or sv == '' then sv = paint.earth end
+  if not versionAtLeast(sv, 1, 8) then return nil end
+  local st, fs = rawget(_G, 'scenetree'), rawget(_G, 'FS')
+  local have = false
+  pcall(function() have = st ~= nil and st.findObject ~= nil and st.findObject(M.DIRT_MATERIAL) ~= nil end)
+  if not have then
+    pcall(function() have = fs ~= nil and fs:fileExists(M.DIRT_MATERIALS_FILE) and true or false end)
+  end
+  if have then return nil end
+  local mp = rawget(_G, 'MPCoreNetwork')
+  local onMp = false
+  pcall(function() onMp = mp ~= nil and mp.isMPSession ~= nil and mp.isMPSession() and true or false end)
+  stale.got = { server = tostring(sv), mp = onMp }
+  return stale.got
+end
+M._earthModStale = earthModStale
+
 local function payload()
   local car, anchor = where()
   local street, place, country = streetNow()
@@ -717,7 +760,7 @@ local function payload()
     nav = navText(navState), autodrive = gst and gst.autodrive or false,
     course = courseText(crsState), trackLoading = trackReq ~= nil, trackError = trackError,
     trackSlow = trackReq ~= nil and clock - trackReq.at > 15 or nil,
-    sources = companion.sources, tracksDir = companion.tracksDir,
+    sources = companion.sources, tracksDir = companion.tracksDir, earthStale = earthModStale(),
     paint = { on = settings.paint, painting = paint.state ~= nil, painter = paint.painter ~= nil and paint.painter ~= false,
               error = paint.error, canPaint = crs ~= nil and crs.hasLine and not crs.track.approximate,
               course = type(paint.painter) == 'table' and paint.painter.course or nil, mode = paint.mode,

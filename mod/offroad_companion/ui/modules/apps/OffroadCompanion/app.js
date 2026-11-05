@@ -1,7 +1,7 @@
 // Offroad Companion (the in-game app; lua/ge/extensions/offroadCompanion/main.lua): turn-by-turn road navigation and race-course guidance.
 // The game's UI browser cannot make web requests, so everything goes through the game's Lua (bngApi.engineLua);
 // the Lua side pushes 'OffroadCompanionUpdate' five times a second while this app is on screen.
-var EGPS_APP_BUILD = '2026-11-04 16:30'   // (main.lua M.BUILD: the same, or the game kept an older copy of one of them)
+var EGPS_APP_BUILD = '2026-11-05 15:00'   // (main.lua M.BUILD: the same, or the game kept an older copy of one of them)
 angular.module('beamng.apps')
 .directive('offroadCompanion', ['$sce', function ($sce) {
   'use strict'
@@ -229,6 +229,13 @@ angular.module('beamng.apps')
 '</div>' +
 
 '<div class="lower">' +
+/* -- BeamNG.Earth's game mod older than its server: orange dirt roads (main.lua earthModStale) -- */
+'<div class="strip stale" ng-if="d.earthStale" title="BeamNG.Earth {{ d.earthStale.server }} draws dirt roads with materials its own game mod brings since 1.8; an older copy of that mod has none, so the game shows its orange missing-texture">' +
+'  <div class="err">Orange dirt roads: BeamNG.Earth\'s game mod is older than its server ({{ d.earthStale.server }}).' +
+'    <span ng-if="d.earthStale.mp"> On this BeamMP server everyone gets the server\'s copy: its owner replaces Resources/Client/beamng_earth.zip with BeamNG.Earth {{ d.earthStale.server }}\'s (the Offroad Companion BeamMP server zip has it), then everyone rejoins.</span>' +
+'    <span ng-if="!d.earthStale.mp"> Remove the old beamng_earth zip or folder from your mods folder (keep BeamNG.Earth {{ d.earthStale.server }}\'s), or start the Offroad Companion .exe again (it installs the right one), then restart the game.</span>' +
+'  </div>' +
+'</div>' +
 /* -- track editor -- */
 '<div class="strip edit" ng-if="tab === \'make\' || (d.editor && d.editor.mode !== \'off\')">' +
 '  <div class="row" style="margin-top:0"><b class="grow">Make a track</b><span class="num">{{ d.editor.n || 0 }} points &middot; {{ d.editor.length }}<span ng-if="d.editor.checkpoints"> &middot; {{ d.editor.checkpoints }} CP</span></span></div>' +
