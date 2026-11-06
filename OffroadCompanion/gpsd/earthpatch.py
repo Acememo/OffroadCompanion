@@ -31,8 +31,9 @@ log = logging.getLogger("earthd.offroad")
 
 CHECK_S = 2.0
 MEMO = 512
-ROUGH = {"off": 0.0, "mild": 0.55, "on": 1.0, "extra": 1.6, "auto": 1.0}     # the track's relief (relief.py), the
-# player's setting ("auto": each stretch its own, relief.course_auto)
+ROUGH = {"off": 0.0, "mild": 0.55, "on": 1.0, "extra": 1.6, "auto": 1.0, "default": 0.0}     # the track's relief
+# (relief.py), the player's setting ("auto", the app's Baja: each stretch its own, relief.course_auto; "default":
+# none of the painter's, the track as BeamNG.Earth makes a track: install_course_grade)
 HEARTBEAT_S = 20.0
 RETRY_S = 30.0
 DEMAND_RETRY_S = 3.0        # the ground near the car being built: a window that failed is tried again this soon (it
@@ -251,6 +252,10 @@ class _State:
                 self.course = plan
                 self.merged.clear()
                 self.bld.clear()
+                try:                    # (the roads planned again: the new track, the new setting's dirt road wear)
+                    forget_plans()
+                except Exception as e:
+                    log.debug("course painter: plans kept (%s: %s)", type(e).__name__, e)
                 if plan is not None:
                     for c in plan.lines:
                         log.info("course painter: %s: %s (%.0f km)", c.name,
@@ -1047,12 +1052,51 @@ def course_rows(feats):
     return got
 
 
+LEAN_SHARE = 0.05       # Baja, Mild, Rough, Extra: the share of BeamNG.Earth's dirt road parts that keep their lean
+
+
+def dirt_wear(mode, course):
+    """How BeamNG.Earth 1.8.2's dirt road wear goes on a dirt road part with the course's terrain setting mode (None:
+    no course) and course (the course's own track or not): (bumps, lean, smoothing), each "earth" (BeamNG.Earth's own)
+    or None / "rare" / "smooth". The user, 2026-11-06:
+      default   BeamNG.Earth 1.8.2's ground, the course's track a worn track like any other (the painter's relief off)
+      off       Flat: like BeamNG.Earth before 1.8.2, no wear on any dirt road (smoothed over DIRT_SIGMA_M)
+      others    Baja (auto), Mild, Rough, Extra: the track the painter's own, unworn; the mapped dirt roads keep their
+                potholes but lean only rarely (LEAN_SHARE)
+    No course: BeamNG.Earth's own everywhere. Pure."""
+    if mode is None or mode == "default":
+        return "earth", "earth", "earth"
+    if course or mode == "off":
+        return None, None, "smooth"
+    return "earth", "rare", "earth"
+
+
+def lean_kept(xy):
+    """Whether a dirt road part keeps its lean (LEAN_SHARE of them): from the part's first point, so every process
+    and tile picks the same. Pure."""
+    xy = np.asarray(xy, np.float64)
+    if xy.ndim != 2 or not len(xy):
+        return False
+    key = f"{int(round(float(xy[0, 0]) * 3.0))},{int(round(float(xy[0, 1]) * 3.0))}".encode()
+    h = int.from_bytes(hashlib.blake2s(key, digest_size=4).digest(), "little")
+    return h / 2.0 ** 32 < LEAN_SHARE
+
+
+def wear_mode(st):
+    """The course's terrain setting (its rough), None when no course is loaded."""
+    plan = st.current() if st is not None else None
+    if plan is None:
+        return None
+    c = plan.paint or next((ln for ln in plan.lines if getattr(ln, "kind", "") == "course"), None)
+    return getattr(c, "rough", None) if c is not None else None
+
+
 def install_course_grade(st):
     """BeamNG.Earth 1.8.2 wears its dirt roads (grading.dirt_bumps: potholes, broken patches, deep pits, 2.5 times as
-    deep on a track; dirt_bank: a lean of up to 0.2 m per m; profile_sigma: a minor one smoothed over 2.5 m, not 8). The
-    course's track is a "track" too, and its ground is the painter's own (relief.py, by its ground version): it was
-    the same as on 1.8.1, never worn by BeamNG.Earth's. roads.road_specs marks the track's specs (course_spec_class);
-    the three give it what 1.8.1 did (no bumps, no lean, DIRT_SIGMA_M). Mapped dirt roads keep BeamNG.Earth's wear."""
+    deep on a track; dirt_bank: a lean of up to 0.2 m per m; profile_sigma: a minor one smoothed over 2.5 m, not 8).
+    The course's terrain setting decides where (dirt_wear): roads.road_specs marks the course's track's specs
+    (course_spec_class), the three hooks go by dirt_wear for the part. The track's own ground stays the painter's
+    (relief.py, by its ground version), the same as on 1.8.1, but on Default."""
     import grading as gradingmod
     roadsmod = st.roads
     if not hasattr(gradingmod, "dirt_bumps") or getattr(gradingmod, "_egps_course_grade", False):
@@ -1079,18 +1123,44 @@ def install_course_grade(st):
 
     orig_bumps, orig_bank, orig_sigma = gradingmod.dirt_bumps, gradingmod.dirt_bank, gradingmod.profile_sigma
 
+    def wear(spec):
+        try:
+            return dirt_wear(wear_mode(st), isinstance(spec, cls))
+        except Exception:                   # (never break BeamNG.Earth's grading: its own)
+            return "earth", "earth", "earth"
+
     def dirt_bumps(xy, spec, *a, **kw):
-        return None if isinstance(spec, cls) else orig_bumps(xy, spec, *a, **kw)
+        return orig_bumps(xy, spec, *a, **kw) if wear(spec)[0] == "earth" else None
 
     def dirt_bank(xy, spec, *a, **kw):
-        return None if isinstance(spec, cls) else orig_bank(xy, spec, *a, **kw)
+        how = wear(spec)[1]
+        if how == "earth" or (how == "rare" and lean_kept(xy)):
+            return orig_bank(xy, spec, *a, **kw)
+        return None
 
     def profile_sigma(spec):
-        return gradingmod.DIRT_SIGMA_M if isinstance(spec, cls) else orig_sigma(spec)
+        if spec.kind not in roadsmod.BUILT and wear(spec)[2] == "smooth":
+            return gradingmod.DIRT_SIGMA_M
+        return orig_sigma(spec)
 
     roadsmod.road_specs = road_specs
     gradingmod.dirt_bumps, gradingmod.dirt_bank, gradingmod.profile_sigma = dirt_bumps, dirt_bank, profile_sigma
     gradingmod._egps_course_grade = True
+    return True
+
+
+def forget_plans():
+    """This process's road plans made so far dropped from its memory (BeamNG.Earth 1.8 keeps one plan store a
+    process, whatever the anchor): another course or terrain setting plans the roads again (their track, their wear),
+    from the plan cache of that ground or anew. True when there was one."""
+    import sys
+    g = sys.modules.get("grading")
+    store = getattr(g, "_ACTIVE_STORE", None) if g is not None else None
+    planners = getattr(store, "planners", None)
+    if planners is None:
+        return False
+    with store.lock:
+        planners.clear()
     return True
 
 

@@ -33,8 +33,8 @@ M.CHECK_S = 0.2
 M.REROUTE_S = 8
 M.SETTINGS_FILE = '/settings/offroadCompanion.json'
 M.OLD_SETTINGS_FILE = '/settings/earthGps.json'   -- (the project was BeamNG.Earth GPS before 1.2.0)
-M.VERSION = '1.7.4'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
-M.BUILD = '2026-11-06 01:00'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
+M.VERSION = '1.7.5'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
+M.BUILD = '2026-11-06 02:00'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
 
 local settings = { lang = 'en', units = 'auto', ribbon = true, autoRoute = true, zoom = 600, paint = true, paintSize = 1.0,
                    clearCourse = true, clearRoute = true, streets = true, markers = 'checkpoints', ruts = 'auto', rough = 'auto',
@@ -1017,7 +1017,8 @@ function M.uiSet(key, value)
   if key == 'spectators' and value ~= 'off' and value ~= 'some' and value ~= 'lots' then value = 'some' end
   if key == 'nightLights' and value ~= 'off' and value ~= 'on' and value ~= 'bright' then value = 'on' end
   if key == 'crowdSound' or key == 'wetGround' then value = value and true or false end
-  if key == 'rough' and value ~= 'off' and value ~= 'mild' and value ~= 'on' and value ~= 'extra' and value ~= 'auto' then
+  if key == 'rough' and value ~= 'off' and value ~= 'mild' and value ~= 'on' and value ~= 'extra' and value ~= 'auto'
+      and value ~= 'default' then     -- (auto: the app's Baja; default: BeamNG.Earth's own track)
     value = 'auto'
   end
   settings[key] = value

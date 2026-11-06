@@ -166,6 +166,33 @@ class TestPure(unittest.TestCase):
         st.ruts_at(la, lo)
         self.assertTrue(st.rwins, "the planned windows used")
 
+    def test_dirt_road_wear_by_setting(self):
+        """BeamNG.Earth 1.8.2's dirt road wear by the course's terrain setting (earthpatch.dirt_wear, the user
+        2026-11-06): Default BeamNG.Earth's own, the track too; Flat none anywhere; Baja, Mild, Rough, Extra the track
+        unworn and the other roads leaning only rarely (lean_kept: about LEAN_SHARE of them, the same everywhere)."""
+        from gpsd import earthpatch as ep
+        E = ("earth", "earth", "earth")
+        self.assertEqual(ep.dirt_wear(None, False), E, "no course: BeamNG.Earth's own")
+        self.assertEqual(ep.dirt_wear("default", True), E)
+        self.assertEqual(ep.dirt_wear("default", False), E)
+        for mode in ("off", "auto", "mild", "on", "extra"):
+            self.assertEqual(ep.dirt_wear(mode, True), (None, None, "smooth"), mode)
+        self.assertEqual(ep.dirt_wear("off", False), (None, None, "smooth"))
+        for mode in ("auto", "mild", "on", "extra"):
+            self.assertEqual(ep.dirt_wear(mode, False), ("earth", "rare", "earth"), mode)
+        import numpy as np
+        rng = np.random.default_rng(3)
+        kept = [ep.lean_kept([[float(x), float(y)]]) for x, y in rng.uniform(-50000, 50000, (4000, 2))]
+        self.assertAlmostEqual(sum(kept) / len(kept), ep.LEAN_SHARE, delta=0.015)
+        self.assertEqual(ep.lean_kept([[1234.5, -77.0], [0, 0]]), ep.lean_kept([[1234.5, -77.0]]), "its first point")
+        self.assertFalse(ep.lean_kept([]))
+        from gpsd import terrain
+        a = terrain.seal("c", rough="on", earth="1.8.1-beta")
+        b = terrain.seal("c", rough="on", earth="1.8.2-beta")
+        self.assertNotEqual(terrain.seal("c", rough="default", earth="1.8.2-beta"), b)
+        self.assertEqual(a, terrain.seal("c", rough="on", earth="1.8.1-beta"), "1.8.1's seals as they were")
+        self.assertNotEqual(a, b)
+
     def test_one_planner_for_the_whole_server(self):
         """The heartbeat and the planner ahead of the car run in the server's own process only: a worker it spawns
         (which installs the painter while still named after its parent) never starts one (1.6.x on BeamNG.Earth 1.7:
@@ -1280,9 +1307,10 @@ class TestInsideEarth(unittest.TestCase):
             self.set_rough("on")
 
     def test_track_not_worn_by_earths_dirt_roads(self):
-        """BeamNG.Earth 1.8.2 wears its dirt roads (potholes, patches, pits, a lean; a track's the worst): the course's
-        track is a "track" too, but its ground is the painter's own, the same as on 1.8.1. A mapped dirt road keeps
-        BeamNG.Earth's wear."""
+        """BeamNG.Earth 1.8.2 wears its dirt roads (potholes, patches, pits, a lean; a track's the worst), as the course's
+        terrain setting has it (earthpatch.dirt_wear): Baja, Mild, Rough, Extra: the course's track its own ground (the
+        same as on 1.8.1), the other dirt roads worn but rarely leaning; Flat: no wear anywhere (as before 1.8.2);
+        Default: BeamNG.Earth's own, the track worn as a track."""
         import grading
         import roads as roadsmod
         if not hasattr(grading, "dirt_bumps"):
@@ -1302,26 +1330,67 @@ class TestInsideEarth(unittest.TestCase):
         import pickle
         self.assertIsInstance(pickle.loads(pickle.dumps(own[0])), cls, "and to another process")
         plain = roadsmod.Spec(*own[0])
+        ep = self.earthpatch
         line = np.stack([np.arange(0.0, 300.0, 1.0), np.zeros(300)], axis=1)
-        self.assertIsNone(grading.dirt_bumps(line, own[0], 300))
-        self.assertIsNotNone(grading.dirt_bumps(line, plain, 300), "a mapped track of the same kind: worn")
-        self.assertIsNone(grading.bank(line, own[0]))
-        self.assertIsNotNone(grading.bank(line, plain))
-        self.assertEqual(grading.profile_sigma(own[0]), grading.DIRT_SIGMA_M)
-        self.assertEqual(grading.profile_sigma(plain), grading.DIRT_SIGMA_MINOR_M)
-        # the graded ground: the flat desert's track stays flat (its relief off), the mapped dirt road beside is worn
+        kept = next(np.stack([np.arange(0.0, 300.0, 1.0) + x0, np.zeros(300)], axis=1) for x0 in range(0, 100000, 7)
+                    if ep.lean_kept([[x0, 0.0]]))
+        dropped = next(np.stack([np.arange(0.0, 300.0, 1.0) + x0, np.zeros(300)], axis=1) for x0 in range(0, 100000, 7)
+                       if not ep.lean_kept([[x0, 0.0]]))
         frame = self.geodesy.EnuFrame(*ll(1500, 0), 0.0)
-        self.set_rough("off")
+
+        def graded(xs):
+            la, lo = ll(xs, np.zeros_like(xs))
+            return grading.Grader(frame, self.md, lambda a, b: ground(a, b)).apply(la, lo, ground(la, lo))
+        xs, rs = np.arange(600.0, 1400.0, 1.0), np.arange(2300.0, 2680.0, 1.0)     # (a crossing at 2700)
+        seen = {}
         try:
-            def graded(xs):
-                la, lo = ll(xs, np.zeros_like(xs))
-                return grading.Grader(frame, self.md, lambda a, b: ground(a, b)).apply(la, lo, ground(la, lo))
-            track = graded(np.arange(600.0, 1400.0, 1.0))
-            road = graded(np.arange(2300.0, 2700.0, 1.0))
+            for mode in ("on", "auto", "off", "default"):
+                self.set_rough(mode)
+                c = self.earthpatch.state().current().paint
+                self.assertEqual(c.rough, mode)
+                seen[mode] = (graded(xs), graded(rs))
+                if mode in ("on", "auto"):          # Rough, Baja: the track the painter's own; the roads keep their
+                    self.assertIsNone(grading.dirt_bumps(line, own[0], 300), mode)        # potholes, rarely a lean
+                    self.assertIsNone(grading.bank(line, own[0]), mode)
+                    self.assertEqual(grading.profile_sigma(own[0]), grading.DIRT_SIGMA_M)
+                    self.assertIsNotNone(grading.dirt_bumps(line, plain, 300), "a mapped track: worn")
+                    self.assertIsNotNone(grading.bank(kept, plain), "the odd one leans")
+                    self.assertIsNone(grading.bank(dropped, plain), "most do not")
+                    self.assertEqual(grading.profile_sigma(plain), grading.DIRT_SIGMA_MINOR_M)
+                elif mode == "off":                 # Flat: no wear anywhere, as before 1.8.2
+                    for sp in (own[0], plain):
+                        self.assertIsNone(grading.dirt_bumps(line, sp, 300))
+                        self.assertIsNone(grading.bank(kept, sp))
+                        self.assertEqual(grading.profile_sigma(sp), grading.DIRT_SIGMA_M)
+                else:                               # Default: BeamNG.Earth's own, the track a worn track too
+                    for sp in (own[0], plain):
+                        self.assertIsNotNone(grading.dirt_bumps(line, sp, 300))
+                        self.assertIsNotNone(grading.bank(dropped, sp))
+                        self.assertEqual(grading.profile_sigma(sp), grading.DIRT_SIGMA_MINOR_M)
         finally:
             self.set_rough("on")
-        self.assertLess(float(np.abs(track).max()), 0.05, "the track: no potholes")
-        self.assertGreater(float(np.ptp(road)), 0.1, "BeamNG.Earth's own dirt road: worn")
+        la, lo = ll(xs, np.zeros_like(xs))
+        self.assertLess(float(np.abs(seen["off"][0]).max()), 0.05, "Flat: the track flat")
+        self.assertLess(float(np.ptp(seen["off"][1])), 0.05, "Flat: BeamNG.Earth's dirt road too")
+        self.assertGreater(float(np.ptp(seen["default"][0])), 0.3, "Default: the track worn as a track")
+        self.assertGreater(float(np.ptp(seen["default"][1])), 0.1, "Default: the dirt road worn")
+        self.assertGreater(float(np.ptp(seen["on"][1])), 0.1, "Rough: the dirt road keeps its potholes")
+        self.set_rough("on")
+        relief = self.earthpatch.state().relief_at(self.md, la, lo)
+        self.assertLess(float(np.abs(seen["on"][0] - relief).max()), 0.05, "Rough: the track its relief alone")
+        # one plan store all along (BeamNG.Earth 1.8's: one a process): another setting plans the roads again
+        la, lo = ll(rs, np.zeros_like(rs))
+        g = grading.Grader(frame, self.md, lambda a, b: ground(a, b))
+        try:
+            self.set_rough("off")
+            flat = g.apply(la, lo, ground(la, lo))
+            self.set_rough("default")
+            self.earthpatch.state().current()
+            worn = g.apply(la, lo, ground(la, lo))
+        finally:
+            self.set_rough("on")
+        self.assertLess(float(np.ptp(flat)), 0.05)
+        self.assertGreater(float(np.ptp(worn)), 0.1, "the same grader: the roads planned again for Default")
 
     def test_cut_bank_beside_the_track(self):
         """On a steep hillside BeamNG.Earth's grading cuts the dirt track in with a wall's step (a strip at the road's

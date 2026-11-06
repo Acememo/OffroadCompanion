@@ -3,6 +3,21 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.5 (2026-11-06)
+
+- **Track terrain: Auto is now called Baja**, the same ground as before (and still the default).
+- **New Track terrain: Default**, BeamNG.Earth 1.8.2's own dirt track. The course's track is worn like any forest
+  track: potholes, broken patches, deep pits and leans, with none of Offroad Companion's relief.
+- **Flat smooths every dirt road**, as BeamNG.Earth was before 1.8.2: no potholes or leans on the course's track or
+  on the dirt roads around it.
+- **Leans are rare on Baja, Mild, Rough and Extra.** The other dirt roads keep BeamNG.Earth 1.8.2's potholes, but only
+  about 1 road part in 20 leans to one side. The course's track itself stays as in 1.7.4: its own relief, no wear.
+- A change of Track terrain now plans the roads again in BeamNG.Earth 1.8's server, so the new setting reaches every
+  dirt road and not only the ones planned after the change.
+- Without a course loaded, BeamNG.Earth's dirt roads are as BeamNG.Earth makes them. The course's track on Baja, Mild,
+  Rough, Extra and Flat is the same as in 1.7.4 (ground version 8). Ground codes made on BeamNG.Earth 1.8.2 change,
+  since the dirt roads around the course do.
+
 ## 1.7.4 (2026-11-06)
 
 - **BeamNG.Earth 1.8.2-beta** is the version inside the .exe. A source install downloads 1.8.2-beta, and 1.8.1, 1.8.0,

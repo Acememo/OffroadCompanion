@@ -218,7 +218,7 @@ class Server:
             ruts = str(m.get("ruts") or "auto")
             ruts = ruts if ruts in ("auto", "on", "off") else "auto"
             rough = str(m.get("rough") or "on")
-            rough = rough if rough in ("off", "mild", "on", "extra", "auto") else "on"
+            rough = rough if rough in ("off", "mild", "on", "extra", "auto", "default") else "on"
             # a replay's ground: the snapshot made when it was recorded (its course too, if not loaded now) and the
             # terrain version it was made with
             pin = paintfile.snapshot_name(m.get("pin")) if m.get("pin") else None

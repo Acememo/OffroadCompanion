@@ -42,6 +42,8 @@ def seal(cid, paint=True, clear=True, rough="on", ruts="auto", dangers=(), tv=VE
     text = f"{int(tv)}|{cid}|{int(bool(paint))}{int(bool(clear))}|{rough}|{ruts}|{dk}"
     if earth:
         text += f"|E{earth}"
+        if _earth_bytes(earth)[:3] >= bytes([1, 8, 2]):
+            text += "|W1"           # (1.8.2's dirt road wear, as the setting has it: earthpatch.dirt_wear)
     return f"T{int(tv)}-{hashlib.sha1(text.encode()).hexdigest()[:6]}"
 
 
@@ -64,7 +66,7 @@ def earth_version(root):
 # bytes: terrain version, flags (dirt track, cleared, track terrain, ruts), track size x 100 (2), BeamNG.Earth's
 # version (major, minor, patch, suffix).
 B32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-ROUGHS = ("on", "off", "mild", "extra", "auto")
+ROUGHS = ("on", "off", "mild", "extra", "auto", "default")
 RUTS = ("auto", "on", "off")
 EARTH_SUFFIXES = ("", "-beta", "-preview")
 

@@ -346,6 +346,12 @@ class TestPaint(unittest.TestCase):
         me.tracks["b"] = {"points": pts[:2], "name": "B", "approximate": False}
         me.do_paint({"type": "paint", "enabled": True, "trackId": "b"})
         self.assertIn("another course", me.do_ground_code({"type": "ground_code", "code": code})["error"])
+        # (Default, the track as BeamNG.Earth makes it: shared like the others)
+        d = terrain.share_code("T8-abcdef", rough="default", tv=8, earth="1.8.2-beta")
+        self.assertEqual(terrain.parse_share(d)["rough"], "default")
+        for rough in terrain.ROUGHS:
+            self.assertEqual(terrain.parse_share(terrain.share_code("T8-abcdef", rough=rough, ruts="off", tv=8))["rough"],
+                             rough)
         newer = terrain.share_code("T9-abcdef", tv=9)
         self.assertIn("update Offroad Companion", me.do_ground_code({"type": "ground_code", "code": newer})["error"])
         self.assertIn("not a ground code", me.do_ground_code({"type": "ground_code", "code": "hello"})["error"])

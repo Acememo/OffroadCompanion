@@ -190,7 +190,7 @@ ground loads.
 ### Track terrain: whoops, washes, berms, banked corners, ruts, rocks, sand traps, rock crawls
 
 The elevation data is 30 m, so a desert track laid on it is a smooth sheet, and you can cut across anywhere. With
-**Track terrain** (Settings) on **Auto** (the default since 1.6.1) or **Rough**, BeamNG.Earth's server adds a desert race course's relief to the
+**Track terrain** (Settings) on **Baja** (the default since 1.6.1, called Auto before 1.7.5) or **Rough**, BeamNG.Earth's server adds a desert race course's relief to the
 ground along the course, wherever it runs on dirt (its own dirt track, or a dirt or gravel road it follows):
 
 - whoops: rolling bumps across the track about 10 m apart, high in whoop sections (about a third of a course) and
@@ -233,7 +233,7 @@ the Earth whether it does, easing in and out:
 - **gravel**: on the alluvial fans at the foot of the mountains (a desert track climbing or falling a steady 2.5-12 %
   grade), in creek beds in green country, on broken ground on the way into the rocks, and on dirt roads in the hills:
   gravel underfoot, the track a little smoother, a low windrow of gravel along its edges;
-- **rock crawls** (**Auto** only, where the course file's DANGER waypoints count): about 7 in 10 DANGER waypoints
+- **rock crawls** (**Baja** only, where the course file's DANGER waypoints count): about 7 in 10 DANGER waypoints
   that sit in a canyon become a rock crawl 70-160 m long. The track is a staircase of tilted rock shelves, each step
   up or down over about 3 m, with boulders of 30-70 cm in the track and a line weaving between them that is always
   clear, and bigger boulders beside it. The waypoint's own ditch or kicker gives way to it.
@@ -249,6 +249,19 @@ times, **Flat** turns it off (the setting decides where the banked corners and r
 The physics ground, the dirt track's surface and the ground you see all take the same heights, so the tyres and the
 picture agree.
 
+BeamNG.Earth 1.8.2 wears its own dirt roads: potholes, broken patches, the odd deep pit and a lean to one side, forest
+tracks the worst. The track terrain setting decides what that does with a course loaded:
+
+| Track terrain | The course's track | Other dirt roads |
+| --- | --- | --- |
+| **Baja**, **Mild**, **Rough**, **Extra** | the relief above, none of BeamNG.Earth's wear | BeamNG.Earth's potholes; a lean on about 1 road part in 20 |
+| **Default** | BeamNG.Earth's own: worn like any forest track (none of the relief above) | BeamNG.Earth's own |
+| **Flat** | smooth | smooth, as before BeamNG.Earth 1.8.2 |
+
+Without a course loaded, BeamNG.Earth's dirt roads are as BeamNG.Earth makes them. On BeamNG.Earth 1.8.1 and older there
+is no wear, so **Default** is the same as **Flat** there. A change of setting plans the roads again, and the ground
+already loaded changes at the next world shift.
+
 Where the course runs along a steep hillside, BeamNG.Earth cuts the road into it with a retaining wall's step: a flat
 strip, then the ground straight up. Beside a paved road a stone wall stands there; beside a dirt road nothing does, so
 the track ran beside a smooth bare cliff. Along the course's dirt (its own track, or a dirt road it follows) that step
@@ -257,7 +270,7 @@ hillside itself is so steep it would not meet it within 15 m), never above the h
 track, the downhill side, every other road and every gentle transition stay as BeamNG.Earth grades them. Any track
 terrain setting, Flat included.
 
-**Auto** (the default) mixes them along the course: each stretch of 1-3 km is fast and smooth (about 10 % of a course), mild
+**Baja** (the default) mixes them along the course: each stretch of 1-3 km is fast and smooth (about 10 % of a course), mild
 (about 25 %), rough (about 40 %) or extra rough (about 25 %), blending over about 100 m. From about 160 m before each
 DANGER waypoint of the course file to about 100 m after it, it is extra rough, and at the waypoint there is a hazard:
 a deep ditch, a big kicker or a rock garden. Boulder fields stand beside the track on about a third of the course
@@ -557,8 +570,9 @@ and 1.6.0 (and 1.5.x). With 1.8:
   future west of UTC, the game could take its ground materials for new and pack the ground's textures again at every
   block.
 - 1.8.2 wears BeamNG.Earth's dirt roads (potholes, broken patches, deep pits and a lean to one side; tracks the
-  worst). The course's track keeps its own ground instead (its relief, by its ground version): on 1.8.2 it is the same
-  as on 1.8.1, without BeamNG.Earth's holes. The mapped dirt roads around it keep BeamNG.Earth's wear.
+  worst). The track terrain setting decides where (see Track terrain): on Baja, Mild, Rough and Extra the course's
+  track keeps its own ground (the same as on 1.8.1) and the other dirt roads lean only rarely; Default is
+  BeamNG.Earth's own, the track worn too; Flat smooths every dirt road as before 1.8.2.
 - 1.8.2's launcher asks at every start whether to install a newer BeamNG.Earth. Offroad Companion's .exe never asks:
   the BeamNG.Earth inside it comes with Offroad Companion's own releases.
 

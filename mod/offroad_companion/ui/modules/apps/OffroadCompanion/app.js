@@ -1,7 +1,7 @@
 // Offroad Companion (the in-game app; lua/ge/extensions/offroadCompanion/main.lua): turn-by-turn road navigation and race-course guidance.
 // The game's UI browser cannot make web requests, so everything goes through the game's Lua (bngApi.engineLua);
 // the Lua side pushes 'OffroadCompanionUpdate' five times a second while this app is on screen.
-var EGPS_APP_BUILD = '2026-11-06 01:00'   // (main.lua M.BUILD: the same, or the game kept an older copy of one of them)
+var EGPS_APP_BUILD = '2026-11-06 02:00'   // (main.lua M.BUILD: the same, or the game kept an older copy of one of them)
 angular.module('beamng.apps')
 .directive('offroadCompanion', ['$sce', function ($sce) {
   'use strict'
@@ -146,6 +146,8 @@ angular.module('beamng.apps')
 '.egps .seg{display:inline-flex;border:1px solid #33425F;border-radius:calc(6px*var(--s));overflow:hidden;flex:0 0 auto}' +
 '.egps .seg button{border:0;border-radius:0;background:#0F1524;color:var(--mute);padding:calc(4px*var(--s)) calc(9px*var(--s))}' +
 '.egps .seg button+button{border-left:1px solid #33425F}.egps .seg button.on{background:var(--cyan);color:#06222C}' +
+'.egps .set.stack{flex-wrap:wrap}.egps .set.stack .seg{flex:1 1 100%;display:flex}' +   /* (the label above, the choices the row's width: Track terrain's six) */
+'.egps .set.stack .seg button{flex:1 1 0;padding-left:calc(2px*var(--s));padding-right:calc(2px*var(--s));white-space:nowrap}' +
 '.egps .pick{width:100%;display:flex;justify-content:space-between;align-items:center;gap:calc(8px*var(--s));text-align:left;background:#0F1524;padding:calc(6px*var(--s)) calc(10px*var(--s))}' +
 '.egps .pick span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.egps .pick.open{border-color:var(--cyan)}' +
 '.egps .caret{flex:0 0 auto;width:0;height:0;border-left:calc(5px*var(--s)) solid transparent;border-right:calc(5px*var(--s)) solid transparent;border-top:calc(6px*var(--s)) solid var(--mute)}' +
@@ -368,12 +370,13 @@ angular.module('beamng.apps')
 '      <button ng-class="{on: ui.ruts === \'auto\'}" ng-click="choose(\'ruts\', \'auto\')" title="Only where the track blends into the ground (light desert sand)">Auto</button>' +
 '      <button ng-class="{on: ui.ruts === \'on\'}" ng-click="choose(\'ruts\', \'on\')" title="All along the dirt track">Always</button>' +
 '      <button ng-class="{on: ui.ruts === \'off\'}" ng-click="choose(\'ruts\', \'off\')">Off</button></span></div>' +
-'    <div class="set" ng-if="ui.paint === \'on\'"><span title="Whoops, washes, kickers, sand berms on the outside of turns, broken ground and rock ledges along the course on dirt (never on asphalt; dry and salt lakes stay smooth), with boulders beside it in canyons; sand traps in the washes, rock sections in the canyons and on rocky hillsides, gravel on the alluvial fans, only where the place has them. The same on every computer for the same course and place">Track terrain</span><span class="seg">' +
-'      <button ng-class="{on: ui.rough === \'auto\'}" ng-click="choose(\'rough\', \'auto\')" title="Changes along the course: fast smooth stretches, mild, rough and very rough sections, extra rough with a ditch, a kicker or a rock garden at the DANGER markers (in a canyon often a rock crawl), and boulder fields here and there. Picked from the place, so the same for everyone">Auto</button>' +
-'      <button ng-class="{on: ui.rough === \'mild\'}" ng-click="choose(\'rough\', \'mild\')">Mild</button>' +
-'      <button ng-class="{on: ui.rough === \'on\'}" ng-click="choose(\'rough\', \'on\')">Rough</button>' +
-'      <button ng-class="{on: ui.rough === \'extra\'}" ng-click="choose(\'rough\', \'extra\')">Extra</button>' +
-'      <button ng-class="{on: ui.rough === \'off\'}" ng-click="choose(\'rough\', \'off\')" title="As the elevation data has it (graded smooth)">Flat</button></span></div>' +
+'    <div class="set stack" ng-if="ui.paint === \'on\'"><span title="Whoops, washes, kickers, sand berms on the outside of turns, broken ground and rock ledges along the course on dirt (never on asphalt; dry and salt lakes stay smooth), with boulders beside it in canyons; sand traps in the washes, rock sections in the canyons and on rocky hillsides, gravel on the alluvial fans, only where the place has them. The same on every computer for the same course and place">Track terrain</span><span class="seg">' +
+'      <button ng-class="{on: ui.rough === \'auto\'}" ng-click="choose(\'rough\', \'auto\')" title="Baja: changes along the course: fast smooth stretches, mild, rough and very rough sections, extra rough with a ditch, a kicker or a rock garden at the DANGER markers (in a canyon often a rock crawl), and boulder fields here and there. Picked from the place, so the same for everyone. Other dirt roads lean to one side only rarely">Baja</button>' +
+'      <button ng-class="{on: ui.rough === \'default\'}" ng-click="choose(\'rough\', \'default\')" title="BeamNG.Earth\'s own: the track worn like any dirt track (potholes, broken patches, deep pits and leans, BeamNG.Earth 1.8.2 and newer)">Default</button>' +
+'      <button ng-class="{on: ui.rough === \'mild\'}" ng-click="choose(\'rough\', \'mild\')" title="The same roughness all along the course. Other dirt roads lean to one side only rarely">Mild</button>' +
+'      <button ng-class="{on: ui.rough === \'on\'}" ng-click="choose(\'rough\', \'on\')" title="The same roughness all along the course. Other dirt roads lean to one side only rarely">Rough</button>' +
+'      <button ng-class="{on: ui.rough === \'extra\'}" ng-click="choose(\'rough\', \'extra\')" title="The same roughness all along the course. Other dirt roads lean to one side only rarely">Extra</button>' +
+'      <button ng-class="{on: ui.rough === \'off\'}" ng-click="choose(\'rough\', \'off\')" title="As the elevation data has it (graded smooth), and every dirt road without BeamNG.Earth 1.8.2\'s potholes and leans, as before 1.8.2">Flat</button></span></div>' +
 '    <div class="note" ng-if="ui.paint === \'on\'">{{ paintNote() }}</div>' +
 '    <div class="set" ng-if="d.paint.seal"><span title="The name of exactly this ground: the course, its track settings and the terrain version. The same code on another computer is the same ground, bump for bump. Copy it to send to friends: pasted here with the same course loaded, it sets their track settings to yours">Ground code <b class="code">{{ d.paint.code || d.paint.seal }}</b>{{ d.paint.replayGround ? \' (as the replay was recorded)\' : \'\' }}</span><span class="seg">' +
 '      <button ng-click="copyCode()" ng-disabled="!d.paint.code" title="To the clipboard, to send to your friends">Copy</button></span></div>' +
