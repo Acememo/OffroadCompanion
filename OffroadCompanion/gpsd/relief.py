@@ -535,6 +535,17 @@ HAZARD_ROCK_M = (35.0, 55.0)                    # the rock garden: before .. aft
 ROCK_ZONE_M = 900.0
 ROCK_ZONE = (0.55, 0.72)                        # rock fields where the noise is between these (none below)
 AUTO_ROCK_P = 0.32                              # chance per slot (four per sample and side) at full
+# (terrain 9, Baja only; the user, 2026-11-06: "on the Baja setting tune the roughness of the rough and above parts a
+# bit down except for where there is the danger mark and on parts that aren't changed by the new terrain from the new
+# BeamNG.Earth, i.e. parts that aren't marked as dirt roads ... The new terrain added a lot of roughness and its being
+# amplified by ours ... make roughness sections rarer overall, the rougher the rarer except for mild sections")
+AUTO_TV = 9
+AUTO_STEPS_V9 = ((0.33, 0.365, 0.20), (0.53, 0.565, 0.45), (0.69, 0.725, 0.60))  # ~20 % fast, ~40 % mild, ~28 % rough,
+                                                                                  # ~12 % extra
+MILD_LEVEL = 0.55
+ROAD_EXCESS_V9 = 0.65       # on a mapped dirt road the course follows (BeamNG.Earth 1.8.2 wears it), away from a DANGER
+                            # waypoint's stretch: the level's part over Mild kept at this share (Rough 1.0 -> 0.84,
+                            # Extra 1.6 -> 1.23); the course's own track and the DANGER stretches as before
 
 
 def danger_s(course, points):
@@ -558,24 +569,27 @@ def course_auto(course):
     """Per sample of the course, for "auto": (level: the relief's scale, rock: a rockiness the hazards add, rocks: the
     boulder fields' chance per slot, hazard: per DANGER waypoint (s, kind 0 ditch / 1 kicker / 2 rocks, size)).
     Computed once per course (kept on it). Pure."""
+    tv = getattr(course, "tv", 1)
     got = getattr(course, "_auto", None)
-    if got is not None:
+    if got is not None and got.get("tv") == tv:
         return got
     lat = np.asarray(course.lat, np.float64)
     lon = np.asarray(course.lon, np.float64)
     gx, gy = global_xy(lat, lon)
     v = fbm(gx / AUTO_ZONE_M, gy / AUTO_ZONE_M, 7, 2)
     level = np.full(len(lat), AUTO_BASE)
-    for lo_, hi_, add in AUTO_STEPS:
+    for lo_, hi_, add in (AUTO_STEPS_V9 if tv >= AUTO_TV else AUTO_STEPS):
         level += add * _ramp(v, lo_, hi_)
     level = _mean(level, 4)                     # (~100 m blends)
     rock = np.zeros(len(lat))
+    danger = np.zeros(len(lat))                 # (a DANGER waypoint's stretch: 1, easing out; auto_level)
     hz = []
     sv = np.arange(len(lat)) * STEP
     for sd in getattr(course, "dangers", None) or ():
         b0, b1, a0, a1 = DANGER_RAMP
         up = _ramp(sv, sd - b0, sd - b1) * (1.0 - _ramp(sv, sd + a0, sd + a1))
         level = np.maximum(level, AUTO_BASE + (DANGER_LEVEL - AUTO_BASE) * up)
+        danger = np.maximum(danger, up)
         i = min(len(lat) - 1, int(round(sd / STEP)))
         qa, qo = int(round(lat[i] * 1e5)), int(round(lon[i] * 1e5))
         u = float(_hash(qa, qo, 31))
@@ -595,8 +609,18 @@ def course_auto(course):
         if float(_hash(qa, qo, 33)) < variety.CRAWL_P:
             crawl.append((sd, float(_hash(qa, qo, 34))))
     course._auto = got = {"level": level, "rock": rock, "rocks": np.maximum(fields, 0.6 * rock), "hazard": hz,
-                          "crawl": crawl}
+                          "crawl": crawl, "danger": danger, "tv": tv}
     return got
+
+
+def auto_level(course, A, s, f):
+    """course_auto's level at s (m along the course): from terrain AUTO_TV, its part over Mild softened on a mapped dirt
+    road the course follows (f["road"], the profiles' facts at s), outside the DANGER waypoints' stretches. Pure."""
+    lv = _per_sample(A["level"], s)
+    if getattr(course, "tv", 1) < AUTO_TV:
+        return lv
+    road = np.clip(np.asarray(f["road"], np.float64), 0.0, 1.0) * (1.0 - _per_sample(A["danger"], s))
+    return lv - np.maximum(lv - MILD_LEVEL, 0.0) * (1.0 - ROAD_EXCESS_V9) * road
 
 
 def _per_sample(v, s):
@@ -772,7 +796,7 @@ def relief(course, profiles, lat, lon, scale=1.0, auto=False, near=None):
     power = f["rough"] * (1.0 - 0.85 * f["lake"]) * scale
     if auto:
         A = course_auto(course)
-        power = power * _per_sample(A["level"], s)
+        power = power * auto_level(course, A, s, f)
         rock = np.maximum(rock, _per_sample(A["rock"], s))
     d = d - f["ctr"]                 # (from the middle of the track: a dirt road the course follows off its line)
     ad = np.abs(d)
@@ -848,7 +872,7 @@ def ruts_at(course, profiles, lat, lon, scale=1.0, auto=False, near=None):
     f = _Facts(profiles).at(s)
     power = f["rough"] * (1.0 - 0.85 * f["lake"]) * scale
     if auto:
-        power = power * _per_sample(course_auto(course)["level"], s)
+        power = power * auto_level(course, course_auto(course), s, f)
     gx, gy = global_xy(lat[idx], lon[idx])
     on = np.abs(d - f["ctr"]) <= f["hw"] + 0.5
     rw = rut_weight(gx, gy, f["hw"], power, f["road"]) * (1.0 - f["lake"]) * on

@@ -1,7 +1,7 @@
 // Offroad Companion (the in-game app; lua/ge/extensions/offroadCompanion/main.lua): turn-by-turn road navigation and race-course guidance.
 // The game's UI browser cannot make web requests, so everything goes through the game's Lua (bngApi.engineLua);
 // the Lua side pushes 'OffroadCompanionUpdate' five times a second while this app is on screen.
-var EGPS_APP_BUILD = '2026-11-06 02:00'   // (main.lua M.BUILD: the same, or the game kept an older copy of one of them)
+var EGPS_APP_BUILD = '2026-11-06 04:00'   // (main.lua M.BUILD: the same, or the game kept an older copy of one of them)
 angular.module('beamng.apps')
 .directive('offroadCompanion', ['$sce', function ($sce) {
   'use strict'
@@ -141,13 +141,15 @@ angular.module('beamng.apps')
 '.egps .item:hover{background:#1E2A42}.egps .item b{display:block;font-weight:600}.egps .item small{color:var(--mute)}' +
 '.egps .warnText{color:#FFB3AA}' +
 '.egps .note{color:var(--mute);font-size:calc(12px*var(--s));margin-top:calc(8px*var(--s))}.egps .err{color:#FFB3AA;font-size:calc(12px*var(--s));margin-top:calc(6px*var(--s))}' +
-'.egps .set{display:flex;justify-content:space-between;align-items:center;gap:calc(10px*var(--s));margin:calc(10px*var(--s)) 0}' +
+'.egps .set{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:calc(6px*var(--s)) calc(10px*var(--s));margin:calc(10px*var(--s)) 0}' +
 '.egps .codein{flex:1;min-width:0;width:auto;font-family:Consolas,monospace;letter-spacing:.03em}.egps b.code{font-family:Consolas,monospace;font-weight:600;letter-spacing:.03em;user-select:text}' +
-'.egps .seg{display:inline-flex;border:1px solid #33425F;border-radius:calc(6px*var(--s));overflow:hidden;flex:0 0 auto}' +
-'.egps .seg button{border:0;border-radius:0;background:#0F1524;color:var(--mute);padding:calc(4px*var(--s)) calc(9px*var(--s))}' +
-'.egps .seg button+button{border-left:1px solid #33425F}.egps .seg button.on{background:var(--cyan);color:#06222C}' +
-'.egps .set.stack{flex-wrap:wrap}.egps .set.stack .seg{flex:1 1 100%;display:flex}' +   /* (the label above, the choices the row's width: Track terrain's six) */
-'.egps .set.stack .seg button{flex:1 1 0;padding-left:calc(2px*var(--s));padding-right:calc(2px*var(--s));white-space:nowrap}' +
+/* (a row too narrow for its label and choices: the choices go under the label, and wrap onto more lines if they
+   still do not fit; the user, 2026-11-06: Track terrain's Extra and Flat cut off at bigger text) */
+'.egps .seg{display:inline-flex;flex-wrap:wrap;gap:1px;background:#33425F;border:1px solid #33425F;border-radius:calc(6px*var(--s));overflow:hidden;flex:0 1 auto;max-width:100%;margin-left:auto}' +
+'.egps .seg button{flex:1 1 auto;border:0;border-radius:0;background:#0F1524;color:var(--mute);padding:calc(4px*var(--s)) calc(9px*var(--s));min-width:0;overflow-wrap:anywhere}' +
+'.egps .seg button.on{background:var(--cyan);color:#06222C}' +
+'.egps .set.stack .seg{flex:1 1 100%;display:flex;margin-left:0}' +   /* (the label above, the choices the row's width: Track terrain's six) */
+'.egps .set.stack .seg button{padding-left:calc(5px*var(--s));padding-right:calc(5px*var(--s))}' +
 '.egps .pick{width:100%;display:flex;justify-content:space-between;align-items:center;gap:calc(8px*var(--s));text-align:left;background:#0F1524;padding:calc(6px*var(--s)) calc(10px*var(--s))}' +
 '.egps .pick span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.egps .pick.open{border-color:var(--cyan)}' +
 '.egps .caret{flex:0 0 auto;width:0;height:0;border-left:calc(5px*var(--s)) solid transparent;border-right:calc(5px*var(--s)) solid transparent;border-top:calc(6px*var(--s)) solid var(--mute)}' +
@@ -341,6 +343,10 @@ angular.module('beamng.apps')
 '  </div>' +
 
 '<div class="drawer" ng-if="tab === \'settings\'">' +
+'    <div class="set"><span title="The size of the whole app: its text, buttons and turn notes">App size</span><span class="seg">' +
+'      <button ng-disabled="scaleAt(-1)" ng-click="stepScale(-0.1)" title="Smaller">&#8722;</button>' +
+'      <button class="on" style="cursor:default">{{scalePct()}}</button>' +
+'      <button ng-disabled="scaleAt(1)" ng-click="stepScale(0.1)" title="Bigger">+</button></span></div>' +
 '    <div class="set"><span title="Where the turn notes box (the arrow, the distance, the call) sits: over the map, under it, or beside it with the arrow above the text">Turn notes</span><span class="seg">' +
 '      <button ng-class="{on: ui.notes === \'top\'}" ng-click="choose(\'notes\', \'top\')">Top</button>' +
 '      <button ng-class="{on: ui.notes === \'bottom\'}" ng-click="choose(\'notes\', \'bottom\')">Bottom</button>' +
@@ -477,6 +483,21 @@ angular.module('beamng.apps')
       }
       var lastCodeNote = null
       scope.chooseSize = function (v) { scope.ui.paintSize = v; scope.set('paintSize', v) }
+      // Settings' App size: the whole app's text and controls, 70-250 % in 10 % steps
+      var UI_SCALE_MIN = 0.7, UI_SCALE_MAX = 2.5
+      function scaleOf (v) {
+        v = Number(v)
+        if (!isFinite(v) || v <= 0) v = 1
+        return Math.max(UI_SCALE_MIN, Math.min(UI_SCALE_MAX, Math.round(v * 20) / 20))
+      }
+      scope.stepScale = function (d) {
+        var v = scaleOf(Math.round((scaleOf(scope.ui.uiScale) + d) * 10) / 10)
+        scope.ui.uiScale = v
+        scope.set('uiScale', v)
+        ;(window.requestAnimationFrame || setTimeout)(function () { fit(); safeDraw() })
+      }
+      scope.scalePct = function () { return Math.round(scaleOf(scope.ui.uiScale) * 100) + ' %' }
+      scope.scaleAt = function (end) { var v = scaleOf(scope.ui.uiScale); return end < 0 ? v <= UI_SCALE_MIN : v >= UI_SCALE_MAX }
       // the course strip's one line: what the dirt track is doing right here
       scope.trackLine = function () {
         var p = scope.d.paint || {}
@@ -1074,15 +1095,16 @@ angular.module('beamng.apps')
       canvas.addEventListener('dblclick', onDbl)
       canvas.addEventListener('contextmenu', onCtx)
 
-      // -- size: everything scales with the app's width (drag it bigger in the UI editor: bigger text); when the
-      // app is too short for what is open, it shrinks to fit, down to MIN_S; below that only the strips under the
-      // map scroll (the roadbook box, the map and the tabs always stay whole)
+      // -- size: everything scales with Settings' App size (the user, 2026-11-06: a setting, not the app's width as
+      // before 1.7.6); when the app is too short for what is open, it shrinks to fit, down to MIN_S of it; below that
+      // only the strips under the map scroll (the roadbook box, the map and the tabs always stay whole)
       var root = element[0], S = 1
-      var BASE_W = 330, MIN_S = 0.85, MAX_S = 2.6, MAP_MIN = 110, TABS = 34, MAP_SHARE = 0.5, LOWER_FIT = 0.18
+      var MIN_S = 0.85, MAP_MIN = 110, TABS = 34, MAP_SHARE = 0.5, LOWER_FIT = 0.18
       function fit () {
         var w = root.clientWidth, h = root.clientHeight
         if (!w || !h) return
-        var sw = Math.max(MIN_S, Math.min(MAX_S, w / BASE_W))
+        var sw = scaleOf(scope.ui.uiScale)
+        MIN_S = 0.85 * Math.min(1, sw)
         root.style.setProperty('--s', sw.toFixed(3))
         var call = root.querySelector('.call'), lower = root.querySelector('.lower'), map = root.querySelector('.mapWrap')
         // the map keeps at least half of the app's height (the user, 2026-10-22); the strips under it scroll rather than
@@ -1372,6 +1394,7 @@ angular.module('beamng.apps')
             scope.ui.rough = data.settings.rough || 'auto'
             scope.ui.replays = data.settings.replays === false ? 'off' : 'on'
             scope.ui.notes = ({ top: 1, bottom: 1, left: 1, right: 1 })[data.settings.notes] ? data.settings.notes : 'top'
+            scope.ui.uiScale = scaleOf(data.settings.uiScale)
           }
           var c = buildCall(scope.d)
           c.svg = trust(c.svg)

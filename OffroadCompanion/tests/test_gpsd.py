@@ -352,7 +352,7 @@ class TestPaint(unittest.TestCase):
         for rough in terrain.ROUGHS:
             self.assertEqual(terrain.parse_share(terrain.share_code("T8-abcdef", rough=rough, ruts="off", tv=8))["rough"],
                              rough)
-        newer = terrain.share_code("T9-abcdef", tv=9)
+        newer = terrain.share_code(f"T{terrain.VERSION + 1}-abcdef", tv=terrain.VERSION + 1)
         self.assertIn("update Offroad Companion", me.do_ground_code({"type": "ground_code", "code": newer})["error"])
         self.assertIn("not a ground code", me.do_ground_code({"type": "ground_code", "code": "hello"})["error"])
 

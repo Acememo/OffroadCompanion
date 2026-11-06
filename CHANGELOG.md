@@ -3,6 +3,21 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.6 (2026-11-06)
+
+- **Every setting fits.** A Settings row too narrow for its choices (Track terrain's six, or any row at a bigger app
+  size) now puts them under its name, on more lines if needed. Before this, Extra and Flat could be cut off.
+- **App size setting** (top of Settings): − and + scale the whole app, its text, buttons, turn notes and map labels,
+  from 70 % to 250 % in 10 % steps. It used to follow the app's width; now resizing the app only changes its room.
+- **Ground version 9: Baja tuned for BeamNG.Earth 1.8.2.**
+  - Rough sections are rarer, and the rougher the rarer: about 20 % of a course is fast, 40 % mild, 28 % rough and
+    12 % extra rough (before: 10 %, 25 %, 40 %, 25 %).
+  - Where the course follows a mapped dirt road, which BeamNG.Earth 1.8.2 already wears with its own potholes, the rough
+    and extra rough sections are softer (their part over Mild at 65 %), so the two no longer pile up. Around the DANGER
+    waypoints, and on the course's own track, they are as rough as before.
+  - Only Baja changes. Mild, Rough, Extra, Default and Flat make the same ground as version 8, and older ground versions
+    (ground codes) are unchanged.
+
 ## 1.7.5 (2026-11-06)
 
 - **Track terrain: Auto is now called Baja**, the same ground as before (and still the default).

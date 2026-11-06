@@ -33,13 +33,14 @@ M.CHECK_S = 0.2
 M.REROUTE_S = 8
 M.SETTINGS_FILE = '/settings/offroadCompanion.json'
 M.OLD_SETTINGS_FILE = '/settings/earthGps.json'   -- (the project was BeamNG.Earth GPS before 1.2.0)
-M.VERSION = '1.7.5'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
-M.BUILD = '2026-11-06 02:00'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
+M.VERSION = '1.7.6'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
+M.BUILD = '2026-11-06 04:00'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
 
 local settings = { lang = 'en', units = 'auto', ribbon = true, autoRoute = true, zoom = 600, paint = true, paintSize = 1.0,
                    clearCourse = true, clearRoute = true, streets = true, markers = 'checkpoints', ruts = 'auto', rough = 'auto',
                    replays = true, notes = 'top', spectators = 'some', crowdSound = true,
                    nightLights = 'on', wetGround = true,
+                   uiScale = 1.0,       -- Settings' App size: the app's text and controls (0.7-2.5)
                    -- a ground code pasted for a course (Settings): the terrain version it was made with, for that course
                    groundTv = 0, groundTvFor = '',
                    -- the defaults' generation the saved settings were made with (2: Track terrain Auto, 1.6.1)
@@ -1009,6 +1010,7 @@ function M.uiSet(key, value)
   if settings[key] == nil then return { ok = false } end
   if key == 'zoom' then value = math.max(150, math.min(5000, tonumber(value) or 600)) end
   if key == 'paintSize' then value = math.max(0.5, math.min(2.0, tonumber(value) or 1.0)) end
+  if key == 'uiScale' then value = math.floor(math.max(0.7, math.min(2.5, tonumber(value) or 1.0)) * 20 + 0.5) / 20 end
   if key == 'paint' or key == 'clearCourse' or key == 'clearRoute' or key == 'streets' or key == 'replays' then
     value = value and true or false
   end

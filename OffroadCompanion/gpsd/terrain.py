@@ -21,7 +21,7 @@ data). Pure Python.
 """
 import hashlib
 
-VERSION = 8                 # (2: natural cut banks beside the track where BeamNG.Earth stood a bare step: banks.py;
+VERSION = 9                 # (2: natural cut banks beside the track where BeamNG.Earth stood a bare step: banks.py;
                             # 3: the ground's surfaces along the course, sand, mud, loose and packed dirt: surfaces.py;
                             # 4: the track round the trees, courseroads.weave_shifts; grass and scrub on the track
                             # where the land around has them, the wheel paths bare: surfaces.py; washes rarer and
@@ -30,8 +30,10 @@ VERSION = 8                 # (2: natural cut banks beside the track where BeamN
                             # 6: every shape at least ~3 cells of the game's 2 m lattice wide, no creases: relief.SMOOTH_TV;
                             # 7: the track's sections where the place has them, sand traps, rock sections, gravel, rock
                             # crawls at some canyon DANGER waypoints: variety.py;
-                            # 8: the course's corners rounded to arcs, wider tracks: courseroads.CURVES_TV)
-VERSIONS = (1, 2, 3, 4, 5, 6, 7, 8)  # the versions this code can still make
+                            # 8: the course's corners rounded to arcs, wider tracks: courseroads.CURVES_TV;
+                            # 9: Baja's rough sections rarer, the rougher the rarer, and softer on a mapped dirt road
+                            # BeamNG.Earth 1.8.2 wears too (not at the DANGER waypoints): relief.AUTO_TV)
+VERSIONS = (1, 2, 3, 4, 5, 6, 7, 8, 9)  # the versions this code can still make
 
 
 def seal(cid, paint=True, clear=True, rough="on", ruts="auto", dangers=(), tv=VERSION, earth=None):

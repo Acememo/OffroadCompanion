@@ -291,7 +291,7 @@ class TestRelief(unittest.TestCase):
     def test_auto_sections_vary_and_are_the_same_for_everyone(self):
         # 80 km of course: fast, mild, rough and extra stretches, each a km or more, from the place alone
         pts = [tuple(map(float, self.ll(x, 3000 * math.sin(x / 9000.0)))) for x in range(0, 80001, 200)]
-        a, b = cr.Course(pts), cr.Course(pts)
+        a, b = cr.Course(pts, tv=8), cr.Course(pts, tv=8)       # (terrain 8's shares; 9's: TestTerrain9)
         la, lb = rf.course_auto(a)["level"], rf.course_auto(b)["level"]
         self.assertTrue(np.array_equal(la, lb), "the same on every computer")
         share = lambda m: float(np.mean(m))                                    # noqa: E731
@@ -560,3 +560,60 @@ class TestTerrain6(unittest.TestCase):
         h5 = self.field(5, (540, 700, -160, 20))
         k5 = max(np.abs(np.diff(h5, 2, axis=0)).max(), np.abs(np.diff(h5, 2, axis=1)).max())
         self.assertGreater(k5, 1.0, "terrain 5's ground as it always was (the golden test holds it exactly)")
+
+
+class TestTerrain9(unittest.TestCase):
+    """Terrain 9, Baja only (the user, 2026-11-06): rough sections rarer, the rougher the rarer (mild ones more common);
+    on a mapped dirt road the course follows (BeamNG.Earth 1.8.2 wears it too) the part over Mild softened, but not at
+    the DANGER waypoints nor on the course's own track."""
+
+    @classmethod
+    def setUpClass(cls):
+        ll, _xy = frame()
+        cls.ll = staticmethod(ll)
+        pts = [tuple(map(float, ll(x, 3000 * math.sin(x / 9000.0)))) for x in range(0, 400001, 200)]
+        cls.pts = pts
+
+    def shares(self, tv):
+        c = cr.Course(self.pts, tv=tv)
+        lv = rf.course_auto(c)["level"]
+        return lv, [float(np.mean(m)) for m in (lv < 0.45, (lv >= 0.45) & (lv < 0.775), (lv >= 0.775) & (lv < 1.3),
+                                                 lv >= 1.3)]
+
+    def test_rough_sections_rarer_the_rougher_the_rarer(self):
+        _l8, (f8, m8, r8, x8) = self.shares(8)
+        lv, (f9, m9, r9, x9) = self.shares(9)
+        self.assertGreater(m9, m8, "more mild")
+        self.assertGreater(f9, f8, "more fast")
+        self.assertLess(r9, r8, "fewer rough")
+        self.assertLess(x9, x8, "fewer extra rough")
+        self.assertLess(x9 / x8, r9 / r8, "the rougher, the rarer")
+        self.assertGreater(m9, max(f9, r9, x9), "mild the commonest")
+        self.assertTrue(0.05 < x9 < 0.2 and 0.18 < r9 < 0.38, (f9, m9, r9, x9))
+        self.assertTrue(np.array_equal(lv, rf.course_auto(cr.Course(self.pts, tv=9))["level"]), "the same everywhere")
+
+    def test_softer_on_a_mapped_dirt_road_but_not_at_a_danger_sign(self):
+        c = cr.Course([tuple(map(float, self.ll(x, 0.0))) for x in range(0, 6001, 50)], tv=9)
+        c.dangers = [3000.0]
+        A = rf.course_auto(c)
+        n = len(A["level"])
+        A["level"][:] = 1.6                         # (every level by hand: the rule alone)
+        A["level"][:20] = 1.0
+        A["level"][20:40] = 0.55
+        A["level"][40:60] = 0.35
+        s = np.arange(n) * cr.STEP_M
+        own = rf.auto_level(c, A, s, {"road": np.zeros(n)})
+        road = rf.auto_level(c, A, s, {"road": np.ones(n)})
+        self.assertTrue(np.allclose(own, A["level"]), "the course's own track: as before")
+        self.assertAlmostEqual(float(road[10]), 0.55 + 0.45 * rf.ROAD_EXCESS_V9)
+        self.assertAlmostEqual(float(road[100]), 0.55 + 1.05 * rf.ROAD_EXCESS_V9)
+        self.assertTrue(np.allclose(road[20:60], A["level"][20:60]), "mild and fast: as before")
+        i = int(3000 / cr.STEP_M)
+        self.assertAlmostEqual(float(road[i]), float(A["level"][i]), msg="at the DANGER waypoint: full")
+        half = rf.auto_level(c, A, s, {"road": np.full(n, 0.5)})
+        self.assertTrue(np.all((half[100:110] < own[100:110]) & (half[100:110] > road[100:110])), "eased at its ends")
+        c8 = cr.Course([tuple(map(float, self.ll(x, 0.0))) for x in range(0, 6001, 50)], tv=8)
+        A8 = rf.course_auto(c8)
+        s8 = np.arange(len(A8["level"])) * cr.STEP_M
+        self.assertTrue(np.array_equal(rf.auto_level(c8, A8, s8, {"road": np.ones(len(s8))}), A8["level"]),
+                        "terrain 8 and older: as they were")

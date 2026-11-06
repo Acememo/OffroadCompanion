@@ -218,6 +218,11 @@ Now nothing is narrower than about 6 m or changes over less than about 3 m: whoo
 in long swells, the windrows and the turns' sand as wide soft mounds, the banked corner a smooth bowl with its lip just
 past the edge, and the tallest places easing into their limit instead of flattening off.
 
+**Ground version 9** changes only **Baja**: rough sections are rarer, the rougher the rarer (below), and where the
+course follows a mapped dirt road, which BeamNG.Earth 1.8.2 wears with its own potholes, the rough and extra rough
+sections are softer (their part over Mild at 65 %), except around the DANGER waypoints. The course's own track and every
+other setting are the same as in version 8.
+
 **Ground version 8** keeps version 7's terrain and sections, with the wider tracks and rounded turns above.
 
 **Ground version 7** adds sections where the track changes with the ground it crosses, the way a Baja course does.
@@ -270,8 +275,9 @@ hillside itself is so steep it would not meet it within 15 m), never above the h
 track, the downhill side, every other road and every gentle transition stay as BeamNG.Earth grades them. Any track
 terrain setting, Flat included.
 
-**Baja** (the default) mixes them along the course: each stretch of 1-3 km is fast and smooth (about 10 % of a course), mild
-(about 25 %), rough (about 40 %) or extra rough (about 25 %), blending over about 100 m. From about 160 m before each
+**Baja** (the default) mixes them along the course: each stretch of 1-3 km is fast and smooth, mild, rough or extra
+rough, blending over about 100 m. From ground version 9 about 20 % of a course is fast, 40 % mild, 28 % rough and 12 %
+extra rough (before it about 10 %, 25 %, 40 % and 25 %). From about 160 m before each
 DANGER waypoint of the course file to about 100 m after it, it is extra rough, and at the waypoint there is a hazard:
 a deep ditch, a big kicker or a rock garden. Boulder fields stand beside the track on about a third of the course
 (none on the rest, a few or many where they are), more on rocky ground, never on lakes or asphalt, using the rock
@@ -650,8 +656,10 @@ players' origin (when its shared generation is on); afterwards it does again.
 - **Make track**: record, tap or add points, then Save and load (see above).
 - `+` / `−` on the map zoom it; the map turns with the car. Streets and names can be hidden in Settings.
 - **▾** (end of the tabs) hides the app to a small button; a key can be bound to it (Options, Controls).
-- **Size**: resize the app in the game's UI editor. Text, buttons and the map scale with its width. When it is too
-  short for what is open, it shrinks a little to fit; below that the part under the map scrolls, while the
+- **App size** (Settings, top): − and + scale the whole app, its text, buttons, turn notes and map labels, from 70 % to
+  250 % in 10 % steps (before 1.7.6 this followed the app's width). Resizing the app in the game's UI editor changes
+  only its room. A row too narrow for its choices puts them under its name, on more lines if needed. When the app is
+  too short for what is open, it shrinks a little to fit; below that the part under the map scrolls, while the
   direction box, the map and the tabs always stay whole.
 
 Already-loaded ground keeps the old buildings and bridges until it is loaded again: when you pick a new
