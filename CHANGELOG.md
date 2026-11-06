@@ -3,6 +3,22 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.4 (2026-11-06)
+
+- **BeamNG.Earth 1.8.2-beta** is the version inside the .exe. A source install downloads 1.8.2-beta, and 1.8.1, 1.8.0,
+  1.7.x, 1.6.x and 1.5.x still work.
+- **The course's track stays the course's.** BeamNG.Earth 1.8.2 wears its dirt roads: potholes, broken patches, the odd
+  deep pit and a lean to one side, and forest tracks the worst of all. The course's track is a track too, so on 1.8.2
+  it would have had holes nearly 1 m deep. It now keeps its own ground (its relief, by its ground version), the same
+  as on 1.8.1. The mapped dirt roads around the course keep BeamNG.Earth's wear.
+- **No BeamNG.Earth update prompt.** BeamNG.Earth 1.8.2's launcher asks at every start whether to install a newer
+  BeamNG.Earth, and would download BeamNG.Earth's own .exe beside Offroad Companion's. Offroad Companion's .exe never
+  asks: the BeamNG.Earth inside it comes with Offroad Companion's releases.
+- **BeamNG.Earth's data folder in the .exe.** 1.8.2 reads its billboards, direction signs and place search data from
+  a data folder of its own; the .exe now carries it (the mapped billboards were missing from 1.8.0 and 1.8.1 .exes).
+- The ground is the same as 1.7.3's (ground version 8). Players on 1.7.3 and 1.7.4 run different BeamNG.Earth
+  versions, so their servers don't share built ground.
+
 ## 1.7.3 (2026-11-05)
 
 - **Orange dirt roads on BeamMP, explained and prevented.** BeamNG.Earth 1.8 draws dirt roads, the course's track

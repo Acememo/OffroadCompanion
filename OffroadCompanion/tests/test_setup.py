@@ -163,9 +163,9 @@ class TestEarthVersion(unittest.TestCase):
     def test_which_versions(self):
         ses = self._ses()
         self.assertTrue(ses.compatible(ses.EARTH_VERSION))
-        for v in ("1.8.1-beta", "1.8.0-beta", "1.7.3-beta", "1.7.2-beta", "1.7.2-beta.dev.37", "1.7.1-beta", "1.7.0-beta", "1.6.3-beta", "1.6.2-beta", "v1.6.1-beta", "1.6.0-beta", "1.5.4-beta", "v1.5.5-beta", "1.6.2"):
+        for v in ("1.8.2-beta", "1.8.1-beta", "1.8.0-beta", "1.7.3-beta", "1.7.2-beta", "1.7.2-beta.dev.37", "1.7.1-beta", "1.7.0-beta", "1.6.3-beta", "1.6.2-beta", "v1.6.1-beta", "1.6.0-beta", "1.5.4-beta", "v1.5.5-beta", "1.6.2"):
             self.assertTrue(ses.compatible(v), v)
-        for v in ("1.8.2-beta", "1.9.0-beta", "1.7.4-beta", "1.6.4-beta", "1.6.20", "2.0.0", "1.4.35-beta", "", None, "local"):
+        for v in ("1.8.3-beta", "1.9.0-beta", "1.7.4-beta", "1.6.4-beta", "1.6.20", "2.0.0", "1.4.35-beta", "", None, "local"):
             self.assertFalse(ses.compatible(v), v)
 
     def test_downloads_the_one_it_was_made_for(self):

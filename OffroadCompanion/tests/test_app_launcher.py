@@ -93,6 +93,24 @@ class TestClosingNeatly(unittest.TestCase):
 
 @unittest.skipUnless(os.path.isfile(os.path.join(EARTH_ROOT, "launcher.py")), "a BeamNG.Earth checkout")
 class TestPainterInTheServer(unittest.TestCase):
+    def test_no_earth_update_offered(self):
+        """BeamNG.Earth 1.8.2's launcher asks at every start whether to install a newer BeamNG.Earth (its own .exe,
+        downloaded beside ours): never in Offroad Companion."""
+        launcher = type("L", (), {})()
+        launcher.hand_over = lambda: True
+        launcher.update_at_start = lambda args: True
+        al.no_earth_updates(launcher)
+        self.assertFalse(launcher.hand_over())
+        self.assertFalse(launcher.update_at_start(object()))
+        if os.path.isfile(os.path.join(EARTH_ROOT, "launcher.py")):
+            sys.path.insert(0, EARTH_ROOT)
+            try:
+                import launcher as real
+            finally:
+                sys.path.remove(EARTH_ROOT)
+            for name in ("hand_over", "main") + (("update_at_start",) if hasattr(real, "update_popup") else ()):
+                self.assertTrue(callable(getattr(real, name, None)), f"BeamNG.Earth's launcher.{name} (what we replace)")
+
     def test_selftest(self):
         env = dict(os.environ, EARTHGPS_DIR=tempfile.mkdtemp(prefix="oc-app-"))
         env.pop("OFFROAD_COMPANION_PAINTER", None)

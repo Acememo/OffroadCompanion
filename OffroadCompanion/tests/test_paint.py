@@ -1279,6 +1279,50 @@ class TestInsideEarth(unittest.TestCase):
         finally:
             self.set_rough("on")
 
+    def test_track_not_worn_by_earths_dirt_roads(self):
+        """BeamNG.Earth 1.8.2 wears its dirt roads (potholes, patches, pits, a lean; a track's the worst): the course's
+        track is a "track" too, but its ground is the painter's own, the same as on 1.8.1. A mapped dirt road keeps
+        BeamNG.Earth's wear."""
+        import grading
+        import roads as roadsmod
+        if not hasattr(grading, "dirt_bumps"):
+            self.skipTest("BeamNG.Earth before 1.8.2: no dirt road wear")
+        f = self.roads(*ll(1000, 0))
+        rows = self.earthpatch.course_rows(f)
+        self.assertTrue(rows, "the track's rows")
+        specs = roadsmod.road_specs(f, None, None)
+        cls = self.earthpatch.course_spec_class(roadsmod)
+        own = [specs[i] for i in rows if specs[i] is not None]
+        self.assertTrue(own and all(isinstance(s, cls) for s in own), "the track's specs marked")
+        self.assertFalse(any(isinstance(s, cls) for i, s in enumerate(specs) if i not in rows), "no other road's")
+        again = roadsmod.road_specs(f, None, None)
+        self.assertTrue(all(isinstance(again[i], cls) for i in rows if again[i] is not None), "marked every time")
+        self.assertEqual(again, specs)
+        self.assertIsInstance(own[0]._replace(width=9.0), cls, "kept through _replace")
+        import pickle
+        self.assertIsInstance(pickle.loads(pickle.dumps(own[0])), cls, "and to another process")
+        plain = roadsmod.Spec(*own[0])
+        line = np.stack([np.arange(0.0, 300.0, 1.0), np.zeros(300)], axis=1)
+        self.assertIsNone(grading.dirt_bumps(line, own[0], 300))
+        self.assertIsNotNone(grading.dirt_bumps(line, plain, 300), "a mapped track of the same kind: worn")
+        self.assertIsNone(grading.bank(line, own[0]))
+        self.assertIsNotNone(grading.bank(line, plain))
+        self.assertEqual(grading.profile_sigma(own[0]), grading.DIRT_SIGMA_M)
+        self.assertEqual(grading.profile_sigma(plain), grading.DIRT_SIGMA_MINOR_M)
+        # the graded ground: the flat desert's track stays flat (its relief off), the mapped dirt road beside is worn
+        frame = self.geodesy.EnuFrame(*ll(1500, 0), 0.0)
+        self.set_rough("off")
+        try:
+            def graded(xs):
+                la, lo = ll(xs, np.zeros_like(xs))
+                return grading.Grader(frame, self.md, lambda a, b: ground(a, b)).apply(la, lo, ground(la, lo))
+            track = graded(np.arange(600.0, 1400.0, 1.0))
+            road = graded(np.arange(2300.0, 2700.0, 1.0))
+        finally:
+            self.set_rough("on")
+        self.assertLess(float(np.abs(track).max()), 0.05, "the track: no potholes")
+        self.assertGreater(float(np.ptp(road)), 0.1, "BeamNG.Earth's own dirt road: worn")
+
     def test_cut_bank_beside_the_track(self):
         """On a steep hillside BeamNG.Earth's grading cuts the dirt track in with a wall's step (a strip at the road's
         level, the ground straight up behind it) and no wall stands there on a dirt road: the course's own track gets a

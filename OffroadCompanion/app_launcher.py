@@ -156,7 +156,16 @@ def start_helper():
 # a window closed before that (its X) ended it at once and left both running, and the next start then used that BeamMP
 # ("BeamMP is already running"), whose session lost its player list and ping ("No players... something is wrong").
 
-GAME_GONE_S_WIN = 10        # the game gone this long (Windows: its process, reliably seen): everything stops
+def no_earth_updates(launcher):
+    """BeamNG.Earth's launcher never swaps this program for a plain BeamNG.Earth: a newer BeamNG.Earth .exe beside
+    this one is not started instead (hand_over), and (1.8.2) it does not ask at every start whether to install a newer
+    BeamNG.Earth, downloading BeamNG.Earth's own .exe beside this one (update_at_start). The BeamNG.Earth inside comes
+    with Offroad Companion's own releases."""
+    launcher.hand_over = lambda: False
+    launcher.update_at_start = lambda *a, **kw: False
+
+
+GAME_GONE_S_WIN = 10       # the game gone this long (Windows: its process, reliably seen): everything stops
 
 
 class KillGroup:
@@ -380,7 +389,7 @@ def run(argv):
         os.environ.setdefault(EARTH_ENV, earth)
     mine, rest = split_args(argv)
     import launcher                          # BeamNG.Earth's own
-    launcher.hand_over = lambda: False       # (a newer BeamNG.Earth .exe beside this one is not started instead)
+    no_earth_updates(launcher)
     if not FROZEN:                           # (its server: this file again with --server, so the painter goes in)
         launcher.__file__ = os.path.abspath(__file__)
     orig_console = launcher.windows_console

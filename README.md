@@ -508,7 +508,7 @@ and BeamNG.drive started once.
    (you get `BeamNG.Earth\OffroadCompanion\...`). It is not a game mod: do not put it in `mods`.
 2. Run `OffroadCompanion\setup_offroad_companion.bat` once (Linux: `OffroadCompanion/setup_offroad_companion.sh`). It:
    - uses the BeamNG.Earth folder it is in (nothing is downloaded), when that is a version Offroad Companion works with
-     (1.8.1, 1.8.0, 1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1, 1.6.0 or 1.5.x); otherwise it downloads the source of **BeamNG.Earth 1.8.1-beta**, the version this
+     (1.8.2, 1.8.1, 1.8.0, 1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1, 1.6.0 or 1.5.x); otherwise it downloads the source of **BeamNG.Earth 1.8.2-beta**, the version this
      release is made for, next to it, never simply the newest (a newer BeamNG.Earth may change what the course painter
      hooks into). If the download fails it prints the address of that release's zip to fetch by hand (then
      `setup_offroad_companion.bat --zip PATH`);
@@ -536,7 +536,7 @@ folder is renamed `companion (old - now OffroadCompanion)`: delete it when you l
 
 ### BeamNG.Earth 1.8, 1.7, 1.6 and BeamMP
 
-Works with BeamNG.Earth 1.8.1 (the version the .exe has inside), 1.8.0, 1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1
+Works with BeamNG.Earth 1.8.2 (the version the .exe has inside), 1.8.1, 1.8.0, 1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1
 and 1.6.0 (and 1.5.x). With 1.8:
 
 - The ground near the car is a 1 m lattice (2 m before); the track's relief, sand, rock and gravel are made for it as
@@ -556,6 +556,11 @@ and 1.6.0 (and 1.5.x). With 1.8:
 - The mod's files are dated in the past in every time zone (as BeamNG.Earth 1.8.1 does with its own): dated in the
   future west of UTC, the game could take its ground materials for new and pack the ground's textures again at every
   block.
+- 1.8.2 wears BeamNG.Earth's dirt roads (potholes, broken patches, deep pits and a lean to one side; tracks the
+  worst). The course's track keeps its own ground instead (its relief, by its ground version): on 1.8.2 it is the same
+  as on 1.8.1, without BeamNG.Earth's holes. The mapped dirt roads around it keep BeamNG.Earth's wear.
+- 1.8.2's launcher asks at every start whether to install a newer BeamNG.Earth. Offroad Companion's .exe never asks:
+  the BeamNG.Earth inside it comes with Offroad Companion's own releases.
 
 With 1.7:
 

@@ -58,6 +58,28 @@ def earth_data_files(earth):
     return sorted(out)
 
 
+def earth_data_dirs(earth):
+    """The server's data folders BeamNG.Earth's own build adds, each under its own name ((source, name) pairs: its
+    build_app.py's os.path.join(server, '<dir>'){SEP}<name>). 1.8.2's server/data: the billboards, the direction
+    signs' styles and lettering, the place search's places, read from beside the modules' "data" folder."""
+    import re
+    server = os.path.join(earth, "server")
+    try:
+        with open(os.path.join(earth, "tools", "build_app.py"), encoding="utf-8") as f:
+            found = re.findall(r"os\.path\.join\(server, '([^']+)'\)\}\{SEP\}([A-Za-z0-9_./-]+)\"", f.read())
+    except OSError:
+        found = []
+    out = []
+    for src, name in found:
+        path = os.path.join(server, src)
+        if name != "." and os.path.isdir(path) and (path, name) not in out:
+            out.append((path, name))
+    data = os.path.join(server, "data")             # (named by hand too: never left out if its build names it otherwise)
+    if os.path.isdir(data) and all(p != data for p, _ in out):
+        out.append((data, "data"))
+    return out
+
+
 def have_module(name):
     import importlib.util
     return importlib.util.find_spec(name) is not None
@@ -219,6 +241,8 @@ def pyinstaller(work, earth, staged, ico, ver, earth_ver, boot=None):
     # one is never left out
     for p in earth_data_files(earth):
         cmd += ["--add-data", f"{p}{SEP}."]
+    for p, name in earth_data_dirs(earth):          # (1.8.2: server/data, as "data")
+        cmd += ["--add-data", f"{p}{SEP}{name}"]
     if have_module("truststore"):                   # (1.7: Windows' own certificate store, netfetch)
         cmd += ["--hidden-import", "truststore"]
     else:

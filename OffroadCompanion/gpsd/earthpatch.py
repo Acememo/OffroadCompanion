@@ -1023,6 +1023,77 @@ def surface_mats(surfacemod):
     return mats
 
 
+COURSE_SRC = "Offroad Companion course"     # (merge's src_dataset of the track's rows)
+_CourseSpec = None
+
+
+def course_spec_class(roadsmod):
+    """A subclass of roads.Spec, the same fields: the course's track's specs, so BeamNG.Earth's grading can tell them
+    from a mapped track's (a namedtuple's _replace keeps the class)."""
+    global _CourseSpec
+    if _CourseSpec is None or _CourseSpec.__bases__[0] is not roadsmod.Spec:
+        _CourseSpec = type("CourseSpec", (roadsmod.Spec,), {"__slots__": (), "__module__": __name__})
+        globals()["CourseSpec"] = _CourseSpec           # (pickled by name: gpsd.earthpatch.CourseSpec)
+    return _CourseSpec
+
+
+def course_rows(feats):
+    """The rows of a roads layer that are the course's track (merge: src_dataset COURSE_SRC), remembered on it."""
+    got = feats.__dict__.get("_egps_course_rows")
+    if got is None:
+        src = (getattr(feats, "attrs", None) or {}).get("src_dataset")
+        got = () if src is None else tuple(int(i) for i in np.flatnonzero(np.asarray(src) == COURSE_SRC))
+        feats.__dict__["_egps_course_rows"] = got
+    return got
+
+
+def install_course_grade(st):
+    """BeamNG.Earth 1.8.2 wears its dirt roads (grading.dirt_bumps: potholes, broken patches, deep pits, 2.5 times as
+    deep on a track; dirt_bank: a lean of up to 0.2 m per m; profile_sigma: a minor one smoothed over 2.5 m, not 8). The
+    course's track is a "track" too, and its ground is the painter's own (relief.py, by its ground version): it was
+    the same as on 1.8.1, never worn by BeamNG.Earth's. roads.road_specs marks the track's specs (course_spec_class);
+    the three give it what 1.8.1 did (no bumps, no lean, DIRT_SIGMA_M). Mapped dirt roads keep BeamNG.Earth's wear."""
+    import grading as gradingmod
+    roadsmod = st.roads
+    if not hasattr(gradingmod, "dirt_bumps") or getattr(gradingmod, "_egps_course_grade", False):
+        return False
+    cls = course_spec_class(roadsmod)
+    orig_specs = roadsmod.road_specs
+
+    def road_specs(feats, *a, **kw):
+        got = orig_specs(feats, *a, **kw)
+        try:
+            rows = course_rows(feats)
+            if not rows or got is None:
+                return got
+            # (BeamNG.Earth hands out a copy of its remembered list each time: marked in it, the track's rows alone)
+            out = got if isinstance(got, list) else list(got)
+            for i in rows:
+                if i < len(out) and out[i] is not None and not isinstance(out[i], cls):
+                    out[i] = cls(*out[i])
+            return out
+        except Exception as e:
+            st.stats["errors"] += 1
+            log.warning("course painter: track specs: %s: %s", type(e).__name__, e)
+            return got
+
+    orig_bumps, orig_bank, orig_sigma = gradingmod.dirt_bumps, gradingmod.dirt_bank, gradingmod.profile_sigma
+
+    def dirt_bumps(xy, spec, *a, **kw):
+        return None if isinstance(spec, cls) else orig_bumps(xy, spec, *a, **kw)
+
+    def dirt_bank(xy, spec, *a, **kw):
+        return None if isinstance(spec, cls) else orig_bank(xy, spec, *a, **kw)
+
+    def profile_sigma(spec):
+        return gradingmod.DIRT_SIGMA_M if isinstance(spec, cls) else orig_sigma(spec)
+
+    roadsmod.road_specs = road_specs
+    gradingmod.dirt_bumps, gradingmod.dirt_bank, gradingmod.profile_sigma = dirt_bumps, dirt_bank, profile_sigma
+    gradingmod._egps_course_grade = True
+    return True
+
+
 def install_surfaces(st):
     """surface.MATERIALS with the sand and gravel layers appended (after the level's dirt, so BeamNG.Earth's own
     indices stay), and surface.paint_lots (every block's last land paint before its gas station pads) followed by the
@@ -1254,6 +1325,11 @@ def install():
         gradingmod.Grader.apply = apply
     except Exception as e:
         log.warning("course painter: no track relief (%s: %s)", type(e).__name__, e)
+    # BeamNG.Earth 1.8.2's worn dirt roads (grading.dirt_bumps, dirt_bank, profile_sigma): not on the course's track
+    try:
+        install_course_grade(st)
+    except Exception as e:                  # (BeamNG.Earth before 1.8.2: nothing to keep off)
+        log.debug("course painter: no dirt road wear hook (%s: %s)", type(e).__name__, e)
     # boulders beside the track in canyons: BeamNG.Earth's own vegetation rocks (--trees on)
     try:
         import vegetation as vegmod
