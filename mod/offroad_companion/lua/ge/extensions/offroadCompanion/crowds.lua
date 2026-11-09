@@ -487,6 +487,22 @@ end
 
 local function halfAt(sides, s) return markers.halfAt(sides, s, M.DEFAULT_HALF_M) end
 
+-- Pure: is the track's width at s still to come? The companion says where its track is (sides: course_sides) and
+-- has said it for some of the course, not yet here: nothing is made here until it has (made on the course's line
+-- with a guessed width, a canopy stood on a track that rounds a bend inside it or follows a road beside the line).
+-- No sides at all (no painted course): never waited for.
+function M.sidesPending(sides, s)
+  if not (sides and sides.step and sides.hw and next(sides.hw) ~= nil) then return false end
+  local i = math.floor((s or 0) / sides.step + 0.5)
+  return type(sides.hw[i]) ~= 'number' or type(sides.ctr and sides.ctr[i]) ~= 'number'
+end
+
+-- Pure: is (x, y) clear of the course for model (CLEAR_M past the edge of every pass of it near)?
+function M.clearFor(e, x, y, sides, model)
+  if not e then return true end
+  return M.clearance(e, x, y, sides) >= clearNeed(model)
+end
+
 -- Pure: how far (x, y) is past the track's edge, of the nearest pass of the course (markers.clearance's).
 function M.clearance(e, x, y, sides, r) return markers.clearance(e, x, y, sides, M.DEFAULT_HALF_M, r) end
 
@@ -771,9 +787,13 @@ local function footGround(kind, x, y, yaw, zHint)
 end
 
 -- Where o can stand: x, y, z | nil (wait) | false (nowhere: left empty). Along the line by SHIFTS_M (its yaw).
-local function spotFor(o, zHint)
+-- clear(x, y): is that clear of the course (nil: not checked)? (1.7.8, the user 2026-11-09, a canopy and a van on a
+-- forest stage's road: a truck shifted along its line for level ground goes straight on, and on the inside of a bend
+-- straight on is toward the track; a step back off a street can be toward another pass of the course)
+local function spotFor(o, zHint, clear)
   local kind = M.footKind(o.model)
   if not kind then
+    if clear and not clear(o.x, o.y) then return false end
     local z = markers.groundZ(o.x, o.y, zHint)
     if z then return o.x, o.y, z end
     return nil
@@ -781,7 +801,8 @@ local function spotFor(o, zHint)
   local waiting = false
   for _, d in ipairs(M.SHIFTS_M) do
     local x, y = o.x + d * math.cos(o.yaw or 0), o.y + d * math.sin(o.yaw or 0)
-    local verdict, z = footGround(kind, x, y, o.yaw, zHint)
+    local verdict, z = 'no', nil
+    if not clear or clear(x, y) then verdict, z = footGround(kind, x, y, o.yaw, zHint) end
     if verdict == 'ok' then return x, y, z end
     if verdict == 'wait' then waiting = true end
   end
@@ -889,6 +910,20 @@ function M.update(crs, anchor, car)
     for _, o in ipairs(list) do want[o.key] = true end
     for key in pairs(live) do if not want[key] then remove(key) end end
     if not keep then nowhere = {} end                -- (placed anew: judged again)
+    if keep then
+      -- (1.7.8) the ones standing that the new plan puts elsewhere (the track's widths came in with the new spots):
+      -- taken away, made again where they now go; the others keep where they stand
+      for _, o in ipairs(list) do
+        local l = live[o.key]
+        if l then
+          if not o.x or math.abs((l.cx or l.px) - o.x) > 0.5 or math.abs((l.cy or l.py) - o.y) > 0.5 then
+            remove(o.key)
+          else
+            o.px, o.py, o.x, o.y = l.cx or l.px, l.cy or l.py, l.px, l.py
+          end
+        end
+      end
+    end
     planned = { course = crs, anchor = anchor, level = M.level, list = list, spotsV = pv, sidesV = sv,
                 window = planned.window, cheers = cheers, at = now }
   elseif planned.sidesV ~= sv then
@@ -902,10 +937,11 @@ function M.update(crs, anchor, car)
           -- the track wider than thought: no room for this one any more
           o.x, o.y = nil, nil
           if live[o.key] then remove(o.key) end
-        elseif not o.x or math.abs(nx - o.x) > 0.5 or math.abs(ny - o.y) > 0.5 then
+        elseif not o.x or math.abs(nx - (o.px or o.x)) > 0.5 or math.abs(ny - (o.py or o.y)) > 0.5 then
+          -- (made again where it now goes: its ground, the roads and the course checked there, not slid over)
           o.x, o.y, o.yaw, o.roadV, o.px, o.py = nx, ny, yaw, nil, nil, nil
-          local l = live[o.key]
-          if l then l.x, l.y, l.base, l.yaw, l.sure, l.moved = nx, ny, yaw, yaw, false, true; dropLight(l) end
+          if live[o.key] then remove(o.key) end
+          nowhere[o.key] = nil
         end
       end
     end
@@ -945,7 +981,8 @@ function M.update(crs, anchor, car)
         end
       end
     end
-    if not live[o.key] and not nowhere[o.key] and d2 < M.SPAWN_M * M.SPAWN_M and not M.onRoad(roads, o) then
+    if not live[o.key] and not nowhere[o.key] and d2 < M.SPAWN_M * M.SPAWN_M and not M.sidesPending(crs.sides, o.s)
+        and not M.onRoad(roads, o) then
       due[#due + 1] = { o = o, d2 = d2 }
     end
   end
@@ -960,12 +997,15 @@ function M.update(crs, anchor, car)
     end
   end
   -- the nearest made first, a few each time (a Lots line is a few hundred things)
+  local eNow = crs.e and crs.e.anchor == anchor and crs.e or nil
   table.sort(due, function(p, q) return p.d2 < q.d2 end)
   local per = M.level == 'lots' and M.PER_UPDATE_LOTS or M.PER_UPDATE
   for _, dd in ipairs(due) do
     if made >= per then break end
     local o = dd.o
-    local x, y, z = spotFor(o, car.z or 0)
+    local x, y, z = spotFor(o, car.z or 0, eNow and function(px, py)
+      return M.clearFor(eNow, px, py, crs.sides, o.model)
+    end)
     if x == false then
       -- (a roof, a wall, a slope: left empty; judged on the far tiles' coarse ground: again when nearer)
       if dd.d2 < M.SURE_M * M.SURE_M then nowhere[o.key] = true end
@@ -973,6 +1013,7 @@ function M.update(crs, anchor, car)
       local ok, id = pcall(make, o, z, x, y)
       if ok then
         live[o.key] = { id = id, x = x, y = y, z = z, yaw = o.yaw, base = o.yaw, fan = o.fan, px = o.x, py = o.y,
+                        cx = o.px or o.x, cy = o.py or o.y,
                         foot = M.footKind(o.model) ~= nil, sure = dd.d2 < M.SURE_M * M.SURE_M }
         nLive, made = nLive + 1, made + 1
       else

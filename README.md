@@ -379,8 +379,10 @@ spot of each stretch. They stand in little groups a clear 3 m past the track's e
 signs; canopies and parked trucks further), never on a road or a dirt track (the game's road map and OpenStreetMap's
 roads and tracks around you, which the companion fetches while a course is loaded), clear of every pass of the course (a tight hairpin's inside is its other leg: they step back past it, or stay home), face
 the course and turn to watch you go by. Parked trucks and canopies only stand on open, nearly level ground: where a
-roof, a wall or a steep slope is under one, it moves a few metres along the line or is left out, so none sits on a
-building or hangs off a hillside. Nothing collides: a crowd never ends a run. Where they stand, how many, their
+roof, a wall or a steep slope is under one, it moves a few metres along the line (only where that is still clear of
+the track) or is left out, so none sits on a building or hangs off a hillside. Nothing is put up on a stretch until the
+companion has said where the track runs there (where it rounds a bend inside the course's line, or follows a road
+beside it), and anything standing when that comes in is put up again past the track's edge. Nothing collides: a crowd never ends a run. Where they stand, how many, their
 poses and their clothes are all picked from the course's place, so everyone on the same course sees the same crowds.
 
 **Lots** lines the course the way a Baja race crowd does: people packed along both sides (behind an orange safety

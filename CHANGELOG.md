@@ -3,6 +3,17 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.8 (2026-11-09)
+
+- **Spectators, canopies and parked trucks no longer stand on the track.** Three causes are fixed:
+  - When the track's real place came in together with new crowd spots, the ones already standing kept their old place
+    (worked out from the course's line with a guessed width). On a track that rounds a bend inside the line, or follows
+    a road beside it, that could be on the track. They are now put up again past its edge.
+  - Nothing is put up on a stretch until the companion has said where the track runs there.
+  - A truck or canopy moved a few metres along its line to find level ground could end up nearer the track on the
+    inside of a bend, or on another pass of the course. It now only moves where it is still clear of the track.
+- No ground changes: courses and ground codes make the same ground as 1.7.7.
+
 ## 1.7.7 (2026-11-08)
 
 - **BeamNG.Earth 1.9.0-beta** is the version inside the .exe. A source install downloads 1.9.0-beta, and 1.8.2, 1.8.1,

@@ -683,6 +683,60 @@ streetmap.reset()
 crowds.clear()
 crowds.setLevel('some')
 
+-- 6b. (1.7.8, the user 2026-11-09: "the props sometimes still block some of the courses") the track's widths come in
+-- after the crowd is standing, together with new spots (planned again, not only moved): the ones standing where the
+-- track turned out to be are made again past its edge; and nothing is made where the width is still to come
+do
+  crowds.clear()
+  crowds.setLevel('lots')
+  local oldReplan = crowds.REPLAN_S
+  local oldAnchorW = e.anchor
+  e.anchor = A
+  crowds.REPLAN_S = 0
+  local crsW = { e = e, track = { waypoints = wps }, length = L, closed = false, s = 0, spots = {},
+                 spotRanges = { { -1000, 30000 } }, spotsVersion = 1 }
+  local carW = { x = 0, y = -30, z = 0 }
+  for _ = 1, 40 do crowds.update(crsW, A, carW) end
+  local before = crowds.status().live
+  -- the track: 3 m each side of a middle 9 m left of the course's line (a road the course follows beside its line)
+  local sd = { step = 10, hw = {}, ctr = {}, version = 1 }
+  for i = 0, 2100 do sd.hw[i], sd.ctr[i] = 3.0, 9.0 end
+  crsW.sides, crsW.spotsVersion = sd, 2
+  for _ = 1, 60 do crowds.update(crsW, A, carW) end
+  local on, n = 0, 0
+  for _, l in pairs(crowds._live()) do
+    n = n + 1
+    if crowds.clearance(e, l.x, l.y, sd) < 1.0 then on = on + 1 end
+  end
+  check(before > 50 and n > 50 and on == 0, 'widths in with new spots: nobody left on the track (' .. on .. ' of ' .. n .. ')')
+  -- the same by the widths alone
+  local sd2 = { step = 10, hw = {}, ctr = {}, version = 1 }
+  for i = 0, 2100 do sd2.hw[i], sd2.ctr[i] = 3.0, -9.0 end
+  crsW.sides = sd2
+  for _ = 1, 60 do crowds.update(crsW, A, carW) end
+  on, n = 0, 0
+  for _, l in pairs(crowds._live()) do
+    n = n + 1
+    if crowds.clearance(e, l.x, l.y, sd2) < 1.0 then on = on + 1 end
+  end
+  check(n > 50 and on == 0, 'widths in alone: nobody left on the track (' .. on .. ' of ' .. n .. ')')
+  -- widths known for the course's first 100 m only: nothing made past them yet, then all of it once they come
+  crowds.clear()
+  local sd3 = { step = 10, hw = {}, ctr = {}, version = 1 }
+  for i = 0, 10 do sd3.hw[i], sd3.ctr[i] = 3.0, 0.0 end
+  crsW.sides = sd3
+  for _ = 1, 60 do crowds.update(crsW, A, carW) end
+  local past = 0
+  for _, l in pairs(crowds._live()) do if l.x > 110 then past = past + 1 end end
+  check(crowds.status().live > 0 and past == 0, 'the width still to come: nothing made there yet (' .. past .. ')')
+  check(crowds.sidesPending(sd3, 300) and not crowds.sidesPending(sd3, 50) and not crowds.sidesPending(nil, 300)
+    and not crowds.sidesPending({ step = 10, hw = {}, ctr = {} }, 300), 'sidesPending: only where the companion has not said yet')
+  crowds.REPLAN_S = oldReplan
+  e.anchor = oldAnchorW
+  crowds.clear()
+  crowds.setLevel('some')
+end
+
 -- 7. parked vehicles and canopies only on open, nearly level ground: not on a roof, not hanging off a slope
 do
   local v, why = crowds.footprint({ 0, 0.1, 0, 0.2, 0 }, { 0, 0, 0, 0, 0 }, 0.45)
