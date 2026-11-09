@@ -546,6 +546,10 @@ MILD_LEVEL = 0.55
 ROAD_EXCESS_V9 = 0.65       # on a mapped dirt road the course follows (BeamNG.Earth 1.8.2 wears it), away from a DANGER
                             # waypoint's stretch: the level's part over Mild kept at this share (Rough 1.0 -> 0.84,
                             # Extra 1.6 -> 1.23); the course's own track and the DANGER stretches as before
+# (terrain 10: BeamNG.Earth's wear kept off the mapped dirt roads the course runs along too, earthpatch.followed_rows;
+# the user, 2026-11-08: "our track on baja still is being influenced by the vanilla BeamNG.Earth new dirt roads". With
+# nothing to make up for, those stretches are as rough as the course's own track again; 9's shares stay.)
+UNWORN_TV = 10
 
 
 def danger_s(course, points):
@@ -614,10 +618,11 @@ def course_auto(course):
 
 
 def auto_level(course, A, s, f):
-    """course_auto's level at s (m along the course): from terrain AUTO_TV, its part over Mild softened on a mapped dirt
-    road the course follows (f["road"], the profiles' facts at s), outside the DANGER waypoints' stretches. Pure."""
+    """course_auto's level at s (m along the course): in terrain 9 (AUTO_TV up to UNWORN_TV), its part over Mild
+    softened on a mapped dirt road the course follows (f["road"], the profiles' facts at s), outside the DANGER
+    waypoints' stretches. Pure."""
     lv = _per_sample(A["level"], s)
-    if getattr(course, "tv", 1) < AUTO_TV:
+    if not AUTO_TV <= getattr(course, "tv", 1) < UNWORN_TV:
         return lv
     road = np.clip(np.asarray(f["road"], np.float64), 0.0, 1.0) * (1.0 - _per_sample(A["danger"], s))
     return lv - np.maximum(lv - MILD_LEVEL, 0.0) * (1.0 - ROAD_EXCESS_V9) * road

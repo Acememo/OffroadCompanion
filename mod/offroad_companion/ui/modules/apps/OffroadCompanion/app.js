@@ -1,7 +1,7 @@
 // Offroad Companion (the in-game app; lua/ge/extensions/offroadCompanion/main.lua): turn-by-turn road navigation and race-course guidance.
 // The game's UI browser cannot make web requests, so everything goes through the game's Lua (bngApi.engineLua);
 // the Lua side pushes 'OffroadCompanionUpdate' five times a second while this app is on screen.
-var EGPS_APP_BUILD = '2026-11-06 04:00'   // (main.lua M.BUILD: the same, or the game kept an older copy of one of them)
+var EGPS_APP_BUILD = '2026-11-08 23:30'   // (main.lua M.BUILD: the same, or the game kept an older copy of one of them)
 angular.module('beamng.apps')
 .directive('offroadCompanion', ['$sce', function ($sce) {
   'use strict'
@@ -349,9 +349,9 @@ angular.module('beamng.apps')
 '      <button ng-disabled="scaleAt(1)" ng-click="stepScale(0.1)" title="Bigger">+</button></span></div>' +
 '    <div class="set"><span title="Where the turn notes box (the arrow, the distance, the call) sits: over the map, under it, or beside it with the arrow above the text">Turn notes</span><span class="seg">' +
 '      <button ng-class="{on: ui.notes === \'top\'}" ng-click="choose(\'notes\', \'top\')">Top</button>' +
-'      <button ng-class="{on: ui.notes === \'bottom\'}" ng-click="choose(\'notes\', \'bottom\')">Bottom</button>' +
 '      <button ng-class="{on: ui.notes === \'left\'}" ng-click="choose(\'notes\', \'left\')">Left</button>' +
-'      <button ng-class="{on: ui.notes === \'right\'}" ng-click="choose(\'notes\', \'right\')">Right</button></span></div>' +
+'      <button ng-class="{on: ui.notes === \'right\'}" ng-click="choose(\'notes\', \'right\')">Right</button>' +
+'      <button ng-class="{on: ui.notes === \'bottom\'}" ng-click="choose(\'notes\', \'bottom\')">Bottom</button></span></div>' +
 '    <div class="set"><span>Language</span><span class="seg">' +
 '      <button ng-class="{on: ui.lang === \'en\'}" ng-click="choose(\'lang\', \'en\')">English</button>' +
 '      <button ng-class="{on: ui.lang === \'es\'}" ng-click="choose(\'lang\', \'es\')">Español</button></span></div>' +

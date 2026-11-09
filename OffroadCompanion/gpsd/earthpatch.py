@@ -1091,6 +1091,44 @@ def wear_mode(st):
     return getattr(c, "rough", None) if c is not None else None
 
 
+def followed_rows(st, roadsmod, feats, specs):
+    """The mapped dirt roads (rows of feats, specs: road_specs') the loaded course runs along (corridor.rows_followed,
+    courseroads' follow rule for dirt roads): the course's road there, so BeamNG.Earth's dirt road wear stays off it as
+    off the course's own track (the user, 2026-11-08: "our track on baja still is being influenced by the vanilla
+    BeamNG.Earth new dirt roads"). Remembered on feats for the course loaded. -> tuple of rows."""
+    plan = st.current() if st is not None else None
+    c = getattr(plan, "paint", None) if plan is not None else None
+    if c is None:
+        return ()
+    memo = feats.__dict__.get("_egps_followed")
+    if memo is not None and memo[0] == plan.key:
+        return memo[1]
+    got = ()
+    built = getattr(roadsmod, "BUILT", ())
+    own = set(course_rows(feats))
+    cand = [i for i, sp in enumerate(specs) if sp is not None and i not in own and getattr(sp, "kind", None) not in built]
+    if cand and len(feats):
+        boxes = corridor._feature_boxes(feats)
+        pad = courseroads.FOLLOW_UNPAVED_M + 30.0
+        dlat = pad / 111320.0
+        ok = np.isfinite(boxes).all(axis=1)
+        if ok.any():
+            b = boxes[ok]
+            bounds = (float(b[:, 0].min()), float(b[:, 1].min()), float(b[:, 2].max()), float(b[:, 3].max()))
+            lines = corridor.course_lines(c, bounds, pad)
+            if lines:
+                allc = np.concatenate(lines)
+                dlon = pad / (111320.0 * max(0.05, math.cos(math.radians(float(allc[:, 1].mean())))))
+                cl0, cl1 = allc.min(axis=0), allc.max(axis=0)
+                near = [i for i in cand if np.isfinite(boxes[i]).all() and boxes[i, 0] <= cl1[0] + dlon and
+                        boxes[i, 2] >= cl0[0] - dlon and boxes[i, 1] <= cl1[1] + dlat and boxes[i, 3] >= cl0[1] - dlat]
+                half = {i: float(getattr(specs[i], "width", 6.0)) / 2.0 for i in near}
+                got = tuple(corridor.rows_followed(feats, near, lines, half, courseroads.FOLLOW_UNPAVED_M,
+                                                   courseroads.FOLLOW_UNPAVED_DEG))
+    feats.__dict__["_egps_followed"] = (plan.key, got)
+    return got
+
+
 def install_course_grade(st):
     """BeamNG.Earth 1.8.2 wears its dirt roads (grading.dirt_bumps: potholes, broken patches, deep pits, 2.5 times as
     deep on a track; dirt_bank: a lean of up to 0.2 m per m; profile_sigma: a minor one smoothed over 2.5 m, not 8).
@@ -1107,10 +1145,13 @@ def install_course_grade(st):
     def road_specs(feats, *a, **kw):
         got = orig_specs(feats, *a, **kw)
         try:
-            rows = course_rows(feats)
-            if not rows or got is None:
+            if got is None:
                 return got
-            # (BeamNG.Earth hands out a copy of its remembered list each time: marked in it, the track's rows alone)
+            rows = course_rows(feats) + followed_rows(st, roadsmod, feats, got)
+            if not rows:
+                return got
+            # (BeamNG.Earth hands out a copy of its remembered list each time: marked in it, the track's rows and the
+            # mapped dirt roads the course runs along alone)
             out = got if isinstance(got, list) else list(got)
             for i in rows:
                 if i < len(out) and out[i] is not None and not isinstance(out[i], cls):
@@ -1138,10 +1179,11 @@ def install_course_grade(st):
             return orig_bank(xy, spec, *a, **kw)
         return None
 
-    def profile_sigma(spec):
-        if spec.kind not in roadsmod.BUILT and wear(spec)[2] == "smooth":
+    def profile_sigma(spec, *a, **kw):         # (1.9: profile_sigma(spec, coarse=False))
+        coarse = bool(a[0]) if a else bool(kw.get("coarse", False))
+        if not coarse and spec.kind not in roadsmod.BUILT and wear(spec)[2] == "smooth":
             return gradingmod.DIRT_SIGMA_M
-        return orig_sigma(spec)
+        return orig_sigma(spec, *a, **kw)
 
     roadsmod.road_specs = road_specs
     gradingmod.dirt_bumps, gradingmod.dirt_bank, gradingmod.profile_sigma = dirt_bumps, dirt_bank, profile_sigma

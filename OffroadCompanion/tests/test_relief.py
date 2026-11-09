@@ -617,3 +617,19 @@ class TestTerrain9(unittest.TestCase):
         s8 = np.arange(len(A8["level"])) * cr.STEP_M
         self.assertTrue(np.array_equal(rf.auto_level(c8, A8, s8, {"road": np.ones(len(s8))}), A8["level"]),
                         "terrain 8 and older: as they were")
+
+
+class TestTerrain10(unittest.TestCase):
+    """Terrain 10 (the user, 2026-11-08): BeamNG.Earth's wear is kept off the mapped dirt roads the course follows
+    (earthpatch.followed_rows), so 9's softening there is gone; 9's section shares stay."""
+
+    def test_no_softening_shares_kept(self):
+        ll, _xy = frame()
+        pts = [tuple(map(float, ll(x, 3000 * math.sin(x / 9000.0)))) for x in range(0, 100001, 200)]
+        c9, c10 = cr.Course(pts, tv=9), cr.Course(pts, tv=10)
+        A9, A10 = rf.course_auto(c9), rf.course_auto(c10)
+        self.assertTrue(np.array_equal(A9["level"], A10["level"]), "9's shares")
+        s = np.arange(len(A10["level"])) * cr.STEP_M
+        road = {"road": np.ones(len(s))}
+        self.assertTrue(np.array_equal(rf.auto_level(c10, A10, s, road), A10["level"]), "no softening on a road")
+        self.assertFalse(np.array_equal(rf.auto_level(c9, A9, s, road), A9["level"]), "9 still softens")

@@ -3,6 +3,21 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.7 (2026-11-08)
+
+- **BeamNG.Earth 1.9.0-beta** is the version inside the .exe. A source install downloads 1.9.0-beta, and 1.8.2, 1.8.1,
+  1.8.0, 1.7.x, 1.6.x and 1.5.x still work. 1.9.0 changed how BeamNG.Earth works out a dirt road's smoothing, which
+  stopped the course painter from grading the roads (fixed). Its first visit to each place plans the roads again.
+- **The course no longer picks up BeamNG.Earth's dirt road wear where it follows a mapped dirt road.** On Baja, Mild,
+  Rough and Extra, a mapped dirt road the course runs along (within 25 m of it, in its direction, for 40 m or more) is
+  now treated as the course's own track: no potholes, pits or leans from BeamNG.Earth there either. Other dirt roads
+  keep BeamNG.Earth's wear. Default and Flat are unchanged.
+- **Ground version 10**: with that wear gone, ground version 9's softening of Baja's rough sections on mapped dirt roads
+  is gone too, so they are as rough as the course's own track again. Version 9's section shares stay. Only Baja
+  changes, and older ground versions (ground codes) are unchanged.
+- **Turn notes** choices are now in the order Top, Left, Right, Bottom.
+- The .exe carries BeamNG.Earth 1.9's new launcher module (the 3D map's sky from orbit).
+
 ## 1.7.6 (2026-11-06)
 
 - **Every setting fits.** A Settings row too narrow for its choices (Track terrain's six, or any row at a bigger app

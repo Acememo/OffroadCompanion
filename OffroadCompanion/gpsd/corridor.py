@@ -112,6 +112,63 @@ def props_off(rows, lines, clear_m):
     return [r for i, r in enumerate(rows) if i not in drop]
 
 
+FOLLOWED_MIN_M = 40.0       # a mapped road the course runs along for at least this long is the course's road
+FOLLOWED_STEP_M = 5.0
+
+
+def rows_followed(f, rows, lines, half_w, pad_m, align_deg, min_m=FOLLOWED_MIN_M, step_m=FOLLOWED_STEP_M):
+    """The rows (of Features f, lon / lat, each a road) the course's lines ((n, 2) lon / lat each) run along: points
+    every step_m along the row within its half width (half_w[row]) + pad_m of a course segment running within align_deg
+    of its way, for at least min_m in all. The row's whole geometry decides, whichever cell it is read from, so every
+    tile and process picks the same. -> sorted list of rows. Pure."""
+    lines = [np.asarray(ln, np.float64) for ln in lines if len(ln) >= 2]
+    rows = [int(i) for i in rows]
+    if not lines or not rows:
+        return []
+    la_ = np.concatenate([ln[:-1] for ln in lines])
+    lb_ = np.concatenate([ln[1:] for ln in lines])
+    cos_tol = math.cos(math.radians(align_deg))
+    out = []
+    for i in rows:
+        reach = float(half_w[i]) + pad_m
+        got = 0.0
+        c0 = int(f.coord_off[int(f.ring_off[int(f.part_off[i])])])
+        if c0 >= len(f.lonlat):
+            continue
+        plane = Plane(float(f.lonlat[c0, 1]), float(f.lonlat[c0, 0]))    # (the row's own: the same from any cell)
+        ca, cb = plane.xy(la_), plane.xy(lb_)
+        cv = cb - ca
+        cl = np.maximum(np.hypot(cv[:, 0], cv[:, 1]), 1e-9)
+        lo, hi = np.minimum(ca, cb).min(axis=0), np.maximum(ca, cb).max(axis=0)
+        for p in range(int(f.part_off[i]), int(f.part_off[i + 1])):
+            for r in range(int(f.ring_off[p]), int(f.ring_off[p + 1])):
+                xy = plane.xy(f.lonlat[int(f.coord_off[r]):int(f.coord_off[r + 1])])
+                if len(xy) < 2:
+                    continue
+                if ((xy.max(axis=0) < lo - reach) | (xy.min(axis=0) > hi + reach)).any():
+                    continue
+                for a, b in zip(xy[:-1], xy[1:]):
+                    d = b - a
+                    L = float(math.hypot(d[0], d[1]))
+                    if L < 1e-6:
+                        continue
+                    k = max(1, int(math.ceil(L / step_m)))
+                    pts = a + d * ((np.arange(k) + 0.5) / k)[:, None]
+                    dist = _seg_dist(pts, ca, cb)                               # (k, S)
+                    cos = np.abs(cv @ d) / (cl * L)                             # (S,)
+                    ok = ((dist <= reach) & (cos >= cos_tol)[None, :]).any(axis=1)
+                    got += float(ok.sum()) * (L / k)
+                    if got >= min_m:
+                        break
+                if got >= min_m:
+                    break
+            if got >= min_m:
+                break
+        if got >= min_m:
+            out.append(i)
+    return out
+
+
 def _seg_dist(p, a, b):
     """Distances (m) of points p (P, 2) to segments a -> b (S, 2) each: (P, S)."""
     d = b - a

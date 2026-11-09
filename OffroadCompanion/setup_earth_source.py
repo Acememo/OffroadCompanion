@@ -30,8 +30,8 @@ from gpsd import beamngdirs, paintfile  # noqa: E402
 from gpsd.fetch import USER_AGENT  # noqa: E402
 
 REPO = "TecnaGamer/BeamNG.Earth"
-EARTH_VERSION = "1.8.2-beta"            # downloaded: the release this companion was made and tested with
-COMPATIBLE = ("1.8.2", "1.8.1", "1.8.0", "1.7.3", "1.7.2", "1.7.1", "1.7.0", "1.6.3", "1.6.2", "1.6.1", "1.6.0", "1.5.")     # versions it works with (a copy already here of one: used)
+EARTH_VERSION = "1.9.0-beta"            # downloaded: the release this companion was made and tested with
+COMPATIBLE = ("1.9.0", "1.8.2", "1.8.1", "1.8.0", "1.7.3", "1.7.2", "1.7.1", "1.7.0", "1.6.3", "1.6.2", "1.6.1", "1.6.0", "1.5.")     # versions it works with (a copy already here of one: used)
 API = f"https://api.github.com/repos/{REPO}"
 ZIP = "https://codeload.github.com/" + REPO + "/zip/refs/tags/{tag}"
 CONFIG = os.path.join(paintfile.base_dir(), "launcher.json")

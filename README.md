@@ -218,6 +218,10 @@ Now nothing is narrower than about 6 m or changes over less than about 3 m: whoo
 in long swells, the windrows and the turns' sand as wide soft mounds, the banked corner a smooth bowl with its lip just
 past the edge, and the tallest places easing into their limit instead of flattening off.
 
+**Ground version 10** keeps version 9's sections, without its softening on mapped dirt roads: since 1.7.7 BeamNG.Earth's
+wear stays off the mapped dirt roads the course follows (below), so those stretches are as rough as the course's own
+track again. Only **Baja** changes.
+
 **Ground version 9** changes only **Baja**: rough sections are rarer, the rougher the rarer (below), and where the
 course follows a mapped dirt road, which BeamNG.Earth 1.8.2 wears with its own potholes, the rough and extra rough
 sections are softer (their part over Mild at 65 %), except around the DANGER waypoints. The course's own track and every
@@ -259,9 +263,12 @@ tracks the worst. The track terrain setting decides what that does with a course
 
 | Track terrain | The course's track | Other dirt roads |
 | --- | --- | --- |
-| **Baja**, **Mild**, **Rough**, **Extra** | the relief above, none of BeamNG.Earth's wear | BeamNG.Earth's potholes; a lean on about 1 road part in 20 |
+| **Baja**, **Mild**, **Rough**, **Extra** | the relief above, none of BeamNG.Earth's wear, also where it follows a mapped dirt road | BeamNG.Earth's potholes; a lean on about 1 road part in 20 |
 | **Default** | BeamNG.Earth's own: worn like any forest track (none of the relief above) | BeamNG.Earth's own |
 | **Flat** | smooth | smooth, as before BeamNG.Earth 1.8.2 |
+
+A mapped dirt road counts as the course's where the course runs along it (within 25 m of it, in its direction) for at
+least 40 m; then the whole of that mapped road is left unworn, so it is the same from every tile and every process.
 
 Without a course loaded, BeamNG.Earth's dirt roads are as BeamNG.Earth makes them. On BeamNG.Earth 1.8.1 and older there
 is no wear, so **Default** is the same as **Flat** there. A change of setting plans the roads again, and the ground
@@ -527,7 +534,7 @@ and BeamNG.drive started once.
    (you get `BeamNG.Earth\OffroadCompanion\...`). It is not a game mod: do not put it in `mods`.
 2. Run `OffroadCompanion\setup_offroad_companion.bat` once (Linux: `OffroadCompanion/setup_offroad_companion.sh`). It:
    - uses the BeamNG.Earth folder it is in (nothing is downloaded), when that is a version Offroad Companion works with
-     (1.8.2, 1.8.1, 1.8.0, 1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1, 1.6.0 or 1.5.x); otherwise it downloads the source of **BeamNG.Earth 1.8.2-beta**, the version this
+     (1.9.0, 1.8.2, 1.8.1, 1.8.0, 1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1, 1.6.0 or 1.5.x); otherwise it downloads the source of **BeamNG.Earth 1.9.0-beta**, the version this
      release is made for, next to it, never simply the newest (a newer BeamNG.Earth may change what the course painter
      hooks into). If the download fails it prints the address of that release's zip to fetch by hand (then
      `setup_offroad_companion.bat --zip PATH`);
@@ -555,7 +562,7 @@ folder is renamed `companion (old - now OffroadCompanion)`: delete it when you l
 
 ### BeamNG.Earth 1.8, 1.7, 1.6 and BeamMP
 
-Works with BeamNG.Earth 1.8.2 (the version the .exe has inside), 1.8.1, 1.8.0, 1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1
+Works with BeamNG.Earth 1.9.0 (the version the .exe has inside), 1.8.2, 1.8.1, 1.8.0, 1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1
 and 1.6.0 (and 1.5.x). With 1.8:
 
 - The ground near the car is a 1 m lattice (2 m before); the track's relief, sand, rock and gravel are made for it as
@@ -578,7 +585,9 @@ and 1.6.0 (and 1.5.x). With 1.8:
 - 1.8.2 wears BeamNG.Earth's dirt roads (potholes, broken patches, deep pits and a lean to one side; tracks the
   worst). The track terrain setting decides where (see Track terrain): on Baja, Mild, Rough and Extra the course's
   track keeps its own ground (the same as on 1.8.1) and the other dirt roads lean only rarely; Default is
-  BeamNG.Earth's own, the track worn too; Flat smooths every dirt road as before 1.8.2.
+  BeamNG.Earth's own, the track worn too; Flat smooths every dirt road as before 1.8.2. A mapped dirt road the course
+  runs along counts as the course's own (1.7.7). 1.9.0 bounds the wear (its holes about 0.1 m here, 1.8.2's up to
+  1 m) and changes how roads sit on the ground, so its first visit to each place plans the roads again.
 - 1.8.2's launcher asks at every start whether to install a newer BeamNG.Earth. Offroad Companion's .exe never asks:
   the BeamNG.Earth inside it comes with Offroad Companion's own releases.
 

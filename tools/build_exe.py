@@ -262,7 +262,10 @@ def pyinstaller(work, earth, staged, ico, ver, earth_ver, boot=None):
             cmd += ["--add-data", f"{os.path.join(earth, name)}{SEP}."]
     vf, mf = version_files(work, ver, earth_ver)
     cmd += ["--version-file", vf, "--manifest", mf]
-    for m in mods + ["launcher", "install", "apppaths", "bmplaunch"]:
+    root = sorted({"launcher", "install", "apppaths", "bmplaunch"} |   # (and any other module beside the launcher: 1.9's
+                  {os.path.splitext(n)[0] for n in os.listdir(earth)      # skypatch, the 3D map's sky from orbit)
+                   if n.endswith(".py") and n not in ("start.py", "setup.py")})
+    for m in mods + root:
         cmd += ["--hidden-import", m]
     for m in stdlib_imports(staged):
         cmd += ["--hidden-import", m]

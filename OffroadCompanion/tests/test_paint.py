@@ -441,6 +441,10 @@ class TestInsideEarth(unittest.TestCase):
             xs = np.arange(2000.0, 3001.0, 25.0)
             la, lo = ll(xs, np.zeros_like(xs))
             roads.append(("0aa1", np.stack([lo, la], 1), "unclassified", "dirt"))
+            # a dirt road 300 m off the course, along it but not followed: BeamNG.Earth's own wear stays on it
+            xs = np.arange(2000.0, 2601.0, 25.0)
+            la, lo = ll(xs, np.full_like(xs, 300.0))
+            roads.append(("0aa2", np.stack([lo, la], 1), "unclassified", "dirt"))
             ys = np.arange(-600.0, 601.0, 50.0)
             la, lo = ll(np.full_like(ys, 4200.0), ys)
             roads.append(("0bb2", np.stack([lo, la], 1), "residential", "paved"))
@@ -1322,7 +1326,15 @@ class TestInsideEarth(unittest.TestCase):
         cls = self.earthpatch.course_spec_class(roadsmod)
         own = [specs[i] for i in rows if specs[i] is not None]
         self.assertTrue(own and all(isinstance(s, cls) for s in own), "the track's specs marked")
-        self.assertFalse(any(isinstance(s, cls) for i, s in enumerate(specs) if i not in rows), "no other road's")
+        fol = set(self.earthpatch.followed_rows(self.earthpatch.state(), roadsmod, f, specs))
+        self.assertEqual({i for i, s in enumerate(specs) if isinstance(s, cls)}, set(rows) | fol, "no other road's")
+        f2 = self.roads(*ll(2500, 0))
+        specs2 = roadsmod.road_specs(f2, None, None)
+        ids = [str(v) for v in f2.ids]
+        fol2 = {i for i, s in enumerate(specs2) if isinstance(s, cls)} - set(self.earthpatch.course_rows(f2))
+        self.assertTrue(any(ids[i].endswith("0aa1") for i in fol2), ("the dirt road the course runs along: the "
+                                                                      "course's", ids))
+        self.assertFalse(any(ids[i].endswith(("0aa2", "0bb2", "0dd4", "0ff6")) for i in fol2), "not one beside or across")
         again = roadsmod.road_specs(f, None, None)
         self.assertTrue(all(isinstance(again[i], cls) for i in rows if again[i] is not None), "marked every time")
         self.assertEqual(again, specs)
@@ -1342,13 +1354,18 @@ class TestInsideEarth(unittest.TestCase):
             la, lo = ll(xs, np.zeros_like(xs))
             return grading.Grader(frame, self.md, lambda a, b: ground(a, b)).apply(la, lo, ground(la, lo))
         xs, rs = np.arange(600.0, 1400.0, 1.0), np.arange(2300.0, 2680.0, 1.0)     # (a crossing at 2700)
+        os_ = np.arange(2100.0, 2500.0, 1.0)                                        # (the dirt road 300 m off)
+
+        def graded_off(xs_):
+            la_, lo_ = ll(xs_, np.full_like(xs_, 300.0))
+            return grading.Grader(frame, self.md, lambda a, b: ground(a, b)).apply(la_, lo_, ground(la_, lo_))
         seen = {}
         try:
             for mode in ("on", "auto", "off", "default"):
                 self.set_rough(mode)
                 c = self.earthpatch.state().current().paint
                 self.assertEqual(c.rough, mode)
-                seen[mode] = (graded(xs), graded(rs))
+                seen[mode] = (graded(xs), graded(rs), graded_off(os_))
                 if mode in ("on", "auto"):          # Rough, Baja: the track the painter's own; the roads keep their
                     self.assertIsNone(grading.dirt_bumps(line, own[0], 300), mode)        # potholes, rarely a lean
                     self.assertIsNone(grading.bank(line, own[0]), mode)
@@ -1371,13 +1388,23 @@ class TestInsideEarth(unittest.TestCase):
             self.set_rough("on")
         la, lo = ll(xs, np.zeros_like(xs))
         self.assertLess(float(np.abs(seen["off"][0]).max()), 0.05, "Flat: the track flat")
-        self.assertLess(float(np.ptp(seen["off"][1])), 0.05, "Flat: BeamNG.Earth's dirt road too")
-        self.assertGreater(float(np.ptp(seen["default"][0])), 0.3, "Default: the track worn as a track")
-        self.assertGreater(float(np.ptp(seen["default"][1])), 0.1, "Default: the dirt road worn")
-        self.assertGreater(float(np.ptp(seen["on"][1])), 0.1, "Rough: the dirt road keeps its potholes")
+        self.assertLess(float(np.ptp(seen["off"][1])), 0.05, "Flat: the dirt road the course follows")
+        self.assertLess(float(np.ptp(seen["off"][2])), 0.05, "Flat: BeamNG.Earth's other dirt roads too")
+        # (BeamNG.Earth 1.9 bounds its wear: about 0.1 m here, 1.8.2's up to 1 m)
+        self.assertGreater(float(np.ptp(seen["default"][0])), 0.05, "Default: the track worn as a track")
+        self.assertGreater(float(np.ptp(seen["default"][1])), 0.05, "Default: the dirt road it follows worn")
+        self.assertGreater(float(np.ptp(seen["on"][2])), 0.05, "Rough: a dirt road off the course keeps its potholes")
         self.set_rough("on")
         relief = self.earthpatch.state().relief_at(self.md, la, lo)
         self.assertLess(float(np.abs(seen["on"][0] - relief).max()), 0.05, "Rough: the track its relief alone")
+        la2, lo2 = ll(rs, np.zeros_like(rs))
+        relief2 = self.earthpatch.state().relief_at(self.md, la2, lo2)
+        self.assertLess(float(np.ptp(seen["on"][1] - relief2)), 0.02,
+                        "Rough: the dirt road the course follows its relief alone, none of BeamNG.Earth's wear")
+        self.set_rough("auto")
+        relief2 = self.earthpatch.state().relief_at(self.md, la2, lo2)
+        self.set_rough("on")
+        self.assertLess(float(np.ptp(seen["auto"][1] - relief2)), 0.02, "Baja: the same")
         # one plan store all along (BeamNG.Earth 1.8's: one a process): another setting plans the roads again
         la, lo = ll(rs, np.zeros_like(rs))
         g = grading.Grader(frame, self.md, lambda a, b: ground(a, b))
@@ -1390,7 +1417,7 @@ class TestInsideEarth(unittest.TestCase):
         finally:
             self.set_rough("on")
         self.assertLess(float(np.ptp(flat)), 0.05)
-        self.assertGreater(float(np.ptp(worn)), 0.1, "the same grader: the roads planned again for Default")
+        self.assertGreater(float(np.ptp(worn)), 0.05, "the same grader: the roads planned again for Default")
 
     def test_cut_bank_beside_the_track(self):
         """On a steep hillside BeamNG.Earth's grading cuts the dirt track in with a wall's step (a strip at the road's
