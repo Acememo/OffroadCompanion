@@ -891,6 +891,49 @@ def ruts_at(course, profiles, lat, lon, scale=1.0, auto=False, near=None):
 
 
 # -- boulders beside the track ----------------------------------------------------------------------------------------
+# (terrain 11; the user, 2026-11-10, screenshots of boulders on a highway beside the course: "rocks shouldn't be placed
+# in paved roads") No boulder on a road: BeamNG.Earth's own, paved or not, within its half width + the boulder's
+# radius of its middle, and ROCK_ROAD_PAD_M more off a paved one (its shoulder); the course's own track's rows are not
+# among them.
+ROCKS_OFF_ROADS_TV = 11
+ROCK_ROAD_PAD_M = 1.0
+
+
+def rocks_off_roads(r, ends, hws, paved=None, pad=ROCK_ROAD_PAD_M):
+    """rocks' dict r (rocks()) without the boulders on a road: ends (M, 4) lon0, lat0, lon1, lat1 of the roads'
+    segments, hws (M,) their half widths (m), paved (M,) bool (None: all paved). Pure."""
+    n = len(r["lon"])
+    ends = np.asarray(ends, np.float64).reshape(-1, 4)
+    if not n or not len(ends):
+        return r
+    lat0 = float(np.mean(r["lat"]))
+    kx = math.radians(1.0) * courseroads.R_EARTH * math.cos(math.radians(lat0))
+    ky = math.radians(1.0) * courseroads.R_EARTH
+    lon_c = float(np.mean(r["lon"]))
+    px = (np.asarray(r["lon"], np.float64) - lon_c) * kx
+    py = (np.asarray(r["lat"], np.float64) - lat0) * ky
+    ax, ay = (ends[:, 0] - lon_c) * kx, (ends[:, 1] - lat0) * ky
+    bx, by = (ends[:, 2] - lon_c) * kx, (ends[:, 3] - lat0) * ky
+    pv = np.ones(len(ends), bool) if paved is None else np.asarray(paved, bool)
+    reach = np.asarray(hws, np.float64) + np.where(pv, pad, 0.0)
+    keep = np.ones(n, bool)
+    big = float(np.max(reach)) + 3.0
+    for i in range(n):
+        near = (np.minimum(ax, bx) - big <= px[i]) & (np.maximum(ax, bx) + big >= px[i]) & \
+               (np.minimum(ay, by) - big <= py[i]) & (np.maximum(ay, by) + big >= py[i])
+        if not near.any():
+            continue
+        dx, dy = bx[near] - ax[near], by[near] - ay[near]
+        L2 = np.maximum(dx * dx + dy * dy, 1e-12)
+        t = np.clip(((px[i] - ax[near]) * dx + (py[i] - ay[near]) * dy) / L2, 0.0, 1.0)
+        d = np.hypot(ax[near] + t * dx - px[i], ay[near] + t * dy - py[i])
+        if (d <= reach[near] + 0.5 * float(r["size"][i])).any():
+            keep[i] = False
+    if keep.all():
+        return r
+    return {k: np.asarray(v)[keep] for k, v in r.items()}
+
+
 def rocks(course, profiles, bounds, auto=False):
     """Boulders beside the track where it is rocky (canyons, rocky hillsides) inside bounds (lon0, lat0, lon1, lat1):
     arrays (lon, lat, size m, yaw deg, rank, scale), hashed from each sample's place. auto: also the boulder fields

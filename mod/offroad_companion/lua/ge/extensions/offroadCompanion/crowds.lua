@@ -37,6 +37,9 @@ M.FOOT_STEP_M = { vehicle = 0.45, canopy = 0.6 }
 M.ON_TOP_M = 0.6
 M.SHIFTS_M = { 0, 3.5, -3.5, 7, -7 }
 M.SURE_M = 300
+M.REGROUND_S = 4.0          -- within SURE_M the ground under each one is measured again this often ...
+M.REGROUND_PER = 40         -- ... at most this many each update ...
+M.REGROUND_DZ = 0.3         -- ... and it is put back on it when it is this far off
 M.PER_UPDATE = 10
 M.WATCH_M = 140             -- spectators this near the car turn to watch it ...
 M.TURN_DEG_S = 160          -- ... this fast
@@ -954,6 +957,7 @@ function M.update(crs, anchor, car)
   local due = {}
   -- (the game's road map around the car and OpenStreetMap's ways: nothing made on a road or a track)
   local roads = roadsnear.combine(roadsnear.current(), osmRoads(anchor, car))
+  local checks = 0
   for _, o in ipairs(planned.list) do
     local d2 = math.huge                     -- (no room for it now: never made; a night one by day: not now)
     if o.x and (night or not o.night) then d2 = (o.x - car.x) ^ 2 + (o.y - car.y) ^ 2 end
@@ -961,8 +965,14 @@ function M.update(crs, anchor, car)
     if l then
       if d2 > M.DESPAWN_M * M.DESPAWN_M then
         remove(o.key)
-      elseif not l.sure and d2 < M.SURE_M * M.SURE_M then
-        -- (made far away: the ground there may have been the far tiles'; measured again on the real one)
+      elseif d2 < M.SURE_M * M.SURE_M and (not l.sure or (checks < M.REGROUND_PER
+          and now - (l.checkedAt or 0) >= M.REGROUND_S)) then
+        -- (made far away: the ground there may have been the far tiles'; measured again on the real one. And then
+        -- again every REGROUND_S, a few each update (1.7.10, the user 2026-11-10: spectators and canopies in the air:
+        -- the block they were measured on was the stand-in BeamNG.Earth sends first, or one built before the
+        -- course's track was cut there; the graded one that replaced it is lower)
+        checks = checks + (l.sure and 1 or 0)
+        l.checkedAt = now
         local gz = markers.groundZ(l.x, l.y, car.z or l.z)
         local ob = scenetree.findObjectById(l.id)
         local kind = l.foot and M.footKind(o.model)
@@ -974,8 +984,9 @@ function M.update(crs, anchor, car)
           remove(o.key)                                -- (made far away; on the real ground a roof or a slope)
           nowhere[o.key] = true
         elseif gz and verdict ~= 'wait' then
-          if l.moved or math.abs(gz - l.z) > 0.15 then
+          if l.moved or math.abs(gz - l.z) > (l.sure and M.REGROUND_DZ or 0.15) then
             pcall(markers.place, ob, l.x, l.y, gz, l.yaw); l.z = gz; dropLight(l)
+            if l.sure then M.reground = (M.reground or 0) + 1 end
           end
           l.sure, l.moved = true, nil
         end

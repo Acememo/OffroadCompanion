@@ -218,6 +218,10 @@ Now nothing is narrower than about 6 m or changes over less than about 3 m: whoo
 in long swells, the windrows and the turns' sand as wide soft mounds, the banked corner a smooth bowl with its lip just
 past the edge, and the tallest places easing into their limit instead of flattening off.
 
+**Ground version 11** keeps version 10's ground with two changes: no boulder lies on a road (BeamNG.Earth's own,
+paved or dirt, and off a paved road's shoulder too), and where the course leaves or joins a paved road, its dirt track
+meets the road at its edge instead of running onto the middle of the asphalt (crossings are unchanged).
+
 **Ground version 10** keeps version 9's sections, without its softening on mapped dirt roads: since 1.7.7 BeamNG.Earth's
 wear stays off the mapped dirt roads the course follows (below), so those stretches are as rough as the course's own
 track again. Only **Baja** changes.
@@ -363,10 +367,18 @@ computer. When the setting is turned off or the ground dries, BeamNG's own grip 
 BeamNG.Earth grades the ground it shows from each area's road data. When you drive faster than that data is ready,
 a stretch of ground is shown before its roads are graded into it, and you see ungraded ground over the road that
 you drive through (it corrects itself once that area is rebuilt). The course painter adds the dirt track to that
-road data, so it plans the track around the car ahead of time: a background process of its own, at low priority,
-plans the course nearest first where you are heading (the game tells it where you are through the companion) and
-keeps it on disk for BeamNG.Earth's workers, so BeamNG.Earth never waits for it. If you still see ground over the
-road without a course loaded, that is BeamNG.Earth's own streaming.
+road data, so it plans the track ahead of time: a background process of its own, at low priority, plans the course
+from where you are on it, 10 km ahead along the course (round its bends) and 1 km behind, plus any other pass of the
+course nearby; the first 4 km with the same download priority as the ground being built (the game tells it where you
+are through the companion). It keeps the plans on disk for BeamNG.Earth's workers. About once a minute the server's
+log says how far ahead the track is planned.
+
+When a piece of ground is built before its stretch is planned anyway (a teleport, a very fast car), the build waits for
+it (up to 45 s), and one process plans each stretch while the others wait for its result instead of planning it again.
+Before 1.7.10 that ground was built without the course's track and kept that way for the session, and where it met
+ground built later with the track it showed as steps and walls, and the track's texture came late. Ground built
+without the track now only happens when the data really can't be had (offline), and the log says so. If you still see
+ground over the road without a course loaded, that is BeamNG.Earth's own streaming.
 
 ## Spectators
 
@@ -380,7 +392,9 @@ signs; canopies and parked trucks further), never on a road or a dirt track (the
 roads and tracks around you, which the companion fetches while a course is loaded), clear of every pass of the course (a tight hairpin's inside is its other leg: they step back past it, or stay home), face
 the course and turn to watch you go by. Parked trucks and canopies only stand on open, nearly level ground: where a
 roof, a wall or a steep slope is under one, it moves a few metres along the line (only where that is still clear of
-the track) or is left out, so none sits on a building or hangs off a hillside. Nothing is put up on a stretch until the
+the track) or is left out, so none sits on a building or hangs off a hillside. Within 300 m of the car the ground under
+each one is measured again every few seconds, so when the ground there changes (BeamNG.Earth's quick stand-in ground
+replaced by the graded one), nothing is left standing in the air. Nothing is put up on a stretch until the
 companion has said where the track runs there (where it rounds a bend inside the course's line, or follows a road
 beside it), and anything standing when that comes in is put up again past the track's edge. Nothing collides: a crowd never ends a run. Where they stand, how many, their
 poses and their clothes are all picked from the course's place, so everyone on the same course sees the same crowds.

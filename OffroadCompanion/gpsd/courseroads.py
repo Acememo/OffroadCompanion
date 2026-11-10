@@ -48,6 +48,12 @@ EXTEND = 1                  # samples a run reaches onto the road at each end (w
 # samples and at most half the road stretch before the next run (the two never meet on the road).
 JOIN_SLOPE_M = 6.0
 JOIN_MAX = 5
+# (terrain 11; the user, 2026-11-10, a screenshot of the dirt track spilling over a highway where the course leaves it:
+# "the roads sometimes eat the asphalt too much ... it's just the ending the issue") A run that leaves or joins a paved
+# road bends onto its edge, PAVED_EDGE_IN_M onto the asphalt, not onto its middle: the dirt meets the road at its side.
+# A dirt road is still joined at its middle (the track becomes that road). Crossings are untouched.
+PAVED_EDGE_TV = 11
+PAVED_EDGE_IN_M = 0.5
 SIDE_M = 16.0
 SIDE_STEP_M = 2.0
 RISE_M = 1.0                # the ground within RISE_M + RISE_GRADE x offset of the track's height is room
@@ -367,18 +373,39 @@ def paint_mask(cov, at_start=True, at_end=True, extend=EXTEND):
     return out
 
 
-def joins(paint, cidx, x, y, segs, at_start=True, at_end=True):
+def joins(paint, cidx, x, y, segs, at_start=True, at_end=True, paved_edge=False):
     """Where each painted run (paint: from paint_mask(..., extend=0)) bends onto the road it joins or leaves.
     cidx: cover_index per sample. Returns (paint with the bends, mx, my, frac, road_hw): per sample the move (m) from
-    the course line, how far onto the road (0 .. 1) and the road's half width (bend samples only). Pure (a sample looks
-    at most JOIN_MAX + 2 * JOIN_MAX + 1 samples either way)."""
+    the course line, how far onto the road (0 .. 1) and the road's half width (bend samples only). paved_edge (terrain
+    PAVED_EDGE_TV): onto a paved road's edge on the run's side, not its middle. Pure (a sample looks at most JOIN_MAX +
+    2 * JOIN_MAX + 1 samples either way)."""
     n = len(paint)
     out = list(paint)
     mx, my, frac, rhw = [0.0] * n, [0.0] * n, [0.0] * n, [0.0] * n
+    nrm = [(0.0, 0.0)] * n
     runs = _runs(paint)
 
     def smooth(t):
         return t * t * (3.0 - 2.0 * t)
+
+    def side_normal(sg, ox, oy):
+        """The unit normal of segment sg pointing to (ox, oy)'s side."""
+        ax, ay, bx, by = sg[:4]
+        L = math.hypot(bx - ax, by - ay)
+        if L < 1e-9:
+            return 0.0, 0.0
+        nx, ny = -(by - ay) / L, (bx - ax) / L
+        return (nx, ny) if (ox - ax) * nx + (oy - ay) * ny >= 0 else (-nx, -ny)
+
+    def target(px, py, sg, side):
+        """Where a bend sample goes: the road's middle, or (paved_edge, a paved road) its edge on the run's side (side:
+        the run's last sample off the road), the normal returned too for the track's half width (window_pieces)."""
+        fx, fy = foot(px, py, sg)
+        if not paved_edge or (len(sg) > 5 and not sg[5]):
+            return fx, fy, 0.0, 0.0
+        nx, ny = side_normal(sg, side[0], side[1])
+        reach = max(0.0, float(sg[4]) - PAVED_EDGE_IN_M)
+        return fx + nx * reach, fy + ny * reach, nx, ny
 
     def bend(edge, step, gap_len, closed):
         """The run's sample next to the road: edge (first road sample); step +1 (the run ends) / -1 (it starts)."""
@@ -389,15 +416,18 @@ def joins(paint, cidx, x, y, segs, at_start=True, at_end=True):
             q += step
         if cov_run == 0:
             return
-        fx, fy = foot(x[edge], y[edge], segs[cidx[edge]])
+        o = edge - step                             # (the run's own last sample, off the road)
+        side = (x[o], y[o]) if 0 <= o < n else (x[edge], y[edge])
+        fx, fy, _, _ = target(x[edge], y[edge], segs[cidx[edge]], side)
         m = max(1, min(JOIN_MAX, int(math.ceil(math.hypot(fx - x[edge], fy - y[edge]) / JOIN_SLOPE_M - 1e-9))))
         m = min(m, cov_run, (gap_len - 1) // 2 if closed else gap_len)
         for j in range(1, m + 1):
             q = edge + step * (j - 1)
             sg = segs[cidx[q]]
-            fx, fy = foot(x[q], y[q], sg)
+            fx, fy, nx, ny = target(x[q], y[q], sg, side)
             f = smooth(j / m)
             mx[q], my[q], frac[q], rhw[q] = f * (fx - x[q]), f * (fy - y[q]), f, float(sg[4])
+            nrm[q] = (nx, ny)
             out[q] = True
 
     for r, (a, b, v) in enumerate(runs):
@@ -409,6 +439,8 @@ def joins(paint, cidx, x, y, segs, at_start=True, at_end=True):
         if a > 0:                                   # the run starts: off the road before it
             ga, gb, _ = runs[r - 1]
             bend(a - 1, -1, gb - ga, ga > 0)
+    if paved_edge:
+        return out, mx, my, frac, rhw, nrm
     return out, mx, my, frac, rhw
 
 
@@ -614,7 +646,10 @@ def window_pieces(course, k, road_segs_fn, elev_fn, canopy_fn=None):
     cov = [j >= 0 for j in cidx]
     at_start, at_end = c0 == 0, c1 == course.n - 1
     paint = paint_mask(cov, at_start=at_start, at_end=at_end, extend=0)
-    paint, mx, my, frac, rhw = joins(paint, cidx, x, y, segs, at_start, at_end)
+    edge_tv = getattr(course, "tv", 1) >= PAVED_EDGE_TV
+    got = joins(paint, cidx, x, y, segs, at_start, at_end, paved_edge=edge_tv)
+    paint, mx, my, frac, rhw = got[:5]
+    nrm = got[5] if edge_tv else None
     if not any(paint[a - c0:b - c0 + 1]):
         return []
     # clearance: the ground beside every sample (one elevation call)
@@ -655,9 +690,6 @@ def window_pieces(course, k, road_segs_fn, elev_fn, canopy_fn=None):
     OFF = [0.0] * course.n
     bent = [i for i in range(n) if frac[i] > 0]
     for i in bent:
-        LAT[c0 + i] = lat[i] + my[i] / pl.ky
-        LON[c0 + i] = lon[i] + mx[i] / pl.kx
-        OFF[c0 + i] = -ty[i] * mx[i] + tx[i] * my[i]
         e = i - 1 if i > 0 and paint[i - 1] and frac[i - 1] < frac[i] else i + 1     # (the run's side)
         while 0 <= e < n and frac[e] > 0:
             e += 1 if e > i else -1
@@ -665,6 +697,14 @@ def window_pieces(course, k, road_segs_fn, elev_fn, canopy_fn=None):
         road = max(WIDTH_MIN * course.scale, 2.0 * rhw[i])
         v = we + (min(we, road) - we) * frac[i]                # (never wider than the track)
         w[i] = math.floor(v / WIDTH_Q + 0.5) * WIDTH_Q
+        if nrm is not None and nrm[i] != (0.0, 0.0):
+            # (terrain 11: onto a paved road's edge, the run's own half width out from it (the wider of the two pieces
+            # meeting there): its dirt meets the asphalt PAVED_EDGE_IN_M in, never spreads over the road)
+            mx[i] += nrm[i][0] * frac[i] * max(we, w[i]) / 2
+            my[i] += nrm[i][1] * frac[i] * max(we, w[i]) / 2
+        LAT[c0 + i] = lat[i] + my[i] / pl.ky
+        LON[c0 + i] = lon[i] + mx[i] / pl.kx
+        OFF[c0 + i] = -ty[i] * mx[i] + tx[i] * my[i]
     # round the trees (terrain 4): the track's points moved sideways by their shift, their heights there
     woven = [i for i in range(n) if shift[i] and frac[i] == 0]
     for i in woven:

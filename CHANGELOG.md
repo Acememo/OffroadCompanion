@@ -3,6 +3,27 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.10 (2026-11-10)
+
+- **The ground is built with the course's track in it, not before it.** When a piece of ground near the car was built
+  before its stretch of the course was planned (driving fast, after a teleport, with downloads slow), it was built
+  without the track and kept that way for the session. Where it met ground built later with the track, that showed as
+  steps and walls in the ground, floating slivers and a wall the car could drive inside, and the track's texture came
+  late. Now:
+  - a build that needs a stretch waits for it (up to 45 s), and tries again when its data was still downloading;
+  - one process plans each stretch while the others wait for its result, instead of all planning it at once, so
+    the ground comes faster;
+  - the track is planned 10 km ahead along the course (round its bends, not in a straight line from the car), the
+    first 4 km with the same download priority as the ground itself;
+  - the server's log says how far ahead the track is planned, and when a build had to wait or went without it.
+- **Spectators, canopies and parked trucks no longer hang in the air.** Within 300 m of the car the ground under each
+  one is measured again every few seconds and they are put back on it when it changed.
+- **Ground version 11:**
+  - no boulder lies on a road (paved or dirt, and clear of a paved road's shoulder);
+  - where the course leaves or joins a paved road, its dirt track meets the asphalt at the edge instead of running onto
+    the middle of the road. Crossings are unchanged.
+  - Older ground versions (ground codes) are unchanged.
+
 ## 1.7.9 (2026-11-09)
 
 - **BeamNG.Earth 1.9.1-beta** is the version inside the .exe. A source install downloads 1.9.1-beta, and 1.9.0, 1.8.2,

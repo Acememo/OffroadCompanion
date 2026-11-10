@@ -59,6 +59,52 @@
    "surfaces": "271b26bd4b3ab201"
   }
  },
+ "11": {
+  "banks": "2b570bcf260bf92f",
+  "cid": "28311086b054",
+  "heights": {
+   "auto": "49c7d223c3fdeed4",
+   "extra": "4cd484a33c18726a",
+   "mild": "597c75d011d7a156",
+   "on": "5febb5eab74dc729"
+  },
+  "paved_join": "8e834b81481287ac",
+  "pieces": "e20ac4a4464abf5c",
+  "pieces_n": 77,
+  "profiles": "6e287f43211f1e79",
+  "rocks": {
+   "auto": "dd7042fee6d5331a",
+   "auto_n": 734,
+   "plain": "36ed1612d4b0ad67",
+   "plain_n": 116
+  },
+  "rocks_off_roads": [
+   "a59468464cb43acb",
+   712
+  ],
+  "ruts": {
+   "auto": "960758b3aa08cf0e",
+   "extra": "1e8158f38164ec00",
+   "mild": "22b1aacd8c732823",
+   "on": "76db3cf0d3b53b01"
+  },
+  "seal": "T11-6dd5a5",
+  "surfaces": [
+   "cdb43e2c7cc27c75",
+   "45e3a151ce9206bc"
+  ],
+  "variety": {
+   "auto": "aa7e231c07c5b53b",
+   "extra": "cbd8ca6565244d53",
+   "mild": "cdb0b281534c33f5",
+   "on": "8300a94a975b638a",
+   "pieces": "49ab39d2eb9cae8f",
+   "profiles": "0f902bdcb776032a",
+   "rocks": "4c128ed422ee34cb",
+   "ruts": "f00685a422c5dd43",
+   "surfaces": "271b26bd4b3ab201"
+  }
+ },
  "2": {
   "banks": "2b570bcf260bf92f",
   "cid": "b6f5554f9011",

@@ -36,8 +36,17 @@ ROUGH = {"off": 0.0, "mild": 0.55, "on": 1.0, "extra": 1.6, "auto": 1.0, "defaul
 # none of the painter's, the track as BeamNG.Earth makes a track: install_course_grade)
 HEARTBEAT_S = 20.0
 RETRY_S = 30.0
-DEMAND_RETRY_S = 3.0        # the ground near the car being built: a window that failed is tried again this soon (it
-                            # waits for its data), so no stretch is built flat for want of it (and differs next time)
+# A window a build needs (kind DEMAND_KINDS: the ground, the road tiles, the vegetation being built now) is waited for:
+# planned here, or by the process planning it already (a lock file beside it), up to DEMAND_WAIT_S, tried again after a
+# failure (its data still coming). Only past that is the ground built without it (logged), and for DEMAND_GIVEUP_S
+# after that the builds there do not wait again (offline). _planned.
+DEMAND_KINDS = ("demand", "urgent")
+DEMAND_WAIT_S = 45.0
+DEMAND_GIVEUP_S = 30.0
+POLL_S = 0.2
+SLOW_PLAN_S = 3.0           # a demand read that took this long is logged (how long builds waited for the course)
+PLAN_LOCK_STALE_S = 30.0    # a lock file not touched this long is a planner gone (its process stopped mid-plan) ...
+PLAN_LOCK_TOUCH_S = 5.0     # ... its planner touches it this often while it plans
 
 _state = None
 
@@ -66,6 +75,50 @@ def _pinned(course, fn, algo):
         return None
     got = paintfile.read_json(os.path.join(d, fn))
     return got if isinstance(got, dict) and got.get("algo") == algo else None
+
+
+def _try_lock(path):
+    """Takes path's planning lock (path + ".lock", made exclusively): True when this process plans it now. A lock older
+    than PLAN_LOCK_STALE_S is taken over; a folder where no lock can be made plans without one."""
+    lp = path + ".lock"
+    for _ in range(2):
+        try:
+            os.makedirs(os.path.dirname(lp), exist_ok=True)
+            fd = os.open(lp, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            try:
+                if time.time() - os.path.getmtime(lp) <= PLAN_LOCK_STALE_S:
+                    return False
+            except OSError:
+                continue                    # (released meanwhile: tried again)
+            _remove(lp)                     # (a planner gone)
+            continue
+        except OSError:
+            return True
+        try:
+            os.write(fd, str(os.getpid()).encode())
+        finally:
+            os.close(fd)
+        return True
+    return False
+
+
+def _keep_lock(path):
+    """Touches path's lock every PLAN_LOCK_TOUCH_S until the event returned is set (the planner is alive)."""
+    done = threading.Event()
+
+    def run():
+        while not done.wait(PLAN_LOCK_TOUCH_S):
+            try:
+                os.utime(path + ".lock")
+            except OSError:
+                return
+    threading.Thread(target=run, name="offroad-plan-lock", daemon=True).start()
+    return done
+
+
+def _unlock(path):
+    _remove(path + ".lock")
 
 
 def _remove(path):
@@ -193,8 +246,8 @@ class _State:
         self.mtime = None
         self.course = None          # courseroads.Course or None
         self.wins = {}              # k -> pieces
-        self.win_failed = {}        # k -> time
-        self.win_locks = {}
+        self.plan_failed = {}       # (what, k, demand) -> time: a window not to be had then (_planned)
+        self.plan_locks = {}        # (what, k) -> this process's lock while it plans the window
         self.merged = OrderedDict()  # (cell key str, cid) -> Features
         self.segs = OrderedDict()   # cell key str -> (lonlat segments (M, 4), half widths (M,))
         self.dems = []              # Dem instances made in this process (BeamNG.Earth's own first)
@@ -205,8 +258,6 @@ class _State:
                       "trees_off": 0}
         self.rwins = {}             # k -> relief profile (relief.window_profile)
         self.md = None              # the map data last read (the blocks' surfaces: install_surfaces)
-        self.rwin_failed = {}
-        self.rwin_locks = {}
         self.rock_cells = OrderedDict()     # (cell, course key) -> vegetation Items with the boulders added
         self.clear_cells = OrderedDict()    # (cell, course key) -> vegetation Items with nothing on the track
         self.veg_plan = None                # the course key the vegetation's own memory was made for
@@ -246,8 +297,7 @@ class _State:
             if (plan and plan.key) != (self.course and self.course.key):
                 old = self.course.paint if self.course else None
                 if (plan and plan.paint and (plan.paint.cid, plan.paint.pin)) != (old and (old.cid, old.pin)):
-                    self.wins, self.win_failed, self.win_locks = {}, {}, {}
-                    self.rwins, self.rwin_failed, self.rwin_locks = {}, {}, {}
+                    self.wins, self.rwins, self.plan_failed, self.plan_locks = {}, {}, {}, {}
                 self.rock_cells.clear()
                 self.course = plan
                 self.merged.clear()
@@ -485,16 +535,14 @@ class _State:
         return fn
 
     # -- the track's relief (relief.py) ----------------------------------------------------------------------------
-    def relief_window(self, md, course, k, kind):
+    def relief_window(self, md, course, k, kind, wait=None):
         """The relief window k's profile: kept, pinned, on disk, or planned now. kind "peek": never planned here (None
         when not planned yet): for the road tiles' workers, which must not wait on the ground (planning a window asks
         for elevation, from the block process, which may itself be waiting on those road tiles: 1.6.4's road tiles
-        hung so, the user 2026-10-29)."""
+        hung so, the user 2026-10-29). A demand read (a build of the ground) waits for it (_planned)."""
         with self.lock:
             if k in self.rwins:
                 return self.rwins[k]
-            failed = self.rwin_failed.get(k)
-            lk = self.rwin_locks.setdefault(k, threading.Lock())
         if kind == "peek":
             prof = _pinned(course, f"r{k:06d}.json", relief.ALGO)
             if prof is None:
@@ -504,54 +552,131 @@ class _State:
             with self.lock:
                 self.rwins[k] = prof
             return prof
-        if failed is not None and time.monotonic() - failed < (DEMAND_RETRY_S if kind == "demand" else RETRY_S):
-            _fault()
-            return None
-        with lk:
+        pinned = _pinned(course, f"r{k:06d}.json", relief.ALGO)
+        if pinned is not None:
             with self.lock:
-                if k in self.rwins:
-                    return self.rwins[k]
-            path = os.path.join(paintfile.windows_dir(course.cid), f"r{k:06d}.json")
-            prof = _pinned(course, f"r{k:06d}.json", relief.ALGO)
-            if prof is not None:
-                with self.lock:
-                    self.rwins[k] = prof
-                return prof
-            prof = paintfile.read_json(path)
-            if prof is not None and not (isinstance(prof, dict) and prof.get("algo") == relief.ALGO):
-                _remove(path)                   # (another code's: never this course's ground)
-                prof = None
-            if prof is None:
-                pieces = self.window(md, course, k, kind)
-                ef = self.elev(md)
-                try:
-                    if pieces is None:
-                        raise ValueError("no track pieces yet")
-                    ground = getattr(course, "tv", 1) >= surfaces.FROM_TV
-                    prof = relief.window_profile(course, k, pieces, self.surface_segs_fn(md, kind), ef,
-                                                 self.lake_fn(md, kind),
-                                                 self.land_fn(md, kind) if ground else None,
-                                                 self.waters_fn(md, kind) if ground else None)
-                except Exception as e:          # data not there yet: no relief here, tried again later
-                    log.debug("course painter: relief %d: %s: %s", k, type(e).__name__, e)
-                    with self.lock:
-                        self.rwin_failed[k] = time.monotonic()
-                    _fault()
-                    return None
-                if ef.fallback:
-                    prof["dem"] = "fallback"        # (kept all the same: the first ground planned is the course's)
-                    log.info("course painter: relief window %d planned on BeamNG.Earth's fallback elevation", k)
-                try:
-                    got = paintfile.write_json_first(path, prof)
-                    if isinstance(got, dict) and got.get("algo") == relief.ALGO:
-                        prof = got              # (another process planned it first: that one, everywhere)
-                except OSError:
-                    pass
-                with self.lock:
-                    self.stats["relief_windows"] += 1
+                self.rwins[k] = pinned
+            return pinned
+
+        def valid(prof):
+            return prof if isinstance(prof, dict) and prof.get("algo") == relief.ALGO else None
+
+        def make():
+            pieces = self.window(md, course, k, kind, wait)
+            if pieces is None:
+                raise ValueError("no track pieces yet")
+            ef = self.elev(md)
+            ground = getattr(course, "tv", 1) >= surfaces.FROM_TV
+            prof = relief.window_profile(course, k, pieces, self.surface_segs_fn(md, kind), ef,
+                                         self.lake_fn(md, kind),
+                                         self.land_fn(md, kind) if ground else None,
+                                         self.waters_fn(md, kind) if ground else None)
+            if ef.fallback:
+                prof["dem"] = "fallback"        # (kept all the same: the first ground planned is the course's)
+                log.info("course painter: relief window %d planned on BeamNG.Earth's fallback elevation", k)
+            return prof
+        path = os.path.join(paintfile.windows_dir(course.cid), f"r{k:06d}.json")
+        prof = self._planned("r", k, kind, path, valid, make, wait)
+        if prof is not None:
             with self.lock:
                 self.rwins[k] = prof
-            return prof
+        return prof
+
+    def _planned(self, what, k, kind, path, valid, make, wait=None):
+        """Window k's plan (what: "w" the track's pieces, "r" the relief profile) as every process of this server has it:
+        the file at path (the first one planned: write_json_first), else planned here by make() and written there.
+        One process plans a window at a time (a lock file beside it, PLAN_LOCK_STALE_S); the others wait for its file.
+        kind "demand" (a build of the ground, the road tiles, the vegetation: what it gets now is what the player
+        drives) waits for it, planning it again after a failure, up to DEMAND_WAIT_S: a window missing there is ground
+        built without the course's track, kept by BeamNG.Earth's caches for the session and differing from the
+        ground built after it (1.7.10, the user 2026-11-10: walls and steps in the ground where the track met it,
+        the course's track textured late). Other kinds try once, and leave a window another process is planning to it.
+        None when not to be had now (another try: DEMAND_GIVEUP_S / RETRY_S later)."""
+        demand = (kind in DEMAND_KINDS) if wait is None else bool(wait)
+        fk = (what, k, demand)
+        failed = self.plan_failed.get(fk)
+        if failed is not None and time.monotonic() - failed < (DEMAND_GIVEUP_S if demand else RETRY_S):
+            _fault()
+            return None
+        raw = paintfile.read_json(path)
+        got = valid(raw)
+        if got is not None:
+            return got
+        if raw is not None:
+            _remove(path)                   # (another code's: never this course's ground)
+        with self.lock:
+            lk = self.plan_locks.setdefault((what, k), threading.Lock())
+        if not lk.acquire(blocking=demand):
+            return None                     # (this process plans it already: a background read does not wait)
+        t0 = time.monotonic()
+        try:
+            last, delay, waited = None, 0.5, False
+            while True:
+                got = valid(paintfile.read_json(path))
+                if got is not None:
+                    break
+                if _try_lock(path):
+                    keep = _keep_lock(path)
+                    try:
+                        got = valid(paintfile.read_json(path))         # (planned meanwhile)
+                        if got is None:
+                            try:
+                                obj = make()
+                            except Exception as e:      # data not there yet (offline, deferred, a fetch failed)
+                                last = e
+                            else:
+                                try:
+                                    got = valid(paintfile.write_json_first(path, obj)) or obj
+                                except OSError:
+                                    got = obj
+                                with self.lock:
+                                    self.stats["relief_windows" if what == "r" else "windows"] += 1
+                                    if what == "w":
+                                        self.stats["pieces"] += len(obj.get("pieces") or ())
+                                        self.stats["painted_m"] += sum((len(p["ll"]) - 1) * courseroads.STEP_M
+                                                                       for p in obj.get("pieces") or ())
+                    finally:
+                        keep.set()
+                        _unlock(path)
+                    if got is not None:
+                        break
+                    if not demand or time.monotonic() - t0 + delay > DEMAND_WAIT_S:
+                        raise last if last is not None else ValueError("not planned")
+                    waited = True
+                    time.sleep(delay)
+                    delay = min(delay * 2.0, 4.0)
+                else:
+                    if not demand:
+                        return None         # (another process plans it: this one gets the file later)
+                    if time.monotonic() - t0 > DEMAND_WAIT_S:
+                        raise TimeoutError(f"still being planned by another process after {DEMAND_WAIT_S:.0f} s")
+                    waited = True
+                    time.sleep(POLL_S)
+            dt = time.monotonic() - t0
+            if demand and (waited or dt > SLOW_PLAN_S):
+                with self.lock:
+                    self.stats["demand_waits"] = self.stats.get("demand_waits", 0) + 1
+                    self.stats["demand_wait_s"] = round(self.stats.get("demand_wait_s", 0.0) + dt, 1)
+                log.info("course painter: %s window %d ready for a build after %.1f s%s", "relief" if what == "r"
+                         else "track", k, dt, " (waited)" if waited else "")
+            self.plan_failed.pop(fk, None)
+            return got
+        except Exception as e:
+            with self.lock:
+                self.plan_failed[fk] = time.monotonic()
+                self.stats["errors"] += 1
+                if demand:
+                    self.stats["bare_reads"] = self.stats.get("bare_reads", 0) + 1
+            if demand:
+                log.warning("course painter: %s window %d not ready for a build after %.1f s (%s: %s): built without "
+                            "it", "relief" if what == "r" else "track", k, time.monotonic() - t0,
+                            type(e).__name__, e)
+            else:
+                log.debug("course painter: %s window %d: %s: %s", what, k, type(e).__name__, e)
+            _fault()
+            return None
+        finally:
+            lk.release()
 
     def course_near(self, md, lat, lon, kind="demand"):
         """(course, its relief windows' profiles near the points) or None (no course painted near). kind "peek": only
@@ -682,6 +807,8 @@ class _State:
         if ks:
             profs = {k: self.relief_window(md, c, k, "demand") for k in ks}
             r = relief.rocks(c, profs, bounds, auto=getattr(c, "rough", "on") == "auto")
+            if len(r["lon"]) and getattr(c, "tv", 1) >= relief.ROCKS_OFF_ROADS_TV:
+                r = self.rocks_off_roads(md, r, bounds)
             n = len(r["lon"])
             if n:
                 lat, lon = r["lat"], r["lon"]
@@ -700,59 +827,54 @@ class _State:
                 self.rock_cells.popitem(last=False)
         return out
 
+    def rocks_off_roads(self, md, r, bounds):
+        """relief.rocks_off_roads with BeamNG.Earth's roads round bounds (its cells' and their neighbours': a road
+        just past the cell's edge, its width reaching in)."""
+        lon0, lat0, lon1, lat1 = bounds
+        pad = 40.0 / 111320.0
+        padlo = pad / max(0.05, math.cos(math.radians(lat0)))
+        ends, hws, pvs = [], [], []
+        for key in self.mapcells.cells_for_bbox(lat0 - pad, lon0 - padlo, lat1 + pad, lon1 + padlo):
+            e, hw, pv = self.cell_roads(md, key, "demand")
+            if len(e):
+                ends.append(e)
+                hws.append(hw)
+                pvs.append(pv)
+        if not ends:
+            return r
+        out = relief.rocks_off_roads(r, np.concatenate(ends), np.concatenate(hws), np.concatenate(pvs))
+        gone = len(r["lon"]) - len(out["lon"])
+        if gone:
+            with self.lock:
+                self.stats["rocks_off_roads"] = self.stats.get("rocks_off_roads", 0) + gone
+        return out
+
     # -- windows ---------------------------------------------------------------------------------------------------
-    def window(self, md, course, k, kind):
+    def window(self, md, course, k, kind, wait=None):
         with self.lock:
             if k in self.wins:
                 return self.wins[k]
-            failed = self.win_failed.get(k)
-            lk = self.win_locks.setdefault(k, threading.Lock())
-        if failed is not None and time.monotonic() - failed < (DEMAND_RETRY_S if kind == "demand" else RETRY_S):
-            _fault()
-            return None
-        with lk:
-            with self.lock:
-                if k in self.wins:
-                    return self.wins[k]
-            path = os.path.join(paintfile.windows_dir(course.cid), f"w{k:06d}.json")
-            ps = _pinned(course, f"w{k:06d}.json", courseroads.ALGO)
-            if ps is not None:
-                with self.lock:
-                    self.wins[k] = ps["pieces"]
-                return ps["pieces"]
-            ps = paintfile.read_json(path)
-            if ps is not None and not (isinstance(ps, dict) and ps.get("algo") == courseroads.ALGO):
-                _remove(path)                   # (another code's: never this course's ground)
-                ps = None
-            if ps is None:
+        ps = _pinned(course, f"w{k:06d}.json", courseroads.ALGO)
+        if ps is None:
+            def valid(obj):
+                return obj if isinstance(obj, dict) and obj.get("algo") == courseroads.ALGO else None
+
+            def make():
                 ef = self.elev(md)
-                try:
-                    pieces = courseroads.window_pieces(course, k, self.road_segs_fn(md, kind), ef,
-                                                       self.canopy_fn(md, kind))
-                except Exception as e:          # data not there yet (offline, deferred): the cell as it is
-                    log.debug("course painter: window %d: %s: %s", k, type(e).__name__, e)
-                    with self.lock:
-                        self.win_failed[k] = time.monotonic()
-                        self.stats["errors"] += 1
-                    _fault()
-                    return None
-                ps = {"algo": courseroads.ALGO, "pieces": pieces}
+                pieces = courseroads.window_pieces(course, k, self.road_segs_fn(md, kind), ef,
+                                                   self.canopy_fn(md, kind))
+                obj = {"algo": courseroads.ALGO, "pieces": pieces}
                 if ef.fallback:
-                    ps["dem"] = "fallback"          # (kept all the same: the first ground planned is the course's)
+                    obj["dem"] = "fallback"         # (kept all the same: the first ground planned is the course's)
                     log.info("course painter: window %d planned on BeamNG.Earth's fallback elevation", k)
-                try:
-                    got = paintfile.write_json_first(path, ps)
-                    if isinstance(got, dict) and got.get("algo") == courseroads.ALGO:
-                        ps = got                # (another process planned it first: that one, everywhere)
-                except OSError:
-                    pass
-                with self.lock:
-                    self.stats["windows"] += 1
-                    self.stats["pieces"] += len(pieces)
-                    self.stats["painted_m"] += sum((len(p["ll"]) - 1) * courseroads.STEP_M for p in pieces)
-            with self.lock:
-                self.wins[k] = ps["pieces"]
-            return ps["pieces"]
+                return obj
+            path = os.path.join(paintfile.windows_dir(course.cid), f"w{k:06d}.json")
+            ps = self._planned("w", k, kind, path, valid, make, wait)
+            if ps is None:
+                return None
+        with self.lock:
+            self.wins[k] = ps["pieces"]
+        return ps["pieces"]
 
     def roads_for(self, md, key, base, kind):
         plan = self.current()
@@ -1824,8 +1946,17 @@ def _course_in_frame(course, frame, chunks, pad=60.0):
 # and ahead first, and writes them where every process reads them. Its own process at low priority: the planning is
 # mostly pure Python, and a thread would hold the server's event loop.
 PREFETCH_S = 2.0
-PREFETCH_R_M = 5000.0       # windows within this of the car ...
-PREFETCH_AHEAD_S = 25.0     # ... nearest first to where the car will be in this long (straight on)
+# (1.7.10, the user 2026-11-10: "sometimes it takes too long to change the track into how it's supposed to be"; at 150
+# km/h the planner's 25 s ahead in a straight line was the next km, and the windows its background downloads waited
+# for were planned by the builds themselves, with the car on them) The windows along the course from the car's place on
+# it: PREFETCH_AHEAD_M ahead (in the course's order: round the bends), PREFETCH_BEHIND_M behind, and every other pass
+# of the course within PREFETCH_NEAR_M; the first PREFETCH_URGENT_M ahead with the builds' own download priority.
+PREFETCH_AHEAD_M = 10000.0
+PREFETCH_BEHIND_M = 1000.0
+PREFETCH_NEAR_M = 2500.0
+PREFETCH_URGENT_M = 4000.0
+PREFETCH_R_M = 5000.0       # (the car this near the course at most: farther, nothing is planned ahead)
+PREFETCH_PASS_S = 20.0      # a pass plans for this long at most before the car's place is read again
 POSE_MAX_AGE_S = 60.0
 
 
@@ -1840,32 +1971,78 @@ def _low_priority():
         pass
 
 
-def prefetch_order(course, pose, radius=PREFETCH_R_M, ahead_s=PREFETCH_AHEAD_S):
-    """Window indices of course within radius of the pose ({lat, lon, speed, heading}), nearest first to the point
-    the car reaches in ahead_s going straight on. Pure."""
+def course_position(course, pose, radius=PREFETCH_R_M):
+    """The course's sample index nearest the pose ({lat, lon, speed, heading}) within radius, preferring one whose
+    course runs the car's way when it is moving (a course out and back along one road), or None. Pure."""
     lat, lon = float(pose["lat"]), float(pose["lon"])
     kx = 111320.0 * max(0.05, math.cos(math.radians(lat)))
-    dlat, dlon = radius / 111320.0, radius / kx
-    ks = course.windows_in((lon - dlon, lat - dlat, lon + dlon, lat + dlat))
-    sp, hd = pose.get("speed") or 0.0, pose.get("heading")
-    ax, ay = 0.0, 0.0
-    if hd is not None and sp:
-        go = min(float(sp) * ahead_s, radius * 0.6)
-        ax, ay = go * math.sin(math.radians(float(hd))), go * math.cos(math.radians(float(hd)))
-
-    out = []
+    ks = course.windows_near(lat, lon, radius)
+    if not ks:
+        return None
+    sp, hd = float(pose.get("speed") or 0.0), pose.get("heading")
+    hx = hy = None
+    if hd is not None and sp > 3.0:
+        hx, hy = math.sin(math.radians(float(hd))), math.cos(math.radians(float(hd)))
+    best = None
     for k in ks:
+        a, b = course.inner(k)
+        for i in range(a, b + 1):
+            dx, dy = (course.lon[i] - lon) * kx, (course.lat[i] - lat) * 111320.0
+            d = math.hypot(dx, dy)
+            if d > radius:
+                continue
+            pen = 0.0
+            if hx is not None:
+                j = min(i + 1, course.n - 1)
+                i0 = j - 1
+                tx, ty = (course.lon[j] - course.lon[i0]) * kx, (course.lat[j] - course.lat[i0]) * 111320.0
+                if tx * hx + ty * hy < 0:
+                    pen = 200.0                 # (the other way: another pass, unless much nearer)
+            key = (d + pen, i)
+            if best is None or key < best:
+                best = key
+    return best[1] if best else None
+
+
+def prefetch_plan(course, pose):
+    """[(window, urgent)] to plan for the car at pose, in order: along the course ahead of its place on it, then just
+    behind it, then the other passes of the course near it. Pure."""
+    i = course_position(course, pose)
+    if i is None:
+        return []
+    out, seen = [], set()
+
+    def add(k, urgent):
+        if 0 <= k < course.nwin and k not in seen:
+            seen.add(k)
+            out.append((k, urgent))
+    k0 = min(course.nwin - 1, i // courseroads.WINDOW)
+    step = courseroads.WINDOW * courseroads.STEP_M
+    ahead = int(math.ceil(PREFETCH_AHEAD_M / step))
+    for j in range(ahead + 1):
+        add(k0 + j, j * step <= PREFETCH_URGENT_M)
+    for j in range(1, int(math.ceil(PREFETCH_BEHIND_M / step)) + 1):
+        add(k0 - j, True)
+    lat, lon = float(pose["lat"]), float(pose["lon"])
+    kx = 111320.0 * max(0.05, math.cos(math.radians(lat)))
+    near = []
+    for k in course.windows_near(lat, lon, PREFETCH_NEAR_M):
         x0, y0, x1, y1 = course.boxes[k]
-        # the box's nearest point to the target, in metres
-        tx, ty = lon + ax / kx, lat + ay / 111320.0
-        nx, ny = min(max(tx, x0), x1), min(max(ty, y0), y1)
-        out.append((math.hypot((nx - tx) * kx, (ny - ty) * 111320.0), k))
-    return [k for _, k in sorted(out)]
+        nx, ny = min(max(lon, x0), x1), min(max(lat, y0), y1)
+        near.append((math.hypot((nx - lon) * kx, (ny - lat) * 111320.0), k))
+    for _, k in sorted(near):
+        add(k, True)
+    return out
+
+
+def prefetch_order(course, pose, radius=PREFETCH_R_M, ahead_s=None):
+    """Window indices prefetch_plan plans, in its order. Pure."""
+    return [k for k, _ in prefetch_plan(course, pose)]
 
 
 def _prefetcher(cache_dir):
     """The prefetch process: BeamNG.Earth's MapData of its own (same cache folder), the painter's windows planned
-    around the car and written to disk."""
+    along the course ahead of the car and written to disk."""
     _low_priority()
     try:
         import mapdata as mdmod
@@ -1874,31 +2051,81 @@ def _prefetcher(cache_dir):
     except Exception as e:
         print(f"Offroad Companion: track prefetch unavailable ({type(e).__name__}: {e})", file=sys.stderr)
         return
+    said = 0.0
     while True:
         try:
-            prefetch_once(_state, md)
+            made = prefetch_once(_state, md)
         except Exception:
-            pass
-        time.sleep(PREFETCH_S)
+            made = []
+        if time.monotonic() - said > PREFETCH_SAY_S:
+            said = time.monotonic()
+            try:
+                got = ready_ahead(_state)
+                if got is not None:
+                    print(f"Offroad Companion: the track is planned {got[0]:.1f} km ahead of the car (km {got[1]:.1f} "
+                          f"of the course)", file=sys.stderr, flush=True)
+            except Exception:
+                pass
+        if not made:
+            time.sleep(PREFETCH_S)
 
 
-def prefetch_once(st, md, limit=6):
-    """One pass: up to `limit` windows around the car planned (those not planned yet). Returns their indices."""
+PREFETCH_SAY_S = 60.0
+
+
+def ready_ahead(st):
+    """(km of the course planned without a gap from the car's place on it, the car's km on the course), or None."""
+    plan = st.current() if st else None
+    course = plan.paint if plan is not None else None
+    pose = paintfile.read_json(paintfile.pose_path())
+    if course is None or not isinstance(pose, dict):
+        return None
+    i = course_position(course, pose)
+    if i is None:
+        return None
+    wdir = paintfile.windows_dir(course.cid)
+    rough = ROUGH.get(getattr(course, "rough", "on"), 1.0)
+    k = i // courseroads.WINDOW
+    end = k
+    while end < course.nwin and os.path.exists(os.path.join(wdir, f"w{end:06d}.json")) and \
+            (not rough or os.path.exists(os.path.join(wdir, f"r{end:06d}.json"))):
+        end += 1
+    ahead = max(0.0, (min(course.n - 1, end * courseroads.WINDOW) - i) * courseroads.STEP_M / 1000.0)
+    return ahead, i * courseroads.STEP_M / 1000.0
+
+
+def prefetch_once(st, md, limit=None):
+    """One pass: the windows prefetch_plan names that are not planned yet, planned (the urgent ones with the builds'
+    download priority, without waiting on another process planning one), for PREFETCH_PASS_S at most or `limit`
+    windows. Returns their indices."""
     plan = st.current() if st else None
     course = plan.paint if plan is not None else None
     pose = paintfile.read_json(paintfile.pose_path())
     if course is None or not isinstance(pose, dict) or time.time() - float(pose.get("t") or 0) > POSE_MAX_AGE_S:
         return []
     made = []
-    for k in prefetch_order(course, pose)[:limit]:
+    t0 = time.monotonic()
+    rough = ROUGH.get(getattr(course, "rough", "on"), 1.0)
+    wdir = paintfile.windows_dir(course.cid)
+    for k, urgent in prefetch_plan(course, pose):
+        if (limit is not None and len(made) >= limit) or time.monotonic() - t0 > PREFETCH_PASS_S:
+            break
+        kind = "demand" if urgent else "background"
+        did = False
         with st.lock:
             done = k in st.wins
-        if not done and st.window(md, course, k, "background") is not None:
+        if not done and not os.path.exists(os.path.join(wdir, f"w{k:06d}.json")):
+            did = st.window(md, course, k, kind, wait=False) is not None
+        if rough:
+            with st.lock:
+                rdone = k in st.rwins
+            if not rdone and not os.path.exists(os.path.join(wdir, f"r{k:06d}.json")):
+                did = (st.relief_window(md, course, k, kind, wait=False) is not None) or did
+        if did:
             made.append(k)
+    if made:
         with st.lock:
-            rdone = k in st.rwins
-        if not rdone and ROUGH.get(getattr(course, "rough", "on"), 1.0):
-            st.relief_window(md, course, k, "background")
+            st.stats["prefetched"] = st.stats.get("prefetched", 0) + len(made)
     return made
 
 

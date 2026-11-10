@@ -44,6 +44,10 @@ def frame():
     return ll, xy
 
 
+WORLD_ROADS = [((2000 + 50 * i, 22.0), (2050 + 50 * i, 22.0), 2.0, 0) for i in range(20)]       # dirt, beside
+WORLD_ROADS += [((3500, -400), (3500, 400), 4.0, 1)]                                              # paved, across
+
+
 def world():
     """A fixed 8 km course: open desert, a dirt road beside it, a paved road across, hills, a canyon, a dry lake,
     trees, a DANGER waypoint."""
@@ -52,9 +56,7 @@ def world():
 
     def road_fn(lat0, lon0, lat1, lon1, plane):
         out = []
-        roads = [((2000 + 50 * i, 22.0), (2050 + 50 * i, 22.0), 2.0, 0) for i in range(20)]       # dirt, beside
-        roads += [((3500, -400), (3500, 400), 4.0, 1)]                                              # paved, across
-        for (xa, ya), (xb, yb), hw, paved in roads:
+        for (xa, ya), (xb, yb), hw, paved in WORLD_ROADS:
             (la, lo), (lb, lob) = ll(xa, ya), ll(xb, yb)
             ax, ay = plane.xy(float(la), float(lo))
             bx, by = plane.xy(float(lb), float(lob))
@@ -111,6 +113,18 @@ def fingerprint(tv):
         "rocks": rocks,
         "seal": terrain.seal(c.cid, True, True, "auto", "auto", danger, tv),
     }
+    if tv >= rf.ROCKS_OFF_ROADS_TV:     # no boulder on a road (earthpatch.rocks_off_roads), the world's roads
+        ends, hws, pv = [], [], []
+        for (xa, ya), (xb, yb), hw, paved in WORLD_ROADS + [((4200, -30), (4800, -30), 3.0, 1)]:
+            (la, lo), (lb, lob) = ll(xa, ya), ll(xb, yb)
+            ends.append([float(lo), float(la), float(lob), float(lb)])
+            hws.append(hw)
+            pv.append(bool(paved))
+        r = rf.rocks_off_roads(rf.rocks(c, profs, b, auto=True), np.asarray(ends), np.asarray(hws), np.asarray(pv))
+        out["rocks_off_roads"] = [_h([[round(float(v), 7) if k in ("lon", "lat") else round(float(v), 3)
+                                      for v in r[k]] for k in sorted(r)]), len(r["lon"])]
+    if tv >= cr.PAVED_EDGE_TV:          # a run leaving and joining a paved road beside the course: at its edge
+        out["paved_join"] = paved_join_fingerprint(tv)
     if tv >= 2:                     # the cut banks (banks.py), on test_banks' hillside under its stand-in grading
         out["banks"] = banks_fingerprint(tv)
     if tv >= 3:                     # the ground's surfaces (surfaces.py), on test_surfaces' course
@@ -122,6 +136,25 @@ def fingerprint(tv):
                        for mode, scale in MODES.items()}
         out["ruts"]["auto"] = _h(np.round(rf.ruts_at(c, profs, gla, glo, 1.0, auto=True) * 1000).astype(int).tolist())
     return out
+
+
+def paved_join_fingerprint(tv):
+    ll, _xy = frame()
+    pts = [tuple(map(float, ll(x, 3.0 * math.sin(x / 150.0)))) for x in range(0, 3001, 20)]
+
+    def road_fn(lat0, lon0, lat1, lon1, plane):
+        out = []
+        for x0 in range(1000, 2000, 40):
+            (la, lo), (lb, lob) = ll(x0, 8.0), ll(x0 + 40, 8.0)
+            ax, ay = plane.xy(float(la), float(lo))
+            bx, by = plane.xy(float(lb), float(lob))
+            out.append((ax, ay, bx, by, 3.5, 1))
+        return out
+
+    def flat(lat, lon):
+        return np.zeros(len(lat)).tolist()
+    c = cr.Course(pts, 1.0, "Paved", tv)
+    return _h([cr.window_pieces(c, k, road_fn, flat) for k in range(c.nwin)])
 
 
 def variety_fingerprint(tv):

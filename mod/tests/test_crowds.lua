@@ -737,6 +737,37 @@ do
   crowds.setLevel('some')
 end
 
+-- 6c. (1.7.10, the user 2026-11-10: spectators in the air) the ground under the ones standing near changes (the block
+-- they were measured on replaced by the graded one, lower): they are put back on it
+do
+  crowds.clear()
+  crowds.setLevel('some')
+  local oldRe, oldPer = crowds.REGROUND_S, crowds.REGROUND_PER
+  crowds.REGROUND_PER = 1000
+  local oldAnchorG = e.anchor
+  e.anchor = A
+  crowds.REGROUND_S = 0
+  local crsG = { e = e, track = { waypoints = wps }, length = L, closed = false, s = 0, spots = {},
+                 spotRanges = { { -1000, 30000 } }, spotsVersion = 1 }
+  local carG = { x = 0, y = -30, z = 0 }
+  for _ = 1, 30 do crowds.update(crsG, A, carG) end
+  local n0 = crowds.status().live
+  castRayStatic = function(from) return from.z + 5 end        -- (the ground now 5 m lower)
+  for _ = 1, 30 do crowds.update(crsG, A, carG) end
+  local high, n = 0, 0
+  for _, l in pairs(crowds._live()) do
+    if (l.x - carG.x) ^ 2 + (l.y - carG.y) ^ 2 < crowds.SURE_M ^ 2 then
+      n = n + 1
+      if l.z > -4.5 then high = high + 1 end
+    end
+  end
+  check(n0 > 10 and n > 10 and high == 0, 'the ground lowered under them: back on it (' .. high .. ' of ' .. n .. ' still high)')
+  castRayStatic = function(from) return from.z - 0 end
+  crowds.REGROUND_S, crowds.REGROUND_PER = oldRe, oldPer
+  e.anchor = oldAnchorG
+  crowds.clear()
+end
+
 -- 7. parked vehicles and canopies only on open, nearly level ground: not on a roof, not hanging off a slope
 do
   local v, why = crowds.footprint({ 0, 0.1, 0, 0.2, 0 }, { 0, 0, 0, 0, 0 }, 0.45)

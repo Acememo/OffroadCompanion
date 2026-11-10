@@ -392,6 +392,38 @@ class TestPure(unittest.TestCase):
         i = int(round(1000 / cr.STEP_M)) - a
         self.assertGreater(prof["ctr"][i], 5.0, f"ctr follows the bend: {prof['ctr'][i - 6:i + 4]}")
 
+    def test_track_meets_a_paved_road_at_its_edge(self):
+        # (terrain 11; the user 2026-11-10: the dirt track spilling over the asphalt where the course leaves a highway)
+        # the course along y = 0; a paved road (7 m wide) along y = 8 between x 1000 and 2000: the course takes it
+        # there; the track before and after it ends at its southern edge, PAVED_EDGE_IN_M onto the asphalt at most
+        pts = [ll(x, 0.0) for x in range(0, 3001, 25)]
+
+        def segs(lat0, lon0, lat1, lon1, plane):
+            out = []
+            for x0 in range(1000, 2000, 50):
+                ax, ay = plane.xy(*ll(x0, 8.0))
+                bx, by = plane.xy(*ll(x0 + 50, 8.0))
+                out.append((ax, ay, bx, by, 3.5, 1))
+            return out
+
+        def flat(lat, lon):
+            return np.zeros(len(lat))
+        for tv, edge in ((10, False), (11, True)):
+            c = cr.Course(pts, 1.0, "Edge", tv)
+            got = sum((cr.window_pieces(c, k, segs, flat) for k in range(c.nwin)), [])
+            reach = []
+            for p in got:
+                X, Y = xy([q[1] for q in p["ll"]], [q[0] for q in p["ll"]])
+                for x_, y_ in zip(X, Y):
+                    if 1000 <= x_ <= 1060 or 1940 <= x_ <= 2000:          # (on the road stretch)
+                        reach.append(y_ + p["w"] / 2)          # (the track's northern edge there)
+            self.assertTrue(reach, f"terrain {tv}: the track reaches the road")
+            if edge:
+                self.assertLessEqual(max(reach), 8.0 - 3.5 + cr.PAVED_EDGE_IN_M + 0.05,
+                                     f"terrain {tv}: the dirt stops at the asphalt's edge: {reach}")
+            else:
+                self.assertGreater(max(reach), 8.0, f"terrain {tv} as it was: onto the road's middle")
+
     def test_windows_agree_with_one_long_window(self):
         pts = [ll(x, 30 * math.sin(x / 300)) for x in range(0, 3001, 25)]
         c = cr.Course(pts)
@@ -1185,10 +1217,10 @@ class TestInsideEarth(unittest.TestCase):
         before = revisit.faults()
         course = st.current().paint
         k = max(st.wins) + 50 if st.wins else 999
-        st.win_failed[k] = __import__("time").monotonic()
+        st.plan_failed[("w", k, False)] = __import__("time").monotonic()
         self.assertIsNone(st.window(self.md, course, k, "background"))
         self.assertGreater(revisit.faults(), before, "marked: not kept")
-        st.win_failed.pop(k, None)
+        st.plan_failed.pop(("w", k, False), None)
 
     def test_compute_sharing_only_between_the_same_ground(self):
         """BeamNG.Earth 1.6's compute sharing: a far tile is asked of / served to another server only when both build
@@ -1260,6 +1292,117 @@ class TestInsideEarth(unittest.TestCase):
                             "and the track's relief there")
         self.paintfile.write_json(self.paintfile.pose_path(), {"lat": la, "lon": lo, "t": 0})
         self.assertEqual(ep.prefetch_once(st, self.md), [], "an old pose: nothing")
+
+    def _fresh_window(self, st, course, k):
+        with st.lock:
+            st.wins.pop(k, None)
+            st.rwins.pop(k, None)
+            for key in [key for key in st.plan_failed if key[1] == k]:
+                st.plan_failed.pop(key, None)
+        for what in ("w", "r"):
+            p = os.path.join(self.paintfile.windows_dir(course.cid), f"{what}{k:06d}.json")
+            for q in (p, p + ".lock"):
+                if os.path.exists(q):
+                    os.unlink(q)
+        return os.path.join(self.paintfile.windows_dir(course.cid), f"w{k:06d}.json")
+
+    def test_a_build_waits_for_the_window_it_needs(self):
+        """(1.7.10, the user 2026-11-10: steps and walls where ground built without the course's track met ground built
+        with it) A build's read of a window another process is planning waits for that one's file; one whose data is
+        not there yet is planned again until it is; a background read never waits; only past DEMAND_WAIT_S is the
+        ground built without it."""
+        import threading
+        import time
+        from unittest import mock
+        from gpsd import courseroads as cr_
+        ep = self.earthpatch
+        st = ep.state()
+        course = st.current().paint
+        k = 3
+        path = self._fresh_window(st, course, k)
+        want = st.window(self.md, course, k, "demand")
+        self.assertTrue(want, "planned")
+        # another process plans it (its lock beside the file): a build waits for its file, a background read does not
+        path = self._fresh_window(st, course, k)
+        with open(path + ".lock", "w") as f:
+            f.write("12345")
+        self.assertIsNone(st.window(self.md, course, k, "background"), "a background read leaves it to that process")
+        self.assertNotIn(("w", k, False), st.plan_failed, "and that is no failure")
+
+        def other():
+            time.sleep(0.6)
+            self.paintfile.write_json_first(path, {"algo": cr_.ALGO, "pieces": want})
+            os.unlink(path + ".lock")
+        t = threading.Thread(target=other)
+        t.start()
+        t0 = time.monotonic()
+        got = st.window(self.md, course, k, "demand")
+        t.join()
+        self.assertGreaterEqual(time.monotonic() - t0, 0.5, "waited for the other process")
+        self.assertEqual(got, want, "and took its plan")
+        # its data not there yet the first time: planned again, not built without it
+        path = self._fresh_window(st, course, k)
+        real = cr_.window_pieces
+        calls = []
+
+        def flaky(*a, **kw):
+            calls.append(1)
+            if len(calls) == 1:
+                raise ValueError("cell not downloaded yet")
+            return real(*a, **kw)
+        with mock.patch.object(cr_, "window_pieces", flaky):
+            got = st.window(self.md, course, k, "demand")
+        self.assertEqual(got, want, "planned on the second try")
+        self.assertEqual(len(calls), 2)
+        # a background read's failure never keeps a build from planning it
+        path = self._fresh_window(st, course, k)
+        with mock.patch.object(cr_, "window_pieces", mock.Mock(side_effect=ValueError("deferred"))):
+            self.assertIsNone(st.window(self.md, course, k, "background"))
+        self.assertEqual(st.window(self.md, course, k, "demand"), want, "a build plans it all the same")
+        # never to be had: past DEMAND_WAIT_S built without it (logged), and the next builds do not wait again
+        path = self._fresh_window(st, course, k)
+        bare = st.stats.get("bare_reads", 0)
+        with mock.patch.object(ep, "DEMAND_WAIT_S", 1.2), \
+                mock.patch.object(cr_, "window_pieces", mock.Mock(side_effect=ValueError("offline"))), \
+                self.assertLogs("earthd.offroad", "WARNING") as cm:
+            t0 = time.monotonic()
+            self.assertIsNone(st.window(self.md, course, k, "demand"))
+            self.assertLess(time.monotonic() - t0, 5.0)
+            t0 = time.monotonic()
+            self.assertIsNone(st.window(self.md, course, k, "demand"))
+            self.assertLess(time.monotonic() - t0, 0.2, "given up: not waited for again at once")
+        self.assertIn("built without it", cm.output[0])
+        self.assertEqual(st.stats.get("bare_reads", 0), bare + 1)
+        self.assertFalse(os.path.exists(path + ".lock"), "no lock left behind")
+        # a planner gone (its lock old): taken over
+        path = self._fresh_window(st, course, k)
+        with open(path + ".lock", "w") as f:
+            f.write("999999")
+        old = time.time() - ep.PLAN_LOCK_STALE_S - 5
+        os.utime(path + ".lock", (old, old))
+        self.assertEqual(st.window(self.md, course, k, "demand"), want)
+        self._fresh_window(st, course, k)
+        st.window(self.md, course, k, "demand")
+
+    def test_prefetch_follows_the_course(self):
+        """The windows planned ahead: along the course from the car's place on it (round its bends), the nearest
+        ahead urgent, then behind it, then the other passes near; a car going the other way on an out-and-back is
+        placed on its own pass."""
+        ep = self.earthpatch
+        from gpsd import courseroads as cr_
+        # out 3 km east along y = 0, back west along y = 40
+        pts = [ll(x, 0.0) for x in range(0, 3001, 50)] + [ll(x, 40.0) for x in range(3000, -1, -50)]
+        c = cr_.Course(pts, 1.0, "Out and back", 11)
+        la, lo = ll(500, 0.0)
+        plan = ep.prefetch_plan(c, {"lat": la, "lon": lo, "speed": 30.0, "heading": 90.0})
+        ks = [k for k, _ in plan]
+        self.assertEqual(ks[:3], [0, 1, 2], "ahead along the course first")
+        self.assertTrue(dict(plan)[0] and dict(plan)[1], "the nearest ahead urgent")
+        self.assertIn(5, ks, "the other pass near the car too")
+        # the same place, heading west: on the way back (km 5.5)
+        i = ep.course_position(c, {"lat": la, "lon": lo, "speed": 30.0, "heading": 270.0})
+        self.assertGreater(i * cr_.STEP_M, 3000, f"on its own pass: {i}")
+        self.assertEqual(ep.prefetch_plan(c, {"lat": la + 1.0, "lon": lo, "speed": 0}), [], "far off: nothing")
 
     def set_rough(self, rough):
         pts = [list(ll(x, 0.0)) for x in range(0, 6001, 50)]
