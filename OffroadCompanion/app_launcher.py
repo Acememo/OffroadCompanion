@@ -16,6 +16,9 @@ server, its mod, Python and Offroad Companion inside (tools/build_exe.py). Doubl
      the game closes (GAME_GONE_S_WIN after it). The server and BeamMP end with this program however it ends (its
      window closed: KillGroup), and a BeamMP left over from an earlier start is closed first.
 
+At each start it asks GitHub for a newer Offroad Companion and offers to install it (appupdate.py: downloaded
+beside this file, checked against GitHub's SHA-256, then started instead of this one).
+
 Nothing to install: no Python, no BeamNG.Earth source folder, no setup step. The BeamNG.Earth inside is the version
 this release was made and tested with (setup_earth_source.EARTH_VERSION); its in-game update notice is turned off (an
 update of BeamNG.Earth comes with the next Offroad Companion). Its map cache and settings are BeamNG.Earth's own, shared
@@ -27,6 +30,7 @@ with BeamNG.Earth's .exe.
     OffroadCompanion.exe --no-game           only the servers (start the game yourself)
     OffroadCompanion.exe --companion         only Offroad Companion's helper (with BeamNG.Earth's own .exe)
     OffroadCompanion.exe --selftest          check the course painter gets into the server's processes
+    OffroadCompanion.exe --no-update-check   start without asking GitHub for a newer Offroad Companion
     (any of BeamNG.Earth's launcher options: --cache-dir, --game-dir, --no-beammp, ... and -- server options)
 
 From source (for testing): python app_launcher.py --earth PATH-TO-BeamNG.Earth [...].
@@ -380,6 +384,23 @@ def companion_version():
         return "?"
 
 
+def self_update(launcher, argv):
+    """The .exe updates itself (appupdate.py): a newer copy downloaded earlier is started instead of this one, or
+    GitHub has a newer release and the player says yes to it. True when the new copy runs (this one then ends)."""
+    try:
+        up = ours("appupdate")
+        exe = up.packaged_path()
+        if not exe:
+            return False
+        say = lambda m: print(m, flush=True)        # noqa: E731
+        current = companion_version()
+        return bool(up.hand_over(current, exe, argv, launcher, out=say)
+                    or up.update_at_start(current, exe, argv, launcher, out=say))
+    except Exception as e:                   # never a reason not to start
+        print(f"  (update check: {type(e).__name__}: {e})", flush=True)
+        return False
+
+
 def run(argv):
     earth = earth_root()
     if not BUNDLE and not earth:
@@ -405,6 +426,8 @@ def run(argv):
     print("", flush=True)
     print(f"  Offroad Companion {companion_version()}  (BeamNG.Earth {earth_install.version()} inside)", flush=True)
     print("  " + "-" * 48, flush=True)
+    if self_update(launcher, argv):
+        return                               # (the new version runs in its own window)
     data_folder(launcher, "--pick-data-dir" in mine)
     user_dir = user_folder(rest, "--pick-user-dir" in mine)
     if user_dir and "--user-dir" not in rest[:rest.index("--") if "--" in rest else len(rest)]:

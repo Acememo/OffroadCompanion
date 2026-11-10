@@ -3,6 +3,18 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.9 (2026-11-09)
+
+- **BeamNG.Earth 1.9.1-beta** is the version inside the .exe. A source install downloads 1.9.1-beta, and 1.9.0, 1.8.2,
+  1.8.1, 1.8.0, 1.7.x, 1.6.x and 1.5.x still work. 1.9.1 fixes world generation hanging while GitHub is down, distant
+  scenery that failed to load after a crash, short freezes in towns and stalls after teleports. Nothing it changed
+  touches the ground, so courses and ground codes make the same ground as 1.7.8.
+- **The .exe updates itself.** At each start it asks GitHub whether a newer Offroad Companion is out and, if so, asks
+  whether to install it now. Yes downloads the new .exe next to this one, checks it against GitHub's SHA-256 checksum
+  and starts it. No starts this version. The old .exe stays, and starting it starts the new one, so shortcuts keep
+  working. `--no-update-check` skips the question. The BeamMP server zip is still updated by hand.
+- Includes 1.7.8's fix for spectators, canopies and parked trucks standing on the track.
+
 ## 1.7.8 (2026-11-09)
 
 - **Spectators, canopies and parked trucks no longer stand on the track.** Three causes are fixed:

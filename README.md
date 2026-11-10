@@ -525,7 +525,17 @@ it. The first time, Windows may say "Windows protected your PC" (the program isn
 planned ground are in the data folder chosen at the first start (`%LOCALAPPDATA%\OffroadCompanion` when kept on the
 system drive; tracks of an earlier source install are copied over). The
 same options as BeamNG.Earth's .exe work (`--no-game`, `--cache-dir`, `--game-dir`, `--no-beammp`, ...);
-`--companion` runs only the helper (beside BeamNG.Earth's own .exe). To update, download the new .exe.
+`--companion` runs only the helper (beside BeamNG.Earth's own .exe).
+
+**Updates (from 1.7.9).** At each start the .exe asks GitHub whether a newer Offroad Companion is out. If it is, a
+pop-up asks whether to install it now. **Yes** downloads `OffroadCompanion-<new version>.exe` next to the one you
+started, checks it against the SHA-256 checksum GitHub publishes for it (a file that doesn't match is deleted, never
+run), and starts it; the BeamNG.Earth inside comes with it. **No** starts the version you have, and it asks again next
+time. The old .exe is left as it is, so a shortcut to it keeps working: it starts the new one. Delete the old file
+when you like and point the shortcut at the new one. If an antivirus or Windows Smart App Control stops the new file,
+the old one starts instead (with Smart App Control, that version isn't offered again). Offline, nothing is asked.
+`--no-update-check` (or `OFFROAD_COMPANION_NO_UPDATE=1`) skips the question. A BeamMP host still replaces the server
+zip by hand, and everyone on a server should use the same version.
 
 **From source** (Linux, or to change the code):
 
@@ -536,7 +546,7 @@ and BeamNG.drive started once.
    (you get `BeamNG.Earth\OffroadCompanion\...`). It is not a game mod: do not put it in `mods`.
 2. Run `OffroadCompanion\setup_offroad_companion.bat` once (Linux: `OffroadCompanion/setup_offroad_companion.sh`). It:
    - uses the BeamNG.Earth folder it is in (nothing is downloaded), when that is a version Offroad Companion works with
-     (1.9.0, 1.8.2, 1.8.1, 1.8.0, 1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1, 1.6.0 or 1.5.x); otherwise it downloads the source of **BeamNG.Earth 1.9.0-beta**, the version this
+     (1.9.1, 1.9.0, 1.8.2, 1.8.1, 1.8.0, 1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1, 1.6.0 or 1.5.x); otherwise it downloads the source of **BeamNG.Earth 1.9.1-beta**, the version this
      release is made for, next to it, never simply the newest (a newer BeamNG.Earth may change what the course painter
      hooks into). If the download fails it prints the address of that release's zip to fetch by hand (then
      `setup_offroad_companion.bat --zip PATH`);
@@ -564,7 +574,7 @@ folder is renamed `companion (old - now OffroadCompanion)`: delete it when you l
 
 ### BeamNG.Earth 1.8, 1.7, 1.6 and BeamMP
 
-Works with BeamNG.Earth 1.9.0 (the version the .exe has inside), 1.8.2, 1.8.1, 1.8.0, 1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1
+Works with BeamNG.Earth 1.9.1 (the version the .exe has inside), 1.9.0, 1.8.2, 1.8.1, 1.8.0, 1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1
 and 1.6.0 (and 1.5.x). With 1.8:
 
 - The ground near the car is a 1 m lattice (2 m before); the track's relief, sand, rock and gravel are made for it as
@@ -590,8 +600,9 @@ and 1.6.0 (and 1.5.x). With 1.8:
   BeamNG.Earth's own, the track worn too; Flat smooths every dirt road as before 1.8.2. A mapped dirt road the course
   runs along counts as the course's own (1.7.7). 1.9.0 bounds the wear (its holes about 0.1 m here, 1.8.2's up to
   1 m) and changes how roads sit on the ground, so its first visit to each place plans the roads again.
-- 1.8.2's launcher asks at every start whether to install a newer BeamNG.Earth. Offroad Companion's .exe never asks:
-  the BeamNG.Earth inside it comes with Offroad Companion's own releases.
+- 1.8.2's launcher asks at every start whether to install a newer BeamNG.Earth. Offroad Companion's .exe never asks
+  that: the BeamNG.Earth inside it comes with Offroad Companion's own releases, and from 1.7.9 the .exe offers those
+  instead (Updates, above).
 
 With 1.7:
 
@@ -722,6 +733,7 @@ OffroadCompanion/gpsd/terrain.py      the ground's version and seal (the rule fo
 OffroadCompanion/gpsd/spots.py        where spectators gather: the jumps (relief's kickers, bit for bit) and paved crossings
 OffroadCompanion/gpsd/urban.py        how urban the course is along it (towns from OpenStreetMap): the Lots crowds' size
 OffroadCompanion/app_launcher.py      the .exe's start: BeamNG.Earth's launcher with the painter and the helper in it
+OffroadCompanion/appupdate.py         the .exe's own update from GitHub's releases (checked, downloaded beside it)
 OffroadCompanion/setup_earth_source.py  BeamNG.Earth from source next to the companion, once
 OffroadCompanion/start_earth_with_tracks.py, earth_tracks_server.py   BeamNG.Earth's start.py with the painter
 mod/offroad_companion/lua/ge/extensions/offroadCompanion/

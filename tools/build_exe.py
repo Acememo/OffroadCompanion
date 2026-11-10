@@ -32,7 +32,7 @@ COMP = os.path.join(ROOT, "OffroadCompanion")
 NAME = "OffroadCompanion"
 SEP = ";" if os.name == "nt" else ":"
 # Offroad Companion's files the .exe needs (the rest: tests, the source install's scripts, caches)
-KEEP_FILES = ("VERSION", "app_launcher.py", "earth_gpsd.py", "setup_earth_source.py")
+KEEP_FILES = ("VERSION", "app_launcher.py", "appupdate.py", "earth_gpsd.py", "setup_earth_source.py")
 KEEP_DIRS = ("gpsd", "mod")
 SKIP_DIRS = ("__pycache__", "cache", "tests")
 # BeamNG.Earth's server data files (in its server folder, read from beside its modules)
@@ -235,7 +235,8 @@ def pyinstaller(work, earth, staged, ico, ver, earth_ver, boot=None):
             "--add-data", f"{os.path.join(earth, 'VERSION')}{SEP}.",
             "--add-data", f"{staged}{SEP}OffroadCompanion",
             "--runtime-hook", os.path.join(ROOT, "tools", "rthook_wine.py"),
-            "--exclude-module", "gpsd", "--exclude-module", "earth_gpsd", "--exclude-module", "setup_earth_source"]
+            "--exclude-module", "gpsd", "--exclude-module", "earth_gpsd", "--exclude-module", "setup_earth_source",
+            "--exclude-module", "appupdate"]
     # the server's data files beside its modules, as BeamNG.Earth's build_app.py adds them (1.6: the bridge types;
     # 1.7: the climate map, oil wells, refineries, the pinned Overture release's index): every one there, so a new
     # one is never left out
