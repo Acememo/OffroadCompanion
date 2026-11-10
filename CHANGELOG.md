@@ -3,6 +3,14 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.11 (2026-11-10)
+
+- **Road tiles up to 5 times faster to plan near the course.** Working out which mapped dirt roads the course follows
+  (so BeamNG.Earth's wear stays off them, 1.7.7) was slow, and it was worked out again for every read of a cell's
+  roads. In the 1.7.9 log, road tiles waited up to two minutes on it, so the ground's textured roads and the dirt track
+  came late and the quick stand-in ground stayed longer. It now gives the same answer much faster, once per road.
+- No ground changes: the same ground as 1.7.10 (ground version 11).
+
 ## 1.7.10 (2026-11-10)
 
 - **The ground is built with the course's track in it, not before it.** When a piece of ground near the car was built
@@ -16,10 +24,6 @@ are summarised by what came in, roughly in order.
   - the track is planned 10 km ahead along the course (round its bends, not in a straight line from the car), the
     first 4 km with the same download priority as the ground itself;
   - the server's log says how far ahead the track is planned, and when a build had to wait or went without it.
-- **Road tiles up to 5 times faster to plan near the course.** Working out which mapped dirt roads the course follows
-  (so BeamNG.Earth's wear stays off them, 1.7.7) was slow, and it was worked out again for every read of a cell's
-  roads. In the 1.7.9 log, road tiles waited up to two minutes on it, so the ground's textured roads and the dirt track
-  came late and the quick stand-in ground stayed longer. It now gives the same answer much faster, once per road.
 - **Spectators, canopies and parked trucks no longer hang in the air.** Within 300 m of the car the ground under each
   one is measured again every few seconds and they are put back on it when it changed.
 - **Ground version 11:**
