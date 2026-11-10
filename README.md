@@ -376,7 +376,8 @@ log says how far ahead the track is planned.
 When a piece of ground is built before its stretch is planned anyway (a teleport, a very fast car), the build waits for
 it (up to 45 s), and one process plans each stretch while the others wait for its result instead of planning it again.
 Before 1.7.10 that ground was built without the course's track and kept that way for the session, and where it met
-ground built later with the track it showed as steps and walls, and the track's texture came late. Ground built
+ground built later with the track it showed as steps and walls, and the track's texture came late. Working out which
+mapped dirt roads the course follows is also much faster in 1.7.10 (road tiles waited up to two minutes on it). Ground built
 without the track now only happens when the data really can't be had (offline), and the log says so. If you still see
 ground over the road without a course loaded, that is BeamNG.Earth's own streaming.
 

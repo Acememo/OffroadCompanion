@@ -392,6 +392,44 @@ class TestPure(unittest.TestCase):
         i = int(round(1000 / cr.STEP_M)) - a
         self.assertGreater(prof["ctr"][i], 5.0, f"ctr follows the bend: {prof['ctr'][i - 6:i + 4]}")
 
+    def test_followed_rows_fast_answers_as_before(self):
+        # (1.7.10) rows_followed, made fast (a ring's points at once, only the course segments in reach), answers as
+        # 1.7.7 - 1.7.9's did on any roads: ground version 10's and 11's ground depend on it
+        from gpsd import corridor
+        rng = np.random.default_rng(7)
+
+        class F:
+            pass
+
+        def make(nrows, nv):
+            f, coords, co, ro, po = F(), [], [0], [0], [0]
+            for _ in range(nrows):
+                x0, y0 = rng.uniform(-800, 800, 2)
+                steps = rng.normal(0, 0.3, nv).cumsum() + rng.uniform(0, 2 * np.pi)
+                xs = x0 + np.cumsum(np.cos(steps) * rng.uniform(5, 30, nv))
+                ys = y0 + np.cumsum(np.sin(steps) * rng.uniform(5, 30, nv))
+                la, lo = ll(xs, ys)
+                coords.append(np.stack([lo, la], 1))
+                co.append(co[-1] + nv)
+                ro.append(len(co) - 1)
+                po.append(len(ro) - 1)
+            f.lonlat, f.coord_off = np.concatenate(coords), np.array(co)
+            f.ring_off, f.part_off = np.array(ro), np.array(po)
+            return f
+        hits = 0
+        for _ in range(12):
+            f = make(25, 40)
+            xs = np.arange(-1500.0, 1500.0, rng.uniform(5, 40))
+            la, lo = ll(xs, rng.uniform(50, 400) * np.sin(xs / rng.uniform(100, 800)) + rng.uniform(-300, 300))
+            k = int(rng.integers(0, 25))
+            near = f.lonlat[f.coord_off[k]:f.coord_off[k + 1]] + rng.normal(0, 0.0001, 2)
+            lines = [np.stack([lo, la], 1), near]
+            half = {i: float(rng.uniform(1, 5)) for i in range(25)}
+            a = corridor.rows_followed_slow(f, range(25), lines, half, 25.0, 25.0)
+            self.assertEqual(corridor.rows_followed(f, range(25), lines, half, 25.0, 25.0), a)
+            hits += len(a)
+        self.assertGreater(hits, 5, "some roads followed")
+
     def test_track_meets_a_paved_road_at_its_edge(self):
         # (terrain 11; the user 2026-11-10: the dirt track spilling over the asphalt where the course leaves a highway)
         # the course along y = 0; a paved road (7 m wide) along y = 8 between x 1000 and 2000: the course takes it

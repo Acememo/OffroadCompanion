@@ -262,6 +262,8 @@ class _State:
         self.clear_cells = OrderedDict()    # (cell, course key) -> vegetation Items with nothing on the track
         self.veg_plan = None                # the course key the vegetation's own memory was made for
         self.water = OrderedDict()  # cell key str -> [(lonlat ring (k, 2)...)] of dry / salt lakes
+        self.followed_ids = {}      # (road id, half width) -> followed by the course (followed_rows), for ...
+        self.followed_plan = None   # ... this course
         self.bld = OrderedDict()    # (cell key str, layer, course key) -> Features
         self.cache_dir = None       # BeamNG.Earth's cache folder (its imagery tiles: the ruts' contrast)
         self._imagery = None
@@ -1174,6 +1176,7 @@ def course_rows(feats):
     return got
 
 
+FOLLOWED_MEMO = 200000      # roads' answers kept (followed_rows)
 LEAN_SHARE = 0.05       # Baja, Mild, Rough, Extra: the share of BeamNG.Earth's dirt road parts that keep their lean
 
 
@@ -1245,8 +1248,32 @@ def followed_rows(st, roadsmod, feats, specs):
                 near = [i for i in cand if np.isfinite(boxes[i]).all() and boxes[i, 0] <= cl1[0] + dlon and
                         boxes[i, 2] >= cl0[0] - dlon and boxes[i, 1] <= cl1[1] + dlat and boxes[i, 3] >= cl0[1] - dlat]
                 half = {i: float(getattr(specs[i], "width", 6.0)) / 2.0 for i in near}
-                got = tuple(corridor.rows_followed(feats, near, lines, half, courseroads.FOLLOW_UNPAVED_M,
-                                                   courseroads.FOLLOW_UNPAVED_DEG))
+                # (a road's answer is its own geometry's, whichever cell it is read in: kept per road id for the
+                # course loaded, so the many reads of a cell's roads (its neighbours', the bridges', the grading's)
+                # work it out once; 1.7.10, the user's server.log 2026-11-10: road geotiles waiting minutes on it)
+                ids = getattr(feats, "ids", None)
+                known, todo = {}, []
+                with st.lock:
+                    memo = st.followed_ids if st.followed_plan == plan.key else None
+                    if memo is None:
+                        st.followed_ids, st.followed_plan = {}, plan.key
+                        memo = st.followed_ids
+                    for i in near:
+                        key = (str(ids[i]), round(half[i], 3)) if ids is not None else None
+                        if key is not None and key in memo:
+                            known[i] = memo[key]
+                        else:
+                            todo.append(i)
+                fol = set(corridor.rows_followed(feats, todo, lines, half, courseroads.FOLLOW_UNPAVED_M,
+                                                 courseroads.FOLLOW_UNPAVED_DEG)) if todo else set()
+                if ids is not None:
+                    with st.lock:
+                        if st.followed_plan == plan.key:
+                            for i in todo:
+                                st.followed_ids[(str(ids[i]), round(half[i], 3))] = i in fol
+                            while len(st.followed_ids) > FOLLOWED_MEMO:
+                                st.followed_ids.pop(next(iter(st.followed_ids)))
+                got = tuple(sorted(set(i for i, v in known.items() if v) | fol))
     feats.__dict__["_egps_followed"] = (plan.key, got)
     return got
 

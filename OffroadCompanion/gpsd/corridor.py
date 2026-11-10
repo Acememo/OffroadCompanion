@@ -120,7 +120,9 @@ def rows_followed(f, rows, lines, half_w, pad_m, align_deg, min_m=FOLLOWED_MIN_M
     """The rows (of Features f, lon / lat, each a road) the course's lines ((n, 2) lon / lat each) run along: points
     every step_m along the row within its half width (half_w[row]) + pad_m of a course segment running within align_deg
     of its way, for at least min_m in all. The row's whole geometry decides, whichever cell it is read from, so every
-    tile and process picks the same. -> sorted list of rows. Pure."""
+    tile and process picks the same. -> sorted list of rows. Pure.
+    (1.7.10: the same answer as rows_followed_slow, the row's points of a ring at once against only the course segments
+    that can reach them: road geotiles waited up to two minutes on it, the user's server.log 2026-11-10.)"""
     lines = [np.asarray(ln, np.float64) for ln in lines if len(ln) >= 2]
     rows = [int(i) for i in rows]
     if not lines or not rows:
@@ -140,6 +142,72 @@ def rows_followed(f, rows, lines, half_w, pad_m, align_deg, min_m=FOLLOWED_MIN_M
         cv = cb - ca
         cl = np.maximum(np.hypot(cv[:, 0], cv[:, 1]), 1e-9)
         lo, hi = np.minimum(ca, cb).min(axis=0), np.maximum(ca, cb).max(axis=0)
+        smin, smax = np.minimum(ca, cb), np.maximum(ca, cb)
+        for p in range(int(f.part_off[i]), int(f.part_off[i + 1])):
+            for r in range(int(f.ring_off[p]), int(f.ring_off[p + 1])):
+                xy = plane.xy(f.lonlat[int(f.coord_off[r]):int(f.coord_off[r + 1])])
+                if len(xy) < 2:
+                    continue
+                if ((xy.max(axis=0) < lo - reach) | (xy.min(axis=0) > hi + reach)).any():
+                    continue
+                # (only the course segments whose box comes within reach of the ring's: the others are farther than
+                # reach from every point of it, and take no part in any point's answer)
+                rmin, rmax = xy.min(axis=0) - reach - 1.0, xy.max(axis=0) + reach + 1.0
+                near = np.flatnonzero((smax[:, 0] >= rmin[0]) & (smin[:, 0] <= rmax[0]) &
+                                      (smax[:, 1] >= rmin[1]) & (smin[:, 1] <= rmax[1]))
+                if not len(near):
+                    continue
+                na, nb, nv, nl = ca[near], cb[near], cv[near], cl[near]
+                segs = []                        # (a, d, L, k) of the ring's segments, in order
+                for a, b in zip(xy[:-1], xy[1:]):
+                    d = b - a
+                    L = float(math.hypot(d[0], d[1]))
+                    if L < 1e-6:
+                        continue
+                    segs.append((a, d, L, max(1, int(math.ceil(L / step_m)))))
+                if not segs:
+                    continue
+                pts = np.concatenate([a + d * ((np.arange(k) + 0.5) / k)[:, None] for a, d, L, k in segs])
+                dist = _seg_dist(pts, na, nb)                                   # (P, S')
+                j = 0
+                for a, d, L, k in segs:
+                    cos = np.abs(nv @ d) / (nl * L)                             # (S',)
+                    ok = ((dist[j:j + k] <= reach) & (cos >= cos_tol)[None, :]).any(axis=1)
+                    j += k
+                    got += float(ok.sum()) * (L / k)
+                    if got >= min_m:
+                        break
+                if got >= min_m:
+                    break
+            if got >= min_m:
+                break
+        if got >= min_m:
+            out.append(i)
+    return out
+
+
+def rows_followed_slow(f, rows, lines, half_w, pad_m, align_deg, min_m=FOLLOWED_MIN_M, step_m=FOLLOWED_STEP_M):
+    """rows_followed as 1.7.7 - 1.7.9 computed it (each segment of each row against every course segment): kept for the
+    test that the fast one answers the same."""
+    lines = [np.asarray(ln, np.float64) for ln in lines if len(ln) >= 2]
+    rows = [int(i) for i in rows]
+    if not lines or not rows:
+        return []
+    la_ = np.concatenate([ln[:-1] for ln in lines])
+    lb_ = np.concatenate([ln[1:] for ln in lines])
+    cos_tol = math.cos(math.radians(align_deg))
+    out = []
+    for i in rows:
+        reach = float(half_w[i]) + pad_m
+        got = 0.0
+        c0 = int(f.coord_off[int(f.ring_off[int(f.part_off[i])])])
+        if c0 >= len(f.lonlat):
+            continue
+        plane = Plane(float(f.lonlat[c0, 1]), float(f.lonlat[c0, 0]))
+        ca, cb = plane.xy(la_), plane.xy(lb_)
+        cv = cb - ca
+        cl = np.maximum(np.hypot(cv[:, 0], cv[:, 1]), 1e-9)
+        lo, hi = np.minimum(ca, cb).min(axis=0), np.maximum(ca, cb).max(axis=0)
         for p in range(int(f.part_off[i]), int(f.part_off[i + 1])):
             for r in range(int(f.ring_off[p]), int(f.ring_off[p + 1])):
                 xy = plane.xy(f.lonlat[int(f.coord_off[r]):int(f.coord_off[r + 1])])
@@ -154,8 +222,8 @@ def rows_followed(f, rows, lines, half_w, pad_m, align_deg, min_m=FOLLOWED_MIN_M
                         continue
                     k = max(1, int(math.ceil(L / step_m)))
                     pts = a + d * ((np.arange(k) + 0.5) / k)[:, None]
-                    dist = _seg_dist(pts, ca, cb)                               # (k, S)
-                    cos = np.abs(cv @ d) / (cl * L)                             # (S,)
+                    dist = _seg_dist(pts, ca, cb)
+                    cos = np.abs(cv @ d) / (cl * L)
                     ok = ((dist <= reach) & (cos >= cos_tol)[None, :]).any(axis=1)
                     got += float(ok.sum()) * (L / k)
                     if got >= min_m:
