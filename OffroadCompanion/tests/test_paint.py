@@ -759,6 +759,26 @@ class TestInsideEarth(unittest.TestCase):
         got = self.earthpatch.props_off_course(st, frame, rows)
         self.assertEqual([r[2] for r in got], [30.0, 1.0], "the fence on the course goes; off it, and other rows, stay")
 
+    def test_a_gap_in_the_guard_rail_the_course_goes_through(self):
+        """A road tile's guard rails (P.guardrail_rows) get a gap where the course goes through them; a rail beside
+        the course, along it, stays (the user, 2026-11-12)."""
+        try:
+            import blockworker
+        except ImportError:
+            self.skipTest("no blockworker")
+        if not hasattr(blockworker, "_tile_parts"):
+            self.skipTest("BeamNG.Earth before 1.7")
+        from gpsd import corridor
+        st = self.earthpatch.state()
+        frame = self.geodesy.EnuFrame(*ll(1000, 0), 0.0)
+        across = [[0, 0.0, float(y), 0.0, 90.0, 0.0, 0.9, 0] for y in range(-42, 43, 3)]     # (the course: y = 0)
+        beside = [[0, float(x), 9.0, 0.0, 0.0, 0.0, 0.9, 0] for x in range(-30, 31, 3)]
+        got = self.earthpatch.rails_off_course(st, frame, across + beside)
+        ys = [r[2] for r in got if r[1] == 0.0 and r[4] == 90.0]
+        self.assertTrue(ys and all(abs(y) > corridor.RAIL_GAP_M for y in ys), ys)
+        self.assertTrue(any(abs(y) < 15 for y in ys), "only a gap, not the whole rail")
+        self.assertEqual(len([r for r in got if r[4] == 0.0]), len(beside), "the rail along the course stays")
+
     def test_the_layer_with_the_track_has_its_own_cell_id(self):
         """1.8 keeps a cell's road facts by its layer's cell id (roads._FACTS_MEM, the revisit cache) and takes a road's
         lanes and bridges from its home cell's copy (_bnge_neighbours): the layer with the track has the neighbours as
@@ -975,6 +995,27 @@ class TestInsideEarth(unittest.TestCase):
         kinds = [(r[0], r[1]) for r in got if r[0] != "chainlink"]
         self.assertEqual(kinds, [("streetlamp", 1.0), ("container", 14.0)], "the lamp and the far container stay")
         self.assertEqual(corridor.props_off(rows, [], corridor.CLEAR_M), rows)
+
+    def test_rail_gaps(self):
+        """corridor.rails_off: a perpendicular crossing opens ~2 x RAIL_GAP_M, a shallow one more along the rail (the
+        way out of a lane onto a dirt road beside it), and another rail across the road stays."""
+        from gpsd import corridor
+        rail = [[0, float(x), 0.0, 0.0, 0.0, 0.0, 0.9, 0] for x in range(-60, 61, 3)]      # along y = 0, yaw 0
+        other = [[0, float(x), -8.0, 0.0, 180.0, 0.0, 0.9, 0] for x in range(-60, 61, 3)]  # the far side's
+        def gap(course):
+            got = corridor.rails_off(rail + other, course)
+            xs = sorted(r[1] for r in got if r[2] == 0.0)
+            return [x for x in range(-60, 61, 3) if x not in xs], len([r for r in got if r[2] == -8.0])
+        cut, far = gap([np.array([[0.5, -50.0], [0.5, 50.0]])])
+        self.assertTrue(cut and max(abs(x) for x in cut) <= corridor.RAIL_GAP_M + 3, cut)
+        self.assertTrue(len(other) - 5 <= far < len(other), "a course across the road: a gap in the far rail too")
+        a = math.radians(15.0)
+        shallow = [np.array([[-10.0, -4.0], [60.0, 70.0 * math.tan(a) - 4.0]])]     # (from the lane between them)
+        cut, far = gap(shallow)
+        self.assertTrue(cut and max(cut) - min(cut) > 25, cut)
+        self.assertEqual(far, len(other), "the far side's rail, not crossed, stays")
+        self.assertEqual(corridor.rails_off(rail, []), rail)
+        self.assertEqual(corridor.rails_off(rail, [np.array([[-60.0, 5.0], [60.0, 5.0]])]), rail, "alongside: none")
 
     def test_walls_alongside_stay(self):
         from gpsd import corridor
@@ -1357,6 +1398,10 @@ class TestInsideEarth(unittest.TestCase):
         st = ep.state()
         course = st.current().paint
         k = 3
+        try:                                # (no car on the course: no prefetcher plans these windows meanwhile)
+            os.unlink(self.paintfile.pose_path())
+        except OSError:
+            pass
         path = self._fresh_window(st, course, k)
         want = st.window(self.md, course, k, "demand")
         self.assertTrue(want, "planned")

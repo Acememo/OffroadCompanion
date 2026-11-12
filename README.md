@@ -153,7 +153,10 @@ default), BeamNG.Earth's server leaves them out as the world streams in:
   the course runs into) becomes a crossing at ground level; one high enough over a canyon stays;
 - **walls across the course**: retaining walls are cut where the course passes through them, and wherever one
   stands on the lanes of the road the course follows (a crossing road's wall reaching into the highway). Walls
-  running alongside it stay.
+  running alongside it stay;
+- **guard rails across the course** (1.7.13): where the course goes through a guard rail (off a paved road onto a dirt
+  road beside it, say), the rail gets a gap: about 13 m where the course crosses straight, up to about 60 m where it
+  leaves at a shallow angle. Rails along the road the course follows, and the one on its other side, stay.
 
 ### The GPS route too
 
@@ -161,7 +164,8 @@ With **Clear the GPS route** on (Settings, on by default), the road route you fo
 narrower strip (its lanes): buildings on it, walls across it and low overpasses. It works for a place you search in
 this app, in BeamNG.Earth's menu, or a marker you put on BeamNG.Earth's big map (BeamNG.Earth's own route is used).
 A long route like Ensenada to Tijuana is cleared all the way, as the world streams in. When you pick a new
-destination, the roads around the car are sent again so it applies right away; ending the route stops it.
+destination with no course loaded, the roads around the car are sent again so it applies right away (at most every
+2 minutes); with a course loaded, it applies as new ground loads. Ending the route stops it.
 "Route cleared" under the street name shows it is on.
 
 This needs BeamNG.Earth's server from source, because the .exe's server is sealed. Set it up once:
@@ -178,7 +182,8 @@ Your map cache is shared, so nothing is downloaded twice.
 ### Wheel ruts where the track blends in
 
 On light desert sand (San Felipe) the dirt track is the ground's own colour and disappears from the driver's seat.
-With **Wheel ruts: Auto** (Settings), BeamNG.Earth's server adds two darker wheel ruts along the track only where
+Wheel ruts are **Off** by default (1.7.13: the track's dirt textures do the job). With **Wheel ruts: Auto**
+(Settings), BeamNG.Earth's server adds two darker wheel ruts along the track only where
 that happens. It compares the satellite imagery under the track (BeamNG.Earth's own, from its cache; nothing extra
 is downloaded) with the dirt's colour. Elsewhere the track keeps its normal look. **Always** puts ruts all along it,
 **Off** none. The rutted sections of the track terrain (below) get braided ruts whatever the setting but **Off**
@@ -408,8 +413,8 @@ poses and their clothes are all picked from the course's place, so everyone on t
 
 **Lots** lines the course the way a Baja race crowd does: people packed along both sides (behind an orange safety
 fence in town or along a really big crowd: each piece laid along the course's curve, left out where a corner is too
-sharp for a straight piece), pop-up canopies behind them, pickups and SUVs parked nose-in behind those, flags in the crowd (Mexico's in
-Mexico) and light towers at the ends of the start, finish and checkpoints. The closer to a town, the bigger it gets:
+sharp for a straight piece), pop-up canopies behind them, pickups and SUVs parked nose-in behind those, flags in the crowd (the flag of
+the country you're in, from flag-icons, MIT; names from i18n-iso-countries, MIT) and light towers at the ends of the start, finish and checkpoints. The closer to a town, the bigger it gets:
 a jump out in the desert has a 45 m line of a few people a metre, the same jump at the edge of a city a line four
 times as long, packed, with a canopy and a truck every few metres; near towns, stretches with nothing special get a
 plain line too. How urban each stretch is comes from OpenStreetMap's cities, towns and villages along the course

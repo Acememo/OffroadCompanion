@@ -112,6 +112,73 @@ def props_off(rows, lines, clear_m):
     return [r for i, r in enumerate(rows) if i not in drop]
 
 
+# A gap in the guard rails where the course goes through them (the user, 2026-11-12: "the course takes you to the
+# right lane and then to the dirt road, but it is blocked by the railing ... just make a gap to allow the course"):
+# the modules within RAIL_GAP_M of the crossing, more along the rail the shallower the course crosses it (/ sin of the
+# angle, the angle at least RAIL_MIN_DEG), at most RAIL_GAP_MAX_M; and any whose middle the course line runs within
+# RAIL_ON_M of. Rails along a road the course follows (beside it, not crossed) stay.
+RAIL_GAP_M = 5.0
+RAIL_GAP_MAX_M = 30.0
+RAIL_MIN_DEG = 10.0
+RAIL_ON_M = 1.0
+RAIL_MODULE_M = 3.0         # (guardrails.MODULE_LENGTH_M: a row's module along its yaw, [group, x, y, z, yaw, ...])
+RAIL_LINE_M = 1.0           # the gap's modules: within this of the crossed module's line (+ RAIL_BEND per m along it,
+RAIL_BEND = 0.05            # a rail round a bend), running within ~30 deg of it: that rail's, not another one's
+RAIL_PARALLEL = math.cos(math.radians(30.0))
+
+
+def rails_off(rows, lines, gap_m=RAIL_GAP_M, gap_max_m=RAIL_GAP_MAX_M, min_deg=RAIL_MIN_DEG, on_m=RAIL_ON_M,
+              module_m=RAIL_MODULE_M):
+    """BeamNG.Earth's guard rail rows (a road tile's P.guardrail_rows: [group, x, y, z, yaw deg, ...] in a frame)
+    without those in the gaps the course lines ((n, 2) each, the same frame) go through; the rest as they are, in
+    order. Pure: the same rows and course give the same gaps in every tile and process."""
+    rows = list(rows or ())
+    lines = [np.asarray(ln, np.float64) for ln in lines if len(ln) >= 2]
+    if not rows or not lines:
+        return rows
+    pick = [i for i, r in enumerate(rows) if len(r) >= 5]
+    if not pick:
+        return rows
+    c = np.array([[float(rows[i][1]), float(rows[i][2])] for i in pick], np.float64)
+    yaw = np.radians(np.array([float(rows[i][4]) for i in pick], np.float64))
+    u = np.stack([np.cos(yaw), np.sin(yaw)], axis=1)
+    e0, e1 = c - u * (module_m / 2), c + u * (module_m / 2)
+    a = np.concatenate([ln[:-1] for ln in lines])
+    b = np.concatenate([ln[1:] for ln in lines])
+    reach = gap_max_m + module_m
+    lo, hi = c.min(axis=0) - reach, c.max(axis=0) + reach
+    near = ((np.minimum(a, b) <= hi) & (np.maximum(a, b) >= lo)).all(axis=1)
+    a, b = a[near], b[near]
+    if not len(a):
+        return rows
+    d = b - a
+    dl = np.maximum(np.hypot(*d.T), 1e-9)
+    sin_min = math.sin(math.radians(min_deg))
+    drop = np.zeros(len(c), bool)
+    for j in range(0, len(a), 512):
+        aj, bj, dj, lj = a[j:j + 512], b[j:j + 512], d[j:j + 512], dl[j:j + 512]
+        drop |= _seg_dist(c, aj, bj).min(axis=1) <= on_m
+        X = _cross(e0, e1, aj, bj)                                  # (R, S): this module crosses that course segment
+        for i, k in zip(*np.nonzero(X)):
+            s = abs(u[i, 0] * dj[k, 1] - u[i, 1] * dj[k, 0]) / lj[k]
+            # where on the module's line the course crosses it
+            den = u[i, 0] * dj[k, 1] - u[i, 1] * dj[k, 0]
+            if abs(den) < 1e-12:
+                p = c[i]
+            else:
+                w = aj[k] - e0[i]
+                t = (w[0] * dj[k, 1] - w[1] * dj[k, 0]) / den
+                p = e0[i] + u[i] * t
+            half = min(gap_m / max(s, sin_min), gap_max_m) + module_m / 2
+            q = c - p                                               # (the modules of this rail only: on its line)
+            along = q @ u[i]
+            across = np.abs(q[:, 0] * u[i, 1] - q[:, 1] * u[i, 0])
+            drop |= (np.abs(along) <= half) & (across <= RAIL_LINE_M + RAIL_BEND * np.abs(along)) & \
+                (np.abs(u @ u[i]) >= RAIL_PARALLEL)
+    gone = {pick[k] for k in np.flatnonzero(drop)}
+    return [r for i, r in enumerate(rows) if i not in gone]
+
+
 FOLLOWED_MIN_M = 40.0       # a mapped road the course runs along for at least this long is the course's road
 FOLLOWED_STEP_M = 5.0
 

@@ -478,6 +478,17 @@ do
   files['/settings/offroadCompanion.json'] = { rough = 'on', defaults = 2 }
   M.onExtensionLoaded()
   check(M.uiSet('ruts', 'auto').settings.rough == 'on', 'Rough chosen since: kept')
+  -- wheel ruts' default became Off (1.7.12): settings saved before with Auto (the old default) move to Off once;
+  -- a choice made after that stays
+  files['/settings/offroadCompanion.json'] = { ruts = 'auto', defaults = 2 }
+  M.onExtensionLoaded()
+  check(M.uiSet('notes', 'top').settings.ruts == 'off', 'the old default Auto: now Off')
+  files['/settings/offroadCompanion.json'] = { ruts = 'auto', defaults = 3 }
+  M.onExtensionLoaded()
+  check(M.uiSet('notes', 'top').settings.ruts == 'auto', 'Auto chosen since: kept')
+  files['/settings/offroadCompanion.json'] = { ruts = 'on', defaults = 2 }
+  M.onExtensionLoaded()
+  check(M.uiSet('notes', 'top').settings.ruts == 'on', 'Always chosen before: kept')
   _G.jsonReadFile = nil
 end
 
@@ -614,6 +625,17 @@ do
   check(M._versionAtLeast('1.10.0', 1, 8) and not M._versionAtLeast('1.7.9', 1, 8) and not M._versionAtLeast(nil, 1, 8),
     'versions compared as numbers')
   scenetree.findObject, FS, beamngEarth_core.serverHello = oldFind, nil, nil
+end
+
+-- 1.7.13: a GPS route sends the roads round the car again only for a new destination with no course loaded
+do
+  local R = M.routeRefresh
+  check(R(true, '1,2', nil, false, 'yes', 1e9) == true, 'a first destination, no course: the roads again')
+  check(R(true, '1,2', '1,2', false, 'yes', 1e9) == false, 'the same destination (a reroute): not')
+  check(R(true, '1,3', '1,2', true, 'yes', 1e9) == false, 'a course loaded (its next waypoint): not')
+  check(R(true, '1,3', '1,2', false, nil, 1e9) == false, 'no painter in the server: not')
+  check(R(true, '1,3', '1,2', false, 'yes', 30) == false, 'not again so soon')
+  check(R(false, '1,3', '1,2', false, 'yes', 1e9) == false, 'no route: not')
 end
 
 print(string.format('%d passed, %d failed', pass, fail))

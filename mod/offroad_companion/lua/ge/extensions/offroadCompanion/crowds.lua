@@ -27,7 +27,7 @@ M.BIN_M = { some = 1600, lots = 800 }
 M.SCALE = { some = 1.0, lots = 1.7 }
 M.GATE_CLEAR_M = 300        -- no other crowd this near a gate's
 M.HAIRPIN_DEG = 110
-M.SPAWN_M, M.DESPAWN_M = 450, 650
+M.SPAWN_M, M.DESPAWN_M = 900, 1150   -- (1.7.13: was 450, the user 2026-11-12: "props take too long to appear")
 -- Parked vehicles and canopies stand only on open, nearly level ground (the user, 2026-10-31: pickups on rooftops in
 -- town and floating off a hillside): rays down at their middle and FOOT_R[kind] m out in four directions (the model's
 -- long side either way); a hit over BeamNG.Earth's terrain by more than ON_TOP_M is a roof or a wall, heights spread
@@ -40,7 +40,7 @@ M.SURE_M = 300
 M.REGROUND_S = 4.0          -- within SURE_M the ground under each one is measured again this often ...
 M.REGROUND_PER = 40         -- ... at most this many each update ...
 M.REGROUND_DZ = 0.3         -- ... and it is put back on it when it is this far off
-M.PER_UPDATE = 10
+M.PER_UPDATE = 15         -- (objects made per update, every MARKERS_S: twice a second)
 M.WATCH_M = 140             -- spectators this near the car turn to watch it ...
 M.TURN_DEG_S = 160          -- ... this fast
 M.WATCH_MAX_DEG = 100       -- ... at most this far from facing the course
@@ -74,8 +74,29 @@ M.LINE_MIN_U = 0.3          -- Lots: a stretch with no jump, turn or crossing th
 -- pieces join along a gentle curve; on a sharp one (a corner in town: pieces crossed each other) it is left out
 M.FENCE_MIN_U, M.FENCE_BIG_M = 0.5, 150
 M.FENCE_STRETCH, M.FENCE_TURN_DEG = 0.2, 25
-M.PER_UPDATE_LOTS = 40      -- (objects made per update on Lots: a line is a few hundred)
-M.country = nil             -- (where the car is: Mexico's flags in Mexico)
+M.TRIES_X = 3               -- places looked for per update: at most this many times PER_UPDATE
+M.PER_UPDATE_LOTS = 60      -- (objects made per update on Lots: a line is a few hundred)
+M.country = nil             -- (where the car is, as BeamNG.Earth's status bar names it: that country's flags)
+local countriesOk, countries = pcall(require, 'offroadCompanion/countries')
+if not countriesOk then countries = { names = {}, flags = {} } end
+M.FLAG_DIR = 'flags/'
+
+-- The crowds' flag for a country's name (the user, 2026-11-12: "add the flags from all of the other countries"):
+-- flags/flag_<iso code> (tools/make_flags.py: every country's, its material made here), or the orange one for a name
+-- not known. Its name as countries.lua has them: ASCII letters lowered, trimmed.
+function M.flagFor(country)
+  if type(country) ~= 'string' or country == '' then return 'flag_orange' end
+  local k = country:lower():gsub('^%s+', ''):gsub('%s+$', '')
+  local code = countries.names[k]
+  if not code and k:find(',') then code = countries.names[k:match('([^,]+)$'):gsub('^%s+', '')] end
+  if not code or not countries.flags[code] then return 'flag_orange' end
+  local model = M.FLAG_DIR .. 'flag_' .. code
+  local mat = 'egps_flag_' .. code
+  if not markers.MATERIALS[mat] then
+    markers.MATERIALS[mat] = { { 'colorMap', model .. '.png' }, { 'diffuseColor', '1 1 1 1' } }
+  end
+  return model
+end
 for _, l in ipairs({ M.STRIPS_SPARSE, M.STRIPS_DENSE, M.VEHICLES }) do
   for _, n in ipairs(l) do M.MODELS[#M.MODELS + 1] = n end
 end
@@ -389,7 +410,7 @@ function M.line(spot, u, skip)
   if (K.sides or 2) == 1 and spot.side ~= 0 then sides = { spot.side } end
   local L = (M.LINE_M[spot.kind] or 30) * (1 + M.LINE_URBAN * u)
   local gate = spot.kind == 'start' or spot.kind == 'finish' or spot.kind == 'checkpoint'
-  local mexico = M.country and tostring(M.country):lower():find('mexic') ~= nil
+  local flag = M.flagFor(M.country)
   for si, side in ipairs(sides) do
     local c = spot.kind == 'jump' and (K.along or 0) or 0
     local a0 = c - L / 2
@@ -432,7 +453,7 @@ function M.line(spot, u, skip)
     -- flags waved in the crowd
     for k = 0, math.floor(L / M.FLAG_EVERY_M) - 1 do
       if h(k, 70) < 0.12 + 0.2 * u then
-        put(mexico and 'flag_mexico' or 'flag_orange', side, M.STRIP_LAT + 1.6, a0 + (k + 0.5) * M.FLAG_EVERY_M, 0)
+        put(flag, side, M.STRIP_LAT + 1.6, a0 + (k + 0.5) * M.FLAG_EVERY_M, 0)
       end
     end
     -- a gate's ends: light towers
@@ -904,7 +925,8 @@ function M.update(crs, anchor, car)
   local moved = crs.s and planned.window and (crs.s - M.PLAN_BACK_M < planned.window[1] - M.PLAN_SLACK_M
     or crs.s + M.PLAN_AHEAD_M > planned.window[2] + M.PLAN_SLACK_M)
   local now = os.clock()
-  local newData = planned.spotsV ~= pv and (not planned.at or now - planned.at >= M.REPLAN_S)
+  local newData = (planned.spotsV ~= pv or planned.flag ~= M.flagFor(M.country))
+    and (not planned.at or now - planned.at >= M.REPLAN_S)
   if planned.course ~= crs or planned.anchor ~= anchor or planned.level ~= M.level or newData or moved then
     local keep = planned.course == crs and planned.anchor == anchor and planned.level == M.level
     local list, cheers = plan(crs, anchor)
@@ -919,7 +941,8 @@ function M.update(crs, anchor, car)
       for _, o in ipairs(list) do
         local l = live[o.key]
         if l then
-          if not o.x or math.abs((l.cx or l.px) - o.x) > 0.5 or math.abs((l.cy or l.py) - o.y) > 0.5 then
+          if not o.x or math.abs((l.cx or l.px) - o.x) > 0.5 or math.abs((l.cy or l.py) - o.y) > 0.5
+              or (l.model and l.model ~= o.model) then
             remove(o.key)
           else
             o.px, o.py, o.x, o.y = l.cx or l.px, l.cy or l.py, l.px, l.py
@@ -928,7 +951,7 @@ function M.update(crs, anchor, car)
       end
     end
     planned = { course = crs, anchor = anchor, level = M.level, list = list, spotsV = pv, sidesV = sv,
-                window = planned.window, cheers = cheers, at = now }
+                window = planned.window, cheers = cheers, at = now, flag = M.flagFor(M.country) }
   elseif planned.sidesV ~= sv then
     -- the track's widths known (more of them): everyone moved to stand past its edge
     planned.sidesV = sv
@@ -1011,8 +1034,10 @@ function M.update(crs, anchor, car)
   local eNow = crs.e and crs.e.anchor == anchor and crs.e or nil
   table.sort(due, function(p, q) return p.d2 < q.d2 end)
   local per = M.level == 'lots' and M.PER_UPDATE_LOTS or M.PER_UPDATE
+  local tries = 0
   for _, dd in ipairs(due) do
-    if made >= per then break end
+    if made >= per or tries >= per * M.TRIES_X then break end
+    tries = tries + 1                  -- (far out, the ground not there yet: the nearest few looked for, not them all)
     local o = dd.o
     local x, y, z = spotFor(o, car.z or 0, eNow and function(px, py)
       return M.clearFor(eNow, px, py, crs.sides, o.model)
@@ -1024,6 +1049,7 @@ function M.update(crs, anchor, car)
       local ok, id = pcall(make, o, z, x, y)
       if ok then
         live[o.key] = { id = id, x = x, y = y, z = z, yaw = o.yaw, base = o.yaw, fan = o.fan, px = o.x, py = o.y,
+                        model = o.model,
                         cx = o.px or o.x, cy = o.py or o.y,
                         foot = M.footKind(o.model) ~= nil, sure = dd.d2 < M.SURE_M * M.SURE_M }
         nLive, made = nLive + 1, made + 1

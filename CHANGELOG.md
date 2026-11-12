@@ -3,6 +3,26 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.13 (2026-11-12)
+
+- **A gap in the guard rail where the course goes through it.** Where the course leaves a paved road through a guard
+  rail (onto a dirt road beside it, say), the rail now has an opening there: about 13 m where the course crosses
+  straight, longer where it leaves at a shallow angle (up to about 60 m). Rails along the road the course follows, and the rail on the
+  road's other side, stay.
+- **Every country's flag.** The spectators' flags are the flag of the country you're driving in (the one in
+  BeamNG.Earth's status bar), for all 250 countries and territories, no longer only Mexico's. Flags from flag-icons,
+  country names from i18n-iso-countries (both MIT).
+- **Wheel ruts are off by default.** The track's dirt textures are good enough on their own. Turn them on in the app's
+  settings if you like them. If yours was on Auto (the old default), it's switched to Off once.
+- **Spectators, canopies, trucks and course signs appear much sooner.** Crowds are put up from 900 m away (was 450 m)
+  and course signs from 1200 m (was 600 m), and the app makes them twice as often and more at a time.
+- **Less of everything vanishing for a second and coming back.** One cause: setting a GPS destination made the app ask for
+  all the roads and trees around the car again, and with a course loaded that also happened on the way to each
+  waypoint or when the route was lost for a moment. Now it only happens for a new destination with no course loaded,
+  at most every 2 minutes.
+- No ground changes: the same ground as 1.7.12 (ground version 12). The guard rail gaps are new, so everyone on a
+  BeamMP server should update together.
+
 ## 1.7.12 (2026-11-12)
 
 - **Spectators, canopies, parked trucks and course signs stay on the ground.** They were set on the first solid thing a

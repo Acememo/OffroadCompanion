@@ -22,7 +22,7 @@ local M = {}
 
 M.mode = 'checkpoints'      -- 'off' | 'checkpoints' | 'full'
 M.enabled = true            -- (mode ~= 'off'; kept for callers that switch it)
-M.SPAWN_M, M.DESPAWN_M = 600, 850
+M.SPAWN_M, M.DESPAWN_M = 1200, 1500   -- (1.7.13: was 600)
 M.SURE_M = 350              -- within this the ground under the car's block is real: heights checked every update
 M.FIX_DZ_M, M.FIX_XY_M = 0.25, 1.0
 M.SIDE_M = 6.0              -- a sign this far beside the course line, while the track's width there is not known ...
@@ -38,7 +38,8 @@ M.ARROW_MIN_DEG = 20        -- turns gentler than this get no arrow
 M.ARROW_BEFORE_M = 30
 M.ARROW_GAP_M = 120         -- at most one arrow per this much course
 M.DANGER_BEFORE_M = 45      -- ~150 ft
-M.PER_UPDATE = 3            -- objects made per update at most
+M.TRIES_PER_UPDATE = 24     -- places whose ground is looked for per update at most
+M.PER_UPDATE = 6            -- objects made per update at most (every MARKERS_S: twice a second)
 M.RAY_UP, M.RAY_LEN = 400, 1500    -- (from well above: a sign on a hillside over the car)
 M.DIR = '/art/offroadcompanion/'
 M.RETRY_S = 30
@@ -602,7 +603,7 @@ function M.update(crs, anchor, car)
   end
   if not scenetree or not scenetree.MissionGroup then return end
   M.ensureMaterials()
-  local made_ = 0
+  local made_, tries = 0, 0
   local sure2 = M.SURE_M * M.SURE_M
   for _, m in ipairs(planned.list) do
     local dx, dy = m.x - car.x, m.y - car.y
@@ -618,7 +619,8 @@ function M.update(crs, anchor, car)
         recheck(m.key, l, car, force)
       end
     end
-    if not live[m.key] and d2 < M.SPAWN_M * M.SPAWN_M and made_ < M.PER_UPDATE then
+    if not live[m.key] and d2 < M.SPAWN_M * M.SPAWN_M and made_ < M.PER_UPDATE and tries < M.TRIES_PER_UPDATE then
+      tries = tries + 1                 -- (far out, ground not there yet: a few looked for each update, not them all)
       local z = groundZ(m.x, m.y, car.z or 0)
       if z then                         -- (the ground there not loaded yet: tried again next time)
         local ok, id = pcall(spawn, m, z)

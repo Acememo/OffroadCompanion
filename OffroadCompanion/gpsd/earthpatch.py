@@ -1902,10 +1902,51 @@ def install_props(st):
         except Exception as e:              # (never break BeamNG.Earth's tile: its props as they were)
             st.stats["errors"] += 1
             log.warning("course painter: props: %s: %s", type(e).__name__, e)
+        try:
+            if getattr(P, "guardrail_rows", None):
+                n = len(P.guardrail_rows)
+                P.guardrail_rows = rails_off_course(st, frame, P.guardrail_rows)
+                if len(P.guardrail_rows) < n:
+                    with st.lock:
+                        st.stats["rails_off"] = st.stats.get("rails_off", 0) + n - len(P.guardrail_rows)
+        except Exception as e:              # (its guard rails as they were)
+            st.stats["errors"] += 1
+            log.warning("course painter: guard rails: %s: %s", type(e).__name__, e)
         return P
     _tile_parts._earthgps = True
     bw._tile_parts = _tile_parts
     return True
+
+
+def course_lines_frame(plan, frame, rows, pad_m=60.0):
+    """[(course, [(n, 2) lines in frame])] of the plan's clearing lines near rows ([_, x, y, ...] in frame)."""
+    xy = np.array([[float(r[1]), float(r[2])] for r in rows if len(r) >= 3], np.float64)
+    if not len(xy):
+        return []
+    la, lo, _ = frame.enu_to_geodetic(xy[:, 0], xy[:, 1], np.zeros(len(xy)))
+    la, lo = np.atleast_1d(la), np.atleast_1d(lo)
+    bounds = (float(lo.min()), float(la.min()), float(lo.max()), float(la.max()))
+    out = []
+    for c in plan.clearing:
+        lines = []
+        for ln in corridor.course_lines(c, bounds, pad_m):
+            e, n, _ = frame.geodetic_to_enu(ln[:, 1], ln[:, 0], np.zeros(len(ln)))
+            lines.append(np.stack([np.asarray(e), np.asarray(n)], axis=1))
+        if lines:
+            out.append((c, lines))
+    return out
+
+
+def rails_off_course(st, frame, rows):
+    """rows (a road tile's guard rail rows in frame, P.guardrail_rows) with corridor.rails_off's gaps where the
+    course lines go through them (the race course only: a GPS route runs along its roads)."""
+    plan = st.current()
+    if plan is None or not plan.clearing or not rows:
+        return rows
+    for c, lines in course_lines_frame(plan, frame, rows):
+        if getattr(c, "kind", "course") == "course":
+            rows = corridor.rails_off(rows, lines)
+    return rows
 
 
 def props_off_course(st, frame, rows):

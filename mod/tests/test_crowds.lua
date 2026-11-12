@@ -797,6 +797,37 @@ do
   crowds.clear()
 end
 
+-- 6e. (1.7.12, the user 2026-11-12: "add the flags from all of the other countries") every country's own flag, by the
+-- name BeamNG.Earth's status bar gives (in its own language), its model and picture there; an unknown one: orange
+do
+  check(crowds.flagFor('México') == 'flags/flag_mx' and crowds.flagFor('Mexico') == 'flags/flag_mx',
+    'Mexico: its flag')
+  check(crowds.flagFor('United States') == 'flags/flag_us' and crowds.flagFor('Deutschland') == 'flags/flag_de'
+    and crowds.flagFor('España') == 'flags/flag_es' and crowds.flagFor('  Canada ') == 'flags/flag_ca',
+    'other countries, in their own language too')
+  check(crowds.flagFor('Atlantis') == 'flag_orange' and crowds.flagFor('') == 'flag_orange'
+    and crowds.flagFor(nil) == 'flag_orange', 'unknown: the orange one')
+  check(markers.MATERIALS.egps_flag_mx and markers.MATERIALS.egps_flag_mx[1][2] == 'flags/flag_mx.png',
+    'its material made')
+  local countries = require('offroadCompanion/countries')
+  local n, missing = 0, {}
+  for code in pairs(countries.flags) do
+    n = n + 1
+    for _, ext in ipairs({ '.cdae', '.png' }) do
+      local f = io.open('../offroad_companion/art/offroadcompanion/flags/flag_' .. code .. ext, 'rb')
+      if f then f:close() else missing[#missing + 1] = code .. ext end
+    end
+  end
+  check(n > 240 and #missing == 0, 'every flag there: ' .. n .. ' (' .. table.concat(missing, ', ') .. ')')
+  local old = crowds.country
+  crowds.country = 'México'
+  local g = crowds.line({ kind = 'start', s = 0, side = 0 }, 1.0)
+  local mx = 0
+  for _, o in ipairs(g) do if o.model == 'flags/flag_mx' then mx = mx + 1 end end
+  check(mx > 0, 'a line in Mexico waves its flag: ' .. mx)
+  crowds.country = old
+end
+
 -- 7. parked vehicles and canopies only on open, nearly level ground: not on a roof, not hanging off a slope
 do
   local v, why = crowds.footprint({ 0, 0.1, 0, 0.2, 0 }, { 0, 0, 0, 0, 0 }, 0.45)

@@ -1,7 +1,7 @@
 // Offroad Companion (the in-game app; lua/ge/extensions/offroadCompanion/main.lua): turn-by-turn road navigation and race-course guidance.
 // The game's UI browser cannot make web requests, so everything goes through the game's Lua (bngApi.engineLua);
 // the Lua side pushes 'OffroadCompanionUpdate' five times a second while this app is on screen.
-var EGPS_APP_BUILD = '2026-11-12 05:30'   // (main.lua M.BUILD: the same, or the game kept an older copy of one of them)
+var EGPS_APP_BUILD = '2026-11-12 08:30'   // (main.lua M.BUILD: the same, or the game kept an older copy of one of them)
 angular.module('beamng.apps')
 .directive('offroadCompanion', ['$sce', function ($sce) {
   'use strict'
@@ -1390,7 +1390,7 @@ angular.module('beamng.apps')
             scope.ui.nightLights = data.settings.nightLights === 'off' || data.settings.nightLights === 'bright' ? data.settings.nightLights : 'on'
             scope.ui.crowdSound = data.settings.crowdSound === false ? 'off' : 'on'
             scope.ui.wetGround = data.settings.wetGround === false ? 'off' : 'on'
-            scope.ui.ruts = data.settings.ruts || 'auto'
+            scope.ui.ruts = data.settings.ruts || 'off'
             scope.ui.rough = data.settings.rough || 'auto'
             scope.ui.replays = data.settings.replays === false ? 'off' : 'on'
             scope.ui.notes = ({ top: 1, bottom: 1, left: 1, right: 1 })[data.settings.notes] ? data.settings.notes : 'top'

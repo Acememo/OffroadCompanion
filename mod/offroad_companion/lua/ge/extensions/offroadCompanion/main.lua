@@ -33,19 +33,20 @@ M.CHECK_S = 0.2
 M.REROUTE_S = 8
 M.SETTINGS_FILE = '/settings/offroadCompanion.json'
 M.OLD_SETTINGS_FILE = '/settings/earthGps.json'   -- (the project was BeamNG.Earth GPS before 1.2.0)
-M.VERSION = '1.7.12'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
-M.BUILD = '2026-11-12 05:30'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
+M.VERSION = '1.7.13'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
+M.BUILD = '2026-11-12 08:30'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
 
 local settings = { lang = 'en', units = 'auto', ribbon = true, autoRoute = true, zoom = 600, paint = true, paintSize = 1.0,
-                   clearCourse = true, clearRoute = true, streets = true, markers = 'checkpoints', ruts = 'auto', rough = 'auto',
+                   clearCourse = true, clearRoute = true, streets = true, markers = 'checkpoints', ruts = 'off', rough = 'auto',
                    replays = true, notes = 'top', spectators = 'some', crowdSound = true,
                    nightLights = 'on', wetGround = true,
                    uiScale = 1.0,       -- Settings' App size: the app's text and controls (0.7-2.5)
                    -- a ground code pasted for a course (Settings): the terrain version it was made with, for that course
                    groundTv = 0, groundTvFor = '',
-                   -- the defaults' generation the saved settings were made with (2: Track terrain Auto, 1.6.1)
-                   defaults = 2 }
-M.MARKERS_S = 1.0
+                   -- the defaults' generation the saved settings were made with (2: Track terrain Auto, 1.6.1; 3:
+                   -- wheel ruts Off, 1.7.13)
+                   defaults = 3 }
+M.MARKERS_S = 0.5          -- (1.7.13: was 1: the course's signs and crowds made sooner)
 M.TRACK_WAIT_S = 240
 -- Dirt tracks painted along the course where no road runs (the companion hands the course to BeamNG.Earth's server
 -- started with the course painter, OffroadCompanion/start_earth_with_tracks.py)
@@ -65,6 +66,14 @@ M.TERRAIN_SETTLE_S = 5      -- s after the companion has a replay's ground befor
                             -- read the course file every 2 s)
 M.REFRESH_DELAY_S = 4       -- the server's processes read the new course within ~2 s
 M.REFRESH_NEAR_M = 2500     -- the roads around the car are sent again when it is this close to the course
+M.REFRESH_ROUTE_S = 120     -- a new destination's: at most this often
+
+-- Pure: are the roads around the car sent again for the GPS route just sent (routeOn) to the destination dk (the
+-- last one's: last)? Only a new destination, with no course loaded, and not within REFRESH_ROUTE_S of the last.
+function M.routeRefresh(routeOn, dk, last, courseLoaded, painter, sinceRefresh)
+  return routeOn and dk ~= nil and dk ~= last and not courseLoaded and painter and true
+    and (sinceRefresh or math.huge) >= M.REFRESH_ROUTE_S or false
+end
 -- The GPS road route cleared like a course (BeamNG.Earth's server with the course painter): Earth's own GPS route
 -- (a search here or in its menu, a marker on its big map), else this app's.
 local rclear = { sent = nil, at = -math.huge, dest = nil, clearing = false, error = nil }
@@ -153,6 +162,12 @@ local function loadSettings()
       if settings.rough == 'on' then settings.rough = 'auto' end
       settings.defaults = 2
     end
+    -- (1.7.13, the user 2026-11-12: "can you make the wheel rut option to be off by default? the track dirt textures
+    -- are good enough now": settings saved with the old default, Auto, move to Off once; a choice made after stays)
+    if (tonumber(t.defaults) or 1) < 3 then
+      if settings.ruts == 'auto' then settings.ruts = 'off' end
+      settings.defaults = 3
+    end
   end
   ribbon.enabled = settings.ribbon and true or false
   settings.markers = markers.setMode(settings.markers)   -- (true / false before 2026-10-22)
@@ -238,7 +253,7 @@ local function paintWanted()
     return { enabled = false, key = 'off' }
   end
   local size = tonumber(settings.paintSize) or 1.0
-  local r = settings.ruts or 'auto'
+  local r = settings.ruts or 'off'
   local g = settings.rough or 'auto'
   -- (a ground code pasted for this course: the terrain version it was made with)
   local tv = (settings.groundTvFor == crs.track.id and tonumber(settings.groundTv) or 0) > 0 and tonumber(settings.groundTv) or nil
@@ -311,6 +326,7 @@ end
 -- them again into the trees the game kept: trees hung in the sky far off, the user 2026-10-31.)
 M.GEO_RESET = 'offroad_geo_reset'
 local function refreshRoads()
+  paint.refreshedAt = clock
   local okR, roads = pcall(require, 'beamngEarth/roads')
   local c = earthCore()
   if not (okR and roads and roads.enabled and c and c.setRoadsEnabled) then return end
@@ -351,10 +367,15 @@ local function syncRouteClear(car)
   if send({ type = 'route_clear', id = newId(), enabled = w ~= nil, points = w and pts or nil,
             name = w and w.name or nil }) then
     rclear.sent, rclear.at = key, clock
-    -- a new destination: the roads around the car again once the server has the route (not on every reroute)
+    -- a new destination: the roads around the car again once the server has the route (not on every reroute). Not
+    -- while a course is loaded (1.7.13, the user 2026-11-12: everything but the terrain, the course too, gone for a
+    -- second and drawn again when it already looked right: the route to the course's next waypoint, or a route lost
+    -- for a moment and found again, sent all the roads and trees again), nor more than once a REFRESH_ROUTE_S.
     local dk = dest and (dest.lat .. ',' .. dest.lon) or nil
-    if w and dk ~= rclear.dest and paint.painter then paint.refreshAt = clock + M.REFRESH_DELAY_S end
-    rclear.dest = w and dk or nil
+    if M.routeRefresh(w ~= nil, dk, rclear.dest, crs ~= nil, paint.painter, clock - (paint.refreshedAt or -math.huge)) then
+      paint.refreshAt = clock + M.REFRESH_DELAY_S
+    end
+    if dk then rclear.dest = dk elseif not dest then rclear.dest = nil end
   end
 end
 
