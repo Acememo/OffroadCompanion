@@ -199,7 +199,7 @@ end
 -- The ground under (x, y): rays down at three spots 0.8 m apart, their middle height (a tree or a post under one of
 -- them does not lift the marker), or the lower of two; nil when nothing is there yet.
 local OFFS = { { 0, 0 }, { 0.8, 0 }, { 0, 0.8 } }
-local function groundZ(x, y, zHint)
+local function rayZ(x, y, zHint)
   local ray = rawget(_G, 'castRayStatic')
   if not ray then return nil end
   local hits = {}
@@ -212,6 +212,34 @@ local function groundZ(x, y, zHint)
   table.sort(hits)
   if #hits == 3 then return hits[2] end
   return hits[1]
+end
+M.rayZ = rayZ
+
+-- The terrain's own height at (x, y) (the TerrainBlock the cars drive on: core_terrain), or nil.
+local function terrainAt(x, y)
+  local ct = rawget(_G, 'core_terrain')
+  if not (ct and ct.getTerrainHeight) then return nil end
+  local ok, h = pcall(ct.getTerrainHeight, vec3(x, y, 0))
+  if ok and type(h) == 'number' and h == h and math.abs(h) < 1e5 then return h end
+  return nil
+end
+M.terrainAt = terrainAt
+
+-- The ground under (x, y): the terrain the cars drive on where it is there (its height, checked by a short ray down
+-- onto it: TERRAIN_CHECK_M above it to as far below), else rayZ's rays from high above. (1.7.12, the user 2026-11-12:
+-- spectators and signs standing right, then jumping into the air, and every one after them up there too: a ray from
+-- RAY_UP above meets the first static collision on its way down, and after one of BeamNG.Earth's moves of the world
+-- (a rebase) the old place's collision stays a while where it was, over the new ground.)
+M.TERRAIN_CHECK_M = 2.0
+M.TERRAIN_TOL_M = 0.35
+local function groundZ(x, y, zHint)
+  local t = terrainAt(x, y)
+  local ray = rawget(_G, 'castRayStatic')
+  if t and ray then
+    local ok, d = pcall(ray, vec3(x, y, t + M.TERRAIN_CHECK_M), vec3(0, 0, -1), 2 * M.TERRAIN_CHECK_M)
+    if ok and type(d) == 'number' and math.abs(d - M.TERRAIN_CHECK_M) <= M.TERRAIN_TOL_M then return t end
+  end
+  return rayZ(x, y, zHint)
 end
 M.groundZ = groundZ
 

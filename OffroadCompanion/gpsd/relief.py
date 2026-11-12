@@ -934,6 +934,53 @@ def rocks_off_roads(r, ends, hws, paved=None, pad=ROCK_ROAD_PAD_M):
     return {k: np.asarray(v)[keep] for k, v in r.items()}
 
 
+# (terrain 12; the user, 2026-11-12, a screenshot of a highway gone lumpy beside the dirt track: "Paved roads get
+# disturbed when close to dirt road and that makes them difficult to drive") The track's relief never reaches onto a
+# paved road: nothing within its half width + PAVED_CLEAR_IN_M of its middle, full again PAVED_CLEAR_FADE_M further.
+PAVED_CLEAR_TV = 12
+PAVED_CLEAR_IN_M = 1.5
+PAVED_CLEAR_FADE_M = 3.0
+
+
+def paved_clear(lat, lon, ends, hws):
+    """Per point (lat, lon arrays): how much of the track's relief it keeps (0 on a paved road and its shoulder .. 1),
+    ends (M, 4) lon0, lat0, lon1, lat1 of the paved roads' segments, hws (M,) their half widths (m). Pure."""
+    lat = np.asarray(lat, np.float64).ravel()
+    lon = np.asarray(lon, np.float64).ravel()
+    out = np.ones(len(lat))
+    ends = np.asarray(ends, np.float64).reshape(-1, 4)
+    if not len(lat) or not len(ends):
+        return out
+    lat0 = float(np.mean(lat))
+    lon0 = float(np.mean(lon))
+    kx = math.radians(1.0) * courseroads.R_EARTH * math.cos(math.radians(lat0))
+    ky = math.radians(1.0) * courseroads.R_EARTH
+    px, py = (lon - lon0) * kx, (lat - lat0) * ky
+    order = np.argsort(px, kind="stable")
+    sx = px[order]
+    ax, ay = (ends[:, 0] - lon0) * kx, (ends[:, 1] - lat0) * ky
+    bx, by = (ends[:, 2] - lon0) * kx, (ends[:, 3] - lat0) * ky
+    hws = np.asarray(hws, np.float64).ravel()
+    for j in range(len(ends)):
+        r = hws[j] + PAVED_CLEAR_IN_M + PAVED_CLEAR_FADE_M
+        x0, x1 = min(ax[j], bx[j]) - r, max(ax[j], bx[j]) + r
+        lo, hi = np.searchsorted(sx, x0, "left"), np.searchsorted(sx, x1, "right")
+        if hi <= lo:
+            continue
+        idx = order[lo:hi]
+        y0, y1 = min(ay[j], by[j]) - r, max(ay[j], by[j]) + r
+        idx = idx[(py[idx] >= y0) & (py[idx] <= y1)]
+        if not len(idx):
+            continue
+        dx, dy = bx[j] - ax[j], by[j] - ay[j]
+        L2 = max(dx * dx + dy * dy, 1e-12)
+        t = np.clip(((px[idx] - ax[j]) * dx + (py[idx] - ay[j]) * dy) / L2, 0.0, 1.0)
+        d = np.hypot(ax[j] + t * dx - px[idx], ay[j] + t * dy - py[idx])
+        f = np.clip((d - hws[j] - PAVED_CLEAR_IN_M) / PAVED_CLEAR_FADE_M, 0.0, 1.0)
+        out[idx] = np.minimum(out[idx], f * f * (3.0 - 2.0 * f))
+    return out
+
+
 def rocks(course, profiles, bounds, auto=False):
     """Boulders beside the track where it is rocky (canyons, rocky hillsides) inside bounds (lon0, lat0, lon1, lat1):
     arrays (lon, lat, size m, yaw deg, rank, scale), hashed from each sample's place. auto: also the boulder fields

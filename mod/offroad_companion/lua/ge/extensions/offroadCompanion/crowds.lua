@@ -764,13 +764,7 @@ function M.footKind(model)
   return nil
 end
 
-local function terrainZ(x, y)
-  local ct = rawget(_G, 'core_terrain')
-  if not (ct and ct.getTerrainHeight) then return nil end
-  local ok, h = pcall(ct.getTerrainHeight, vec3(x, y, 0))
-  if ok and type(h) == 'number' then return h end
-  return nil
-end
+local function terrainZ(x, y) return markers.terrainAt(x, y) end
 
 -- The ground for o at (x, y): M.footprint's answer for its footprint kind.
 local function footGround(kind, x, y, yaw, zHint)
@@ -782,11 +776,17 @@ local function footGround(kind, x, y, yaw, zHint)
   end
   local hits, terr = {}, {}
   for i, p in ipairs(pts) do
-    hits[i] = markers.groundZ(p[1], p[2], zHint)
+    hits[i] = markers.rayZ(p[1], p[2], zHint)          -- (the rays: a roof or a wall shows over the terrain)
     terr[i] = terrainZ(p[1], p[2])
     if hits[i] == nil then return 'wait' end
   end
-  return M.footprint(hits, terr, M.FOOT_STEP_M[kind])
+  local v, z = M.footprint(hits, terr, M.FOOT_STEP_M[kind])
+  if v == 'ok' then
+    -- (stood on the terrain where it is there: markers.groundZ, the middle's)
+    local gz = markers.groundZ(x, y, zHint)
+    if gz then z = gz end
+  end
+  return v, z
 end
 
 -- Where o can stand: x, y, z | nil (wait) | false (nowhere: left empty). Along the line by SHIFTS_M (its yaw).

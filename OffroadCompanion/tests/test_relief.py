@@ -633,3 +633,25 @@ class TestTerrain10(unittest.TestCase):
         road = {"road": np.ones(len(s))}
         self.assertTrue(np.array_equal(rf.auto_level(c10, A10, s, road), A10["level"]), "no softening on a road")
         self.assertFalse(np.array_equal(rf.auto_level(c9, A9, s, road), A9["level"]), "9 still softens")
+
+
+@unittest.skipUnless(HAVE_NP, "numpy")
+class TestTerrain12(unittest.TestCase):
+    """Terrain 12 (the user, 2026-11-12: "Paved roads get disturbed when close to dirt road"): the track's relief never
+    on a paved road or its shoulder."""
+
+    def test_paved_clear(self):
+        ll, xy = frame()
+        (la0, lo0), (la1, lo1) = ll(0.0, 0.0), ll(1000.0, 0.0)
+        ends = np.array([[float(lo0), float(la0), float(lo1), float(la1)]])     # a paved road along y = 0, 7 m wide
+        ys = np.array([0.0, 3.0, 3.5 + rf.PAVED_CLEAR_IN_M - 0.01, 6.5, 3.5 + rf.PAVED_CLEAR_IN_M + rf.PAVED_CLEAR_FADE_M,
+                       20.0, -4.0])
+        la, lo = ll(np.full(len(ys), 500.0), ys)
+        k = rf.paved_clear(la, lo, ends, np.array([3.5]))
+        self.assertTrue(np.all(k[:3] == 0.0), f"none on the asphalt and its shoulder: {k}")
+        self.assertTrue(0.0 < k[3] < 1.0, "eased in past it")
+        self.assertTrue(np.all(k[4:6] == 1.0), "all of it further off")
+        self.assertEqual(k[6], 0.0, "either side")
+        la, lo = ll(np.array([1500.0, -600.0]), np.array([0.0, 0.0]))
+        self.assertTrue(np.all(rf.paved_clear(la, lo, ends, np.array([3.5])) == 1.0), "past the road's ends: all")
+        self.assertTrue(np.all(rf.paved_clear(la, lo, np.zeros((0, 4)), np.zeros(0)) == 1.0), "no paved road: all")

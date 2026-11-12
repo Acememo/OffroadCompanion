@@ -714,8 +714,39 @@ class _State:
             return None
         c, profs = ctx
         dz = relief.relief(c, profs, lat, lon, scale, auto=getattr(c, "rough", "on") == "auto", near=near)
+        if getattr(c, "tv", 1) >= relief.PAVED_CLEAR_TV:
+            try:
+                dz = self.paved_clear(md, lat, lon, dz)
+            except Exception as e:              # (the roads not to be had: the relief as it is, this build not kept)
+                _fault()
+                with self.lock:
+                    self.stats["errors"] += 1
+                log.warning("course painter: relief off the paved roads: %s: %s", type(e).__name__, e)
         with self.lock:
             self.stats["relief_points"] += int(np.count_nonzero(dz))
+        return dz
+
+    def paved_clear(self, md, lat, lon, dz):
+        """dz without the relief on BeamNG.Earth's paved roads (relief.paved_clear: terrain 12)."""
+        dz = np.array(dz, np.float64)
+        flat = dz.reshape(-1)
+        idx = np.flatnonzero(flat)
+        if not len(idx):
+            return dz
+        la = np.asarray(lat, np.float64).reshape(-1)[idx]
+        lo = np.asarray(lon, np.float64).reshape(-1)[idx]
+        pad = 20.0 / 111320.0
+        padlo = pad / max(0.05, math.cos(math.radians(float(la.mean()))))
+        ends, hws = [], []
+        for key in self.mapcells.cells_for_bbox(float(la.min()) - pad, float(lo.min()) - padlo,
+                                                float(la.max()) + pad, float(lo.max()) + padlo):
+            e, hw, pv = self.cell_roads(md, key, "demand")
+            if len(e) and pv.any():
+                ends.append(e[pv])
+                hws.append(hw[pv])
+        if not ends:
+            return dz
+        flat[idx] *= relief.paved_clear(la, lo, np.concatenate(ends), np.concatenate(hws))
         return dz
 
     def ruts_at(self, lat, lon):

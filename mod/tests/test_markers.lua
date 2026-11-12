@@ -328,5 +328,21 @@ check(tp and near(tp.yaw, math.pi / 2) and t.items[2].turned, 'facing the car')
 check(mk.status().test and #mk.status().test.items == 2, 'test result in the status')
 createObject = origNew
 FS = nil
+-- (1.7.12, the user 2026-11-12: signs and spectators jumping into the air) the ground is the terrain the cars drive on
+-- where it is there, not the first static collision a ray from high above meets (after a rebase the old place's
+-- collision stays a while over the new ground): a layer 20 m up is passed by
+do
+  local oldRay, oldCt = castRayStatic, core_terrain
+  castRayStatic = function(from, dir, len)
+    if from.z > 20 then return from.z - 20 end           -- (a ghost layer 20 m up)
+    return from.z - 0                                     -- (the terrain at 0)
+  end
+  check(math.abs(mk.groundZ(10, 10, 0) - 20) < 1e-9, 'no terrain known: the first collision, as before')
+  core_terrain = { getTerrainHeight = function() return 0 end }
+  check(math.abs(mk.groundZ(10, 10, 0)) < 1e-9, 'the terrain known and there: its height, under the layer')
+  castRayStatic = function(from, dir, len) return len + 1 end      -- (no collision there yet)
+  check(mk.groundZ(10, 10, 0) == nil, 'the terrain known but no collision there yet: nothing (tried again later)')
+  castRayStatic, core_terrain = oldRay, oldCt
+end
 print(string.format('%d passed, %d failed', pass, fail))
 os.exit(fail == 0 and 0 or 1)

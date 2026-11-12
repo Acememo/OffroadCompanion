@@ -768,6 +768,35 @@ do
   crowds.clear()
 end
 
+-- 6d. (1.7.12, the user 2026-11-12: "I saw them pop up in the air and all subsequent props were in the air too") a layer
+-- of static collision 20 m over the ground (the old place's, after a rebase): nobody stands on it
+do
+  crowds.clear()
+  crowds.setLevel('some')
+  local oldRe, oldPer = crowds.REGROUND_S, crowds.REGROUND_PER
+  crowds.REGROUND_S, crowds.REGROUND_PER = 0, 1000
+  local oldAnchorH = e.anchor
+  e.anchor = A
+  local crsH = { e = e, track = { waypoints = wps }, length = L, closed = false, s = 0, spots = {},
+                 spotRanges = { { -1000, 30000 } }, spotsVersion = 1 }
+  local carH = { x = 0, y = -30, z = 0 }
+  core_terrain = { getTerrainHeight = function() return 0 end }
+  for _ = 1, 20 do crowds.update(crsH, A, carH) end
+  castRayStatic = function(from) if from.z > 20 then return from.z - 20 end return from.z end
+  for _ = 1, 30 do crowds.update(crsH, A, carH) end
+  local up, n = 0, 0
+  for _, l in pairs(crowds._live()) do
+    n = n + 1
+    if l.z > 1 then up = up + 1 end
+  end
+  check(n > 10 and up == 0, 'a collision layer over the ground: nobody moved up onto it (' .. up .. ' of ' .. n .. ')')
+  castRayStatic = function(from) return from.z - 0 end
+  core_terrain = nil
+  crowds.REGROUND_S, crowds.REGROUND_PER = oldRe, oldPer
+  e.anchor = oldAnchorH
+  crowds.clear()
+end
+
 -- 7. parked vehicles and canopies only on open, nearly level ground: not on a roof, not hanging off a slope
 do
   local v, why = crowds.footprint({ 0, 0.1, 0, 0.2, 0 }, { 0, 0, 0, 0, 0 }, 0.45)

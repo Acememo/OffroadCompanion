@@ -1422,6 +1422,26 @@ class TestInsideEarth(unittest.TestCase):
         self._fresh_window(st, course, k)
         st.window(self.md, course, k, "demand")
 
+    def test_no_relief_on_paved_roads(self):
+        """(terrain 12) The track's relief never on BeamNG.Earth's paved roads: the residential road across the course
+        at x 4200 (7 m wide) keeps its own heights where the track's bumps reach it."""
+        ep = self.earthpatch
+        st = ep.state()
+        course = st.current().paint
+        if course.tv < 12:
+            self.skipTest("an older terrain version")
+        errs = st.stats["errors"]
+        xs = np.arange(4150.0, 4251.0, 0.5)
+        ys = np.arange(-25.0, 25.1, 0.5)
+        gx, gy = np.meshgrid(xs, ys)
+        la, lo = ll(gx.ravel(), gy.ravel())
+        dz = st.relief_at(self.md, la, lo)
+        self.assertEqual(st.stats["errors"], errs, "no error")
+        if dz is None:
+            self.skipTest("no relief here")
+        on = np.abs(gx.ravel() - 4200.0) <= 3.0
+        self.assertTrue(np.all(dz[on] == 0.0), "none on the asphalt")
+
     def test_prefetch_follows_the_course(self):
         """The windows planned ahead: along the course from the car's place on it (round its bends), the nearest
         ahead urgent, then behind it, then the other passes near; a car going the other way on an out-and-back is

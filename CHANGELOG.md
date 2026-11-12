@@ -3,6 +3,17 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.12 (2026-11-12)
+
+- **Spectators, canopies, parked trucks and course signs stay on the ground.** They were set on the first solid thing a
+  ray from high above met, and sometimes that isn't the ground. For example, after BeamNG.Earth moves the world under
+  you (every 15 km), the old place's collision stays where it was for a while, above the new ground. 1.7.10's re-measuring then lifted
+  props that stood right into the air, and every one placed after them too. Now they stand on the terrain the car
+  drives on wherever it's there, checked with a short ray onto it.
+- **Ground version 12: no track relief on paved roads.** The track's whoops, berms and broken ground could reach onto a
+  paved road running close beside the dirt track and make it lumpy to drive. Now nothing of it is on the asphalt or its
+  shoulder (1.5 m past its edge), easing back in over the next 3 m. Older ground versions (ground codes) are unchanged.
+
 ## 1.7.11 (2026-11-10)
 
 - **Road tiles up to 5 times faster to plan near the course.** Working out which mapped dirt roads the course follows

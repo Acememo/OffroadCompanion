@@ -218,6 +218,10 @@ Now nothing is narrower than about 6 m or changes over less than about 3 m: whoo
 in long swells, the windrows and the turns' sand as wide soft mounds, the banked corner a smooth bowl with its lip just
 past the edge, and the tallest places easing into their limit instead of flattening off.
 
+**Ground version 12** keeps version 11's ground, with the track's relief kept off paved roads: nothing of it on the
+asphalt or its shoulder (1.5 m past the edge), easing back in over the next 3 m, so a highway beside the dirt track
+stays smooth.
+
 **Ground version 11** keeps version 10's ground with two changes: no boulder lies on a road (BeamNG.Earth's own,
 paved or dirt, and off a paved road's shoulder too), and where the course leaves or joins a paved road, its dirt track
 meets the road at its edge instead of running onto the middle of the asphalt (crossings are unchanged).
@@ -395,7 +399,9 @@ the course and turn to watch you go by. Parked trucks and canopies only stand on
 roof, a wall or a steep slope is under one, it moves a few metres along the line (only where that is still clear of
 the track) or is left out, so none sits on a building or hangs off a hillside. Within 300 m of the car the ground under
 each one is measured again every few seconds, so when the ground there changes (BeamNG.Earth's quick stand-in ground
-replaced by the graded one), nothing is left standing in the air. Nothing is put up on a stretch until the
+replaced by the graded one), nothing is left standing in the air. They (and the course signs) stand on the terrain the
+car drives on, not on whatever a ray from above meets first (after BeamNG.Earth moves the world, the old place's
+collision stays a while above the new ground). Nothing is put up on a stretch until the
 companion has said where the track runs there (where it rounds a bend inside the course's line, or follows a road
 beside it), and anything standing when that comes in is put up again past the track's edge. Nothing collides: a crowd never ends a run. Where they stand, how many, their
 poses and their clothes are all picked from the course's place, so everyone on the same course sees the same crowds.

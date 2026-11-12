@@ -123,6 +123,16 @@ def fingerprint(tv):
         r = rf.rocks_off_roads(rf.rocks(c, profs, b, auto=True), np.asarray(ends), np.asarray(hws), np.asarray(pv))
         out["rocks_off_roads"] = [_h([[round(float(v), 7) if k in ("lon", "lat") else round(float(v), 3)
                                       for v in r[k]] for k in sorted(r)]), len(r["lon"])]
+    if tv >= rf.PAVED_CLEAR_TV:         # the relief off the paved roads (earthpatch.paved_clear), the world's
+        pe, ph = [], []
+        for (xa, ya), (xb, yb), hw, paved in WORLD_ROADS + [((600, -12), (1400, -12), 3.5, 1)]:
+            if paved:
+                (la, lo), (lb, lob) = ll(xa, ya), ll(xb, yb)
+                pe.append([float(lo), float(la), float(lob), float(lb)])
+                ph.append(hw)
+        keep = rf.paved_clear(gla, glo, np.asarray(pe), np.asarray(ph))
+        out["paved_clear"] = {mode: _h(np.round(rf.relief(c, profs, gla, glo, scale) * keep * 1000).astype(int)
+                                       .tolist()) for mode, scale in MODES.items()}
     if tv >= cr.PAVED_EDGE_TV:          # a run leaving and joining a paved road beside the course: at its edge
         out["paved_join"] = paved_join_fingerprint(tv)
     if tv >= 2:                     # the cut banks (banks.py), on test_banks' hillside under its stand-in grading
