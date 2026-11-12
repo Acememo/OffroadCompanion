@@ -383,6 +383,9 @@ def window_profile(course, k, pieces, road_fn, elev_fn, water_fn=None, land_fn=N
         return [round(float(u), nd) for u in v[s0:s1]]
     prof = {"algo": ALGO, "a": a, "b": b, "hw": out(hw, 2), "ctr": out(ctr, 1), "rough": out(rough), "rock": out(rock),
             "turn": out(turn, 2), "lake": out(lake)}
+    if getattr(course, "tv", 1) >= 13:             # (terrain 13: where the course comes off a paved road: shaping.py)
+        from . import shaping
+        prof["jn"] = shaping.joins(course, k, paved)
     if getattr(course, "tv", 1) >= VARIETY_TV:     # (terrain 7: the grade along the course, for the alluvial fans)
         prof["grade"] = out(_mean(np.abs(np.gradient(zc)) / STEP if n > 1 else np.zeros(n), 3), 4)
     from . import surfaces
@@ -942,9 +945,12 @@ PAVED_CLEAR_IN_M = 1.5
 PAVED_CLEAR_FADE_M = 3.0
 
 
-def paved_clear(lat, lon, ends, hws):
+def paved_clear(lat, lon, ends, hws, in_m=None, fade_m=None):
     """Per point (lat, lon arrays): how much of the track's relief it keeps (0 on a paved road and its shoulder .. 1),
-    ends (M, 4) lon0, lat0, lon1, lat1 of the paved roads' segments, hws (M,) their half widths (m). Pure."""
+    ends (M, 4) lon0, lat0, lon1, lat1 of the paved roads' segments, hws (M,) their half widths (m). in_m, fade_m: in
+    place of PAVED_CLEAR_IN_M, PAVED_CLEAR_FADE_M (shaping.py's: the asphalt only). Pure."""
+    in_m = PAVED_CLEAR_IN_M if in_m is None else in_m
+    fade_m = PAVED_CLEAR_FADE_M if fade_m is None else fade_m
     lat = np.asarray(lat, np.float64).ravel()
     lon = np.asarray(lon, np.float64).ravel()
     out = np.ones(len(lat))
@@ -962,7 +968,7 @@ def paved_clear(lat, lon, ends, hws):
     bx, by = (ends[:, 2] - lon0) * kx, (ends[:, 3] - lat0) * ky
     hws = np.asarray(hws, np.float64).ravel()
     for j in range(len(ends)):
-        r = hws[j] + PAVED_CLEAR_IN_M + PAVED_CLEAR_FADE_M
+        r = hws[j] + in_m + fade_m
         x0, x1 = min(ax[j], bx[j]) - r, max(ax[j], bx[j]) + r
         lo, hi = np.searchsorted(sx, x0, "left"), np.searchsorted(sx, x1, "right")
         if hi <= lo:
@@ -976,7 +982,7 @@ def paved_clear(lat, lon, ends, hws):
         L2 = max(dx * dx + dy * dy, 1e-12)
         t = np.clip(((px[idx] - ax[j]) * dx + (py[idx] - ay[j]) * dy) / L2, 0.0, 1.0)
         d = np.hypot(ax[j] + t * dx - px[idx], ay[j] + t * dy - py[idx])
-        f = np.clip((d - hws[j] - PAVED_CLEAR_IN_M) / PAVED_CLEAR_FADE_M, 0.0, 1.0)
+        f = np.clip((d - hws[j] - in_m) / fade_m, 0.0, 1.0)
         out[idx] = np.minimum(out[idx], f * f * (3.0 - 2.0 * f))
     return out
 

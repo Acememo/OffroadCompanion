@@ -223,6 +223,14 @@ Now nothing is narrower than about 6 m or changes over less than about 3 m: whoo
 in long swells, the windrows and the turns' sand as wide soft mounds, the banked corner a smooth bowl with its lip just
 past the edge, and the tallest places easing into their limit instead of flattening off.
 
+**Ground version 13** keeps version 12's ground with two changes. Where the track passes under a road bridge that
+BeamNG.Earth keeps, the ground under it goes down into a wide dip: a flat floor under the deck and 5 m past it each
+way, eased banks no steeper than 10% down and back up, sloped sides, deep enough for 5 m between the track and the
+deck's girders (never more than 8 m down; the deck is reckoned at its lower end's road height). And where the course
+leaves or joins a paved road that BeamNG.Earth cut into a hillside or raised on a fill, the track no longer meets the
+road at the foot of a bank metres high: it ramps between the road and its own ground at 12% at most, through a notch
+in the bank. Asphalt is never touched.
+
 **Ground version 12** keeps version 11's ground, with the track's relief kept off paved roads: nothing of it on the
 asphalt or its shoulder (1.5 m past the edge), easing back in over the next 3 m, so a highway beside the dirt track
 stays smooth.
@@ -755,6 +763,7 @@ OffroadCompanion/gpsd/geocode.py      the app's search: coordinates, Photon, Nom
 OffroadCompanion/gpsd/ruts.py         wheel ruts where the track blends into the ground (imagery contrast)
 OffroadCompanion/gpsd/relief.py       the track's relief: whoops, washes, berms, ledges, boulders (global hashes)
 OffroadCompanion/gpsd/variety.py      the track's sections: sand traps, rock sections, gravel, rock crawls
+OffroadCompanion/gpsd/shaping.py      dips under low bridges, ramps off paved roads cut into the ground (ground 13)
 OffroadCompanion/gpsd/terrain.py      the ground's version and seal (the rule for changing the ground: in its docstring)
 OffroadCompanion/gpsd/spots.py        where spectators gather: the jumps (relief's kickers, bit for bit) and paved crossings
 OffroadCompanion/gpsd/urban.py        how urban the course is along it (towns from OpenStreetMap): the Lots crowds' size

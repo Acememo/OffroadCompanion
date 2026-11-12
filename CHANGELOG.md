@@ -3,6 +3,20 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.14 (2026-11-12)
+
+- **Ground version 13: room under bridges.** Where the course's track passes under a road bridge, the ground goes down
+  into a wide, smooth dip, so there are 5 m between the track and the bridge's girders. That's enough for a trophy
+  truck coming in bouncing. The floor is flat under the deck and 5 m past it each way, the banks down and back up
+  are no steeper than 10%, and the sides slope back to the ground (at most 8 m deep). A bridge the course passes
+  under on a paved road is left to BeamNG.Earth, which lifts its decks over roads.
+- **Ground version 13: no more steep road entrances.** Where the course leaves or joins a paved road that BeamNG.Earth
+  cut into a hillside (or raised on a fill), the track met the road at the foot of a bank metres high. Now it ramps
+  between the road and its own ground at 12% at most, cutting a notch through the bank. The asphalt itself is never
+  touched.
+- 1.7.14 lays ground version 13, so everyone on a BeamMP server should update together. Older ground versions (ground
+  codes) are unchanged.
+
 ## 1.7.13 (2026-11-12)
 
 - **A gap in the guard rail where the course goes through it.** Where the course leaves a paved road through a guard

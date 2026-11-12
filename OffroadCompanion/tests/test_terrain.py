@@ -135,6 +135,8 @@ def fingerprint(tv):
                                        .tolist()) for mode, scale in MODES.items()}
     if tv >= cr.PAVED_EDGE_TV:          # a run leaving and joining a paved road beside the course: at its edge
         out["paved_join"] = paved_join_fingerprint(tv)
+    if tv >= 13:                    # the dips under bridges and the ramps off paved roads (shaping.py)
+        out["shaping"] = shaping_fingerprint(tv)
     if tv >= 2:                     # the cut banks (banks.py), on test_banks' hillside under its stand-in grading
         out["banks"] = banks_fingerprint(tv)
     if tv >= 3:                     # the ground's surfaces (surfaces.py), on test_surfaces' course
@@ -202,6 +204,52 @@ def surfaces_fingerprint(tv):
     gx, gy = np.meshgrid(np.arange(0.0, 6000.0, 2.1), np.arange(-30.0, 30.0, 1.9))
     idx, la, lo = ts.earth_idx(gx.ravel(), gy.ravel(), land)
     return [_h(profs), _h(surfaces.course_surfaces(idx, la, lo, c, profs, ts.MATS).astype(int).tolist())]
+
+
+def shaping_fingerprint(tv):
+    """A 2 km course on a paved road cut 4 m into a hill to x 700, then its own track, under a 40 m road bridge at
+    x 1400 whose ends stand 3 m over the ground: the heights shaping adds on a grid, under a stand-in grading."""
+    from gpsd import shaping
+    ll, xy = frame()
+    pts = [tuple(map(float, ll(x, 6.0 * math.sin(x / 300.0)))) for x in range(0, 2001, 20)]
+    c = cr.Course(pts, 1.0, "Shaping", tv)
+    a, b = ll(1400.0, -20.0), ll(1410.0, 20.0)
+
+    def road_fn(lat0, lon0, lat1, lon1, plane):
+        (la, lo), (lb, lob) = ll(-50.0, 0.0), ll(700.0, 0.0)
+        ax, ay = plane.xy(float(la), float(lo))
+        bx, by = plane.xy(float(lb), float(lob))
+        return [(ax, ay, bx, by, 4.0, 1)]
+
+    def elev(lat, lon):
+        x, y = xy(np.asarray(lat, np.float64), np.asarray(lon, np.float64))
+        return (0.002 * x + 0.5 * np.sin(y / 20.0)).tolist()
+
+    def grade(lat, lon, nat):
+        x, y = xy(np.asarray(lat, np.float64).ravel(), np.asarray(lon, np.float64).ravel())
+        nat = np.asarray(nat, np.float64).ravel()
+        cut = np.where(x < 700.0, np.clip((np.abs(y) - 5.0) * 2.0, 0.0, 4.0) - 4.0,
+                       np.clip((np.hypot(x - 700.0, y) - 5.0) * 2.0, 0.0, 4.0) - 4.0)
+        cut = np.where((x < 700.0) | (np.hypot(x - 700.0, y) < 7.0), cut, 0.0)
+        ends = (np.abs(x - 1405.0) < 15.0) & (np.abs(y) >= 19.0)
+        return nat + cut + np.where(ends, 3.0, 0.0)
+
+    def elev_fn(lat, lon):
+        return np.asarray(elev(np.asarray(lat).ravel().tolist(), np.asarray(lon).ravel().tolist()), np.float64)
+    profs = {}
+    for k in range(c.nwin):
+        pieces = cr.window_pieces(c, k, road_fn, elev)
+        p = rf.window_profile(c, k, pieces, road_fn, elev)
+        p["ux"] = [{"s": 1400.0, "sin": 0.97, "a": [float(a[1]), float(a[0])], "b": [float(b[1]), float(b[0])],
+                    "hw": 5.0, "len": 41.2, "id": "bridge", "f": 0}]
+        profs[k] = p
+    gx, gy = np.meshgrid(np.arange(500.0, 1600.0, 1.3), np.arange(-40.0, 40.0, 1.7))
+    gla, glo = ll(gx.ravel(), gy.ravel())
+    g = grade(gla, glo, elev_fn(gla, glo))
+    dz = shaping.shape(c, profs, gla, glo, g, grade, elev_fn)
+    return {"jn": [p.get("jn") for _, p in sorted(profs.items())],
+            "dz": _h(np.round(dz * 1000).astype(int).tolist()), "min": round(float(dz.min()), 3),
+            "max": round(float(dz.max()), 3)}
 
 
 def banks_fingerprint(tv):

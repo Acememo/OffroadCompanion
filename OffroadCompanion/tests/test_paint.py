@@ -23,6 +23,7 @@ except ImportError:
     HAVE_NP = False
 
 os.environ["EARTHGPS_DIR"] = tempfile.mkdtemp(prefix="egps-")
+os.environ["EARTHGPS_PREFETCH"] = "off"     # (no planner process racing the tests for their windows: prefetch_once is tested itself)
 
 if HAVE_NP:
     from gpsd import courseroads as cr
@@ -932,6 +933,26 @@ class TestInsideEarth(unittest.TestCase):
         self.assertEqual([k for _, _, k in roadsmod.level_ranges(g, g.index("0ff9"))], ["bridge"],
                          "over the canyon: the course passes under")
 
+    def test_bridges_over_the_course_listed(self):
+        """(terrain 13) The relief windows list the bridges crossing the course (the dips under them: shaping.py), each
+        marked when the clear course makes it a crossing at grade."""
+        st = self.earthpatch.state()
+        course = st.current().paint
+        if course.tv < 13:
+            self.skipTest("an older terrain version")
+        from gpsd import courseroads as cr_
+        got = {}
+        for x in (1800.0, 5500.0):
+            k = int(x / cr_.STEP_M) // cr_.WINDOW
+            prof = st.relief_window(self.md, course, k, "demand")
+            for b in prof.get("ux") or ():
+                got[b["id"]] = b
+        self.assertIn("0ff8", got)
+        self.assertEqual(got["0ff8"]["f"], 1, "the wash's: a crossing at grade")
+        self.assertIn("0ff9", got)
+        self.assertEqual(got["0ff9"]["f"], 0, "over the canyon: kept")
+        self.assertGreater(got["0ff9"]["hw"], 3.0)
+
     def test_toll_plaza_kept(self):
         """A toll plaza on the course stays for BeamNG.Earth to draw its booths (its islands, their booths, its flat
         footprint); a low slab and a kiosk on the course that are not a plaza's are still left out."""
@@ -1515,6 +1536,24 @@ class TestInsideEarth(unittest.TestCase):
         t = __import__("time").time_ns()
         os.utime(self.paintfile.course_path(), ns=(t, t))
         self.earthpatch.state().checked = -1e9
+
+    def test_shaping_in_the_graded_ground(self):
+        """(terrain 13) The dips under bridges and the ramps off paved roads (shaping.py) run in BeamNG.Earth's grading
+        without an error: under the motorway over the canyon (its deck high over the course: no dip needed) and at
+        the paved roads the course meets."""
+        import grading
+        st = self.earthpatch.state()
+        if st.current().paint.tv < 13:
+            self.skipTest("an older terrain version")
+        frame = self.geodesy.EnuFrame(*ll(5000, 0), 0.0)
+        errs = st.stats["errors"]
+        for x0, x1 in ((5300.0, 5700.0), (3100.0, 3500.0), (4150.0, 4250.0)):
+            xs = np.arange(x0, x1, 2.0)
+            la, lo = ll(xs, np.zeros_like(xs))
+            g = grading.Grader(frame, self.md, lambda a, b: ground(a, b))
+            z = g.apply(la, lo, ground(la, lo))
+            self.assertTrue(np.all(np.isfinite(z)))
+        self.assertEqual(st.stats["errors"], errs, "no error")
 
     def test_track_relief_in_the_graded_ground(self):
         """The track's relief (relief.py) in BeamNG.Earth's graded heights (everything takes them: the physics block,

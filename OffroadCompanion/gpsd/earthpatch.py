@@ -25,7 +25,7 @@ from collections import OrderedDict
 
 import numpy as np
 
-from . import banks, corridor, courseroads, paintfile, relief, ruts, surfaces, terrain, variety
+from . import banks, corridor, courseroads, paintfile, relief, ruts, shaping, surfaces, terrain, variety
 
 log = logging.getLogger("earthd.offroad")
 
@@ -262,6 +262,7 @@ class _State:
         self.clear_cells = OrderedDict()    # (cell, course key) -> vegetation Items with nothing on the track
         self.veg_plan = None                # the course key the vegetation's own memory was made for
         self.water = OrderedDict()  # cell key str -> [(lonlat ring (k, 2)...)] of dry / salt lakes
+        self.shape_cache = {}       # lift -> {(cid, "x" / "j", key): what shaping.py read from the grading}
         self.followed_ids = {}      # (road id, half width) -> followed by the course (followed_rows), for ...
         self.followed_plan = None   # ... this course
         self.bld = OrderedDict()    # (cell key str, layer, course key) -> Features
@@ -573,6 +574,8 @@ class _State:
                                          self.lake_fn(md, kind),
                                          self.land_fn(md, kind) if ground else None,
                                          self.waters_fn(md, kind) if ground else None)
+            if getattr(course, "tv", 1) >= shaping.FROM_TV:
+                prof["ux"] = self.bridge_crossings(md, course, k, kind)      # (terrain 13: the dips under them)
             if ef.fallback:
                 prof["dem"] = "fallback"        # (kept all the same: the first ground planned is the course's)
                 log.info("course painter: relief window %d planned on BeamNG.Earth's fallback elevation", k)
@@ -726,7 +729,60 @@ class _State:
             self.stats["relief_points"] += int(np.count_nonzero(dz))
         return dz
 
-    def paved_clear(self, md, lat, lon, dz):
+    def bridge_crossings(self, md, course, k, kind):
+        """The bridges crossing the course in window k's context (shaping.bridge_crossings, from BeamNG.Earth's map), each
+        with f: 1 when the clear course makes it a crossing at grade (corridor.bridges_to_flatten, as roads_for asks)."""
+        c0, c1 = course.context(k)
+        lat = np.asarray(course.lat[c0:c1 + 1], np.float64)
+        lon = np.asarray(course.lon[c0:c1 + 1], np.float64)
+        pad = 30.0 / 111320.0
+        padlo = pad / max(0.05, math.cos(math.radians(float(lat.mean()))))
+        found = []
+        ef = self.elev(md)
+        for key in self.mapcells.cells_for_bbox(float(lat.min()) - pad, float(lon.min()) - padlo,
+                                                float(lat.max()) + pad, float(lon.max()) + padlo):
+            feats = self.orig_cell(md, key, ("roads",), kind).layers.get("roads")
+            if feats is None or not len(feats):
+                continue
+            specs = self.roads.road_specs(feats, None, None)
+            xs = shaping.bridge_crossings(self.roads, feats, specs, course, k)
+            if not xs:
+                continue
+            lines = corridor.course_lines(course, key.bounds(), 200.0)
+            flat = set(corridor.bridges_to_flatten(self.roads, feats, lines, self.ground_near(md, kind),
+                                                   elev_fn=ef)) if lines else set()
+            for x in xs:
+                x["f"] = int(x.pop("i") in flat)
+            found.append(xs)
+        return shaping.merge_crossings(found)
+
+    def shape_at(self, grader, grade_fn, lat, lon, graded, ctx, near, lift=0.0):
+        """Metres the course's dips under bridges and ramps off paved roads add to graded (shaping.py: terrain 13), off
+        the asphalt; None when none."""
+        c, profs = ctx
+        if getattr(c, "tv", 1) < shaping.FROM_TV:
+            return None
+        elev = getattr(grader, "elev", None)
+        if elev is None:
+            return None
+
+        def elev_fn(la, lo):
+            return np.asarray(elev(np.asarray(la, np.float64), np.asarray(lo, np.float64)), np.float64)
+        plan = self.current()
+        cache = self.shape_cache.setdefault(round(float(lift), 3), {})
+        if len(cache) > 4096:
+            cache.clear()
+        dz = shaping.shape(c, profs, lat, lon, graded, grade_fn, elev_fn, near=near,
+                           cleared=bool(plan is not None and plan.clearing), cache=cache)
+        if not np.any(dz):
+            return None
+        dz = self.paved_clear(getattr(grader, "md", None) or self.md, lat, lon, dz,
+                              shaping.ASPHALT_IN_M, shaping.ASPHALT_FADE_M)
+        with self.lock:
+            self.stats["shaped_points"] = self.stats.get("shaped_points", 0) + int(np.count_nonzero(dz))
+        return dz
+
+    def paved_clear(self, md, lat, lon, dz, in_m=None, fade_m=None):
         """dz without the relief on BeamNG.Earth's paved roads (relief.paved_clear: terrain 12)."""
         dz = np.array(dz, np.float64)
         flat = dz.reshape(-1)
@@ -746,7 +802,7 @@ class _State:
                 hws.append(hw[pv])
         if not ends:
             return dz
-        flat[idx] *= relief.paved_clear(la, lo, np.concatenate(ends), np.concatenate(hws))
+        flat[idx] *= relief.paved_clear(la, lo, np.concatenate(ends), np.concatenate(hws), in_m, fade_m)
         return dz
 
     def ruts_at(self, lat, lon):
@@ -1606,6 +1662,14 @@ def install():
                     except Exception as e:  # (BeamNG.Earth's step then)
                         st.stats["errors"] += 1
                         log.warning("course painter: banks: %s: %s", type(e).__name__, e)
+                    try:                    # (terrain 13: under the bridges, off the paved roads: shaping.py)
+                        sdz = st.shape_at(self, grade_fn, lat, lon, out, ctx, near, lift)
+                        if sdz is not None:
+                            out = np.asarray(out, np.float64) + sdz.reshape(np.shape(out))
+                    except Exception as e:  # (the ground as graded then; this build not kept)
+                        _fault()
+                        st.stats["errors"] += 1
+                        log.warning("course painter: shaping: %s: %s", type(e).__name__, e)
                 dz = st.relief_at(self.md, lat, lon, near=near, ctx=ctx)
                 if dz is not None:
                     out = np.asarray(out, np.float64) + dz.reshape(np.shape(out))
