@@ -993,6 +993,44 @@ def paved_clear(lat, lon, ends, hws, in_m=None, fade_m=None):
     return out
 
 
+def paved_past(lat, lon, ends, hws, cap=100.0):
+    """Per point: how far (m) it is past the nearest paved road's asphalt edge (0 on it; cap at most), ends and hws as
+    paved_clear's. Pure."""
+    lat = np.asarray(lat, np.float64).ravel()
+    lon = np.asarray(lon, np.float64).ravel()
+    out = np.full(len(lat), float(cap))
+    ends = np.asarray(ends, np.float64).reshape(-1, 4)
+    if not len(lat) or not len(ends):
+        return out
+    lat0 = float(np.mean(lat))
+    lon0 = float(np.mean(lon))
+    kx = math.radians(1.0) * courseroads.R_EARTH * math.cos(math.radians(lat0))
+    ky = math.radians(1.0) * courseroads.R_EARTH
+    px, py = (lon - lon0) * kx, (lat - lat0) * ky
+    order = np.argsort(px, kind="stable")
+    sx = px[order]
+    ax, ay = (ends[:, 0] - lon0) * kx, (ends[:, 1] - lat0) * ky
+    bx, by = (ends[:, 2] - lon0) * kx, (ends[:, 3] - lat0) * ky
+    hws = np.asarray(hws, np.float64).ravel()
+    for j in range(len(ends)):
+        r = hws[j] + cap
+        x0, x1 = min(ax[j], bx[j]) - r, max(ax[j], bx[j]) + r
+        lo, hi = np.searchsorted(sx, x0, "left"), np.searchsorted(sx, x1, "right")
+        if hi <= lo:
+            continue
+        idx = order[lo:hi]
+        y0, y1 = min(ay[j], by[j]) - r, max(ay[j], by[j]) + r
+        idx = idx[(py[idx] >= y0) & (py[idx] <= y1)]
+        if not len(idx):
+            continue
+        dx, dy = bx[j] - ax[j], by[j] - ay[j]
+        L2 = max(dx * dx + dy * dy, 1e-12)
+        t = np.clip(((px[idx] - ax[j]) * dx + (py[idx] - ay[j]) * dy) / L2, 0.0, 1.0)
+        d = np.hypot(ax[j] + t * dx - px[idx], ay[j] + t * dy - py[idx])
+        out[idx] = np.minimum(out[idx], np.maximum(0.0, d - hws[j]))
+    return out
+
+
 def rocks(course, profiles, bounds, auto=False):
     """Boulders beside the track where it is rocky (canyons, rocky hillsides) inside bounds (lon0, lat0, lon1, lat1):
     arrays (lon, lat, size m, yaw deg, rank, scale), hashed from each sample's place. auto: also the boulder fields

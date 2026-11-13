@@ -411,5 +411,211 @@ class TestDecks(unittest.TestCase):
         g = self.grade(la, lo, None)
         self.assertFalse(np.any(sh.shape(self.c, profs, la, lo, g, self.grade, self.elev)), "no crossing: none")
 
+
+def all_profiles(c, hw=3.0, **perwin):
+    """Every window's profile of course c (flat, rough dirt), extra fields per window: perwin[name] = {k: value}."""
+    out = {}
+    for k in range(c.nwin):
+        a, b = c.inner(k)
+        n = b - a + 1
+        p = {"algo": rf.ALGO, "a": a, "b": b, "hw": [hw] * n, "ctr": [0.0] * n, "rough": [1.0] * n,
+             "rock": [0.0] * n, "turn": [0.0] * n, "lake": [0.0] * n, "road": [0.0] * n, "pv": [0.0] * n}
+        for name, by in perwin.items():
+            if k in by:
+                p[name] = by[k]
+        out[k] = p
+    return out
+
+
+def deck_near(c, k, a_xy, b_xy, ll, width=10.0, bid="deck"):
+    """bridge_near's stretches of window k for one road deck from a_xy to b_xy (plane m)."""
+    class F:
+        ids = [bid]
+        attrs = {"class": np.array(["primary"])}
+
+        def __len__(self):
+            return 1
+    a, b = ll(*a_xy), ll(*b_xy)
+
+    class R:
+        @staticmethod
+        def level_ranges(f, i):
+            return [(0.0, 1.0, "bridge")]
+
+        @staticmethod
+        def bridge_parts(f, i):
+            return [np.array([[float(a[1]), float(a[0])], [float(b[1]), float(b[0])]])]
+
+    class Spec:
+        pass
+    Spec.width = width
+    ud = sh.bridge_near(R, F(), [Spec()], c, k)
+    for x in ud:
+        x["f"] = 0
+        x.pop("i")
+    return ud
+
+
+@unittest.skipUnless(HAVE_NP, "numpy")
+class TestAlongTheLine(unittest.TestCase):
+    """Terrain 17 (the user, 2026-11-13: "The spiky section is worse"): the dips and ramps worked out along the
+    track's own line, never from the course sample nearest a point. At a hairpin by a bridge, terrain 16 cut a point
+    nearer the dug leg down to the dip and left the next one, nearer the other leg, as it was: a wall metres high."""
+
+    def setUp(self):
+        self.ll, self.xy = frame()
+        ll = self.ll
+        # east along y 0 to x 600, a hairpin (radius 15), back west along y 30
+        pts = [(x, 0.0) for x in range(0, 600, 10)]
+        pts += [(600.0 + 15.0 * math.sin(t), 15.0 - 15.0 * math.cos(t)) for t in np.linspace(0, math.pi, 6)]
+        pts += [(x, 30.0) for x in range(590, -1, -10)]
+        self.pts = [tuple(map(float, ll(x, y))) for x, y in pts]
+
+    def course(self, tv):
+        return cr.Course(self.pts, 1.0, "Hairpin", tv)
+
+    def elev(self, lat, lon):
+        return np.zeros(np.size(lat))
+
+    def grade(self, lat, lon, nat):
+        # the land rising 0.4 per m from the first leg's left edge to the hairpin's other leg; the bridge's ends 3 m up
+        x, y = self.xy(np.asarray(lat).ravel(), np.asarray(lon).ravel())
+        ends = (np.abs(x - 560.0) < 3.0) & ((np.abs(y + 20.0) < 3.0) | (np.abs(y - 8.0) < 3.0))
+        return np.where(ends, 3.0, 0.4 * np.clip(y - 6.0, 0.0, 30.0))
+
+    def profiles(self, c):
+        ud = {k: deck_near(c, k, (560.0, -20.0), (560.0, 8.0), self.ll) for k in range(c.nwin)}
+        return all_profiles(c, ud={k: v for k, v in ud.items() if v})
+
+    def surface(self, tv, step=1.0):
+        c = self.course(tv)
+        profs = self.profiles(c)
+        gx, gy = np.meshgrid(np.arange(520.0, 640.0, step), np.arange(-15.0, 45.0, step))
+        la, lo = self.ll(gx.ravel(), gy.ravel())
+        g = self.grade(la, lo, None)
+        ks = [k for k in profs if profs[k].get("ud")]
+        near = {k: profs[k] for k in ks}
+        around = {k: profs[k] for k in sh.neighbours(c, ks)}
+        dz = sh.shape(c, near, la, lo, g, self.grade, self.elev, around=around, cache={})
+        return gx, gy, (g + dz).reshape(gx.shape), dz.reshape(gx.shape)
+
+    def test_no_walls_at_the_hairpin(self):
+        gx, gy, z, dz = self.surface(17)
+        self.assertLess(float(dz.min()), -3.0, "the dip dug")
+        jump = max(float(np.abs(np.diff(z, axis=0)).max()), float(np.abs(np.diff(z, axis=1)).max()))
+        self.assertLess(jump, 1.6, "no wall anywhere: every slope under ~1:0.6")
+        _, _, z16, _ = self.surface(16)
+        jump16 = max(float(np.abs(np.diff(z16, axis=0)).max()), float(np.abs(np.diff(z16, axis=1)).max()))
+        self.assertGreater(jump16, 3.0, "(terrain 16 stood one here, and still does)")
+
+    def test_the_floor_under_the_deck(self):
+        c = self.course(17)
+        profs = self.profiles(c)
+        zT = 3.0 - sh.DECK_UNDER_M - sh.UNDER_CLEAR_M
+        xs = np.arange(550.0, 571.0, 1.0)
+        la, lo = self.ll(xs, np.zeros(len(xs)))
+        g = self.grade(la, lo, None)
+        z = g + sh.shape(c, profs, la, lo, g, self.grade, self.elev, cache={})
+        self.assertTrue(np.allclose(z, zT, atol=1e-6), z)
+
+    def test_the_same_whoever_asks(self):
+        """A point's change is the same asked alone, in a row or with the whole grid."""
+        c = self.course(17)
+        profs = self.profiles(c)
+        gx, gy = np.meshgrid(np.arange(540.0, 630.0, 3.0), np.arange(-10.0, 40.0, 3.0))
+        la, lo = self.ll(gx.ravel(), gy.ravel())
+        g = self.grade(la, lo, None)
+        whole = sh.shape(c, profs, la, lo, g, self.grade, self.elev, cache={})
+        bits = np.concatenate([sh.shape(c, profs, la[i:i + 7], lo[i:i + 7], g[i:i + 7] + 1.0, self.grade, self.elev,
+                                        cache={}) for i in range(0, len(la), 7)])
+        self.assertTrue(np.any(whole))
+        self.assertTrue(np.allclose(whole, bits, atol=1e-9))
+
+    def test_a_ramp_meets_the_road_and_its_sides_slope(self):
+        c = straight(tv=17)
+
+        def cut_grade(lat, lon, nat):
+            x, y = self.xy(np.asarray(lat).ravel(), np.asarray(lon).ravel())
+            return np.clip((x - 504.0) * 2.0, 0.0, 4.0) + np.maximum(0.0, y) * 0.25 * (x > 504.0)
+        n = c.inner(0)[1] + 1
+        profs = all_profiles(c, jn={0: sh.joins(c, 0, [i <= 50 for i in range(n)])})
+        xs = np.arange(490.0, 640.0, 0.5)
+        la, lo = self.ll(xs, np.zeros(len(xs)))
+        g = cut_grade(la, lo, None)
+        z = g + sh.shape(c, profs, la, lo, g, cut_grade, self.elev, cache={})
+        self.assertLessEqual(float((np.abs(np.diff(z)) / 0.5).max()), sh.JOIN15_GRADE * 1.05, "the ramp")
+        self.assertAlmostEqual(float(z[0]), 0.0, places=6, msg="the road untouched")
+        gx, gy = np.meshgrid(np.arange(500.0, 600.0, 1.0), np.arange(-30.0, 30.0, 1.0))
+        la, lo = self.ll(gx.ravel(), gy.ravel())
+        g = cut_grade(la, lo, None)
+        zz = (g + sh.shape(c, profs, la, lo, g, cut_grade, self.elev, cache={})).reshape(gx.shape)
+        self.assertTrue(np.all(zz <= g.reshape(gx.shape) + 1e-9), "only cut here (the ground above the road)")
+        self.assertLess(float(np.abs(np.diff(zz, axis=0)).max()), 1.2, "its sides no wall")
+
+
+@unittest.skipUnless(HAVE_NP, "numpy")
+class TestDeckStretchesMerged(unittest.TestCase):
+    def test_overlapping_stretches_one(self):
+        a = {"id": "b", "s0": 100.0, "s1": 180.0, "a": [0, 0], "b": [1, 1], "hw": 5.0, "len": 80.0, "f": 0}
+        cut = dict(a, s0=150.0, s1=180.0, len=30.0, a=[2, 2])
+        other = dict(a, id="c", s0=400.0, s1=420.0)
+        far = dict(a, s0=600.0, s1=620.0)
+        got = sh.decks17([[cut], [a, other], [far]])
+        self.assertEqual([(x["id"], x["s0"], x["s1"]) for x in got],
+                         [("b", 100.0, 180.0), ("c", 400.0, 420.0), ("b", 600.0, 620.0)])
+        self.assertEqual(got[0]["a"], [0, 0], "the longest part's ends")
+        self.assertEqual(sh.decks17([[cut], [a]]), sh.decks17([[a], [cut]]))
+
+
+@unittest.skipUnless(HAVE_NP, "numpy")
+class TestBridgesKept(unittest.TestCase):
+    """Terrain 17 (the user, 2026-11-13: "the bridge should be on top and dirt road below"): a bridge the course goes
+    under is kept, dug under; only one too low over the paved road the course is on is made a ground road."""
+
+    def setUp(self):
+        self.ll, _ = frame()
+        la, lo = self.ll(np.arange(0.0, 1001.0, 10.0), np.zeros(101))
+        self.lines = [np.stack([lo, la], 1)]
+        a, b = self.ll(500.0, -20.0), self.ll(500.0, 20.0)
+
+        class F:
+            ids = ["br"]
+            attrs = {"class": np.array(["residential"])}
+
+            def __len__(self):
+                return 1
+
+        class R:
+            @staticmethod
+            def level_ranges(f, i):
+                return [(0.0, 1.0, "bridge")]
+
+            @staticmethod
+            def bridge_parts(f, i):
+                return [np.array([[float(a[1]), float(a[0])], [float(b[1]), float(b[0])]])]
+        self.F, self.R = F(), R
+
+    def ground(self, paved):
+        la, lo = self.ll(np.array([400.0, 600.0]), np.zeros(2))
+        row = [float(lo[0]), float(la[0]), float(lo[1]), float(la[1]), 4.0, float(paved)]
+        return lambda lon, lat: np.array([row])
+
+    def flat(self, ground=None, keep=False):
+        from gpsd import corridor
+        return corridor.bridges_to_flatten(self.R, self.F, self.lines, ground,
+                                           elev_fn=lambda la, lo: np.zeros(np.size(la)), keep_under=keep)
+
+    def test_off_the_roads(self):
+        self.assertEqual(self.flat(), [0], "(before: a crossing at grade)")
+        self.assertEqual(self.flat(keep=True), [], "kept")
+
+    def test_over_a_dirt_road(self):
+        self.assertEqual(self.flat(self.ground(0)), [0], "(before: too low over the road, at grade)")
+        self.assertEqual(self.flat(self.ground(0), keep=True), [], "kept")
+
+    def test_too_low_over_a_paved_road(self):
+        self.assertEqual(self.flat(self.ground(1), keep=True), [0])
+
+
 if __name__ == "__main__":
     unittest.main()

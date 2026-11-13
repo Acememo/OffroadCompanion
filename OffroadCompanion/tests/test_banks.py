@@ -143,6 +143,23 @@ class TestBanks(unittest.TestCase):
         _, many, _ = self.run_at(both, ally)
         self.assertTrue(np.array_equal(one, many[:len(ys)]), "a point's bank depends only on the course")
 
+    def test_fading_where_the_grounds_drift_apart(self):
+        """(terrain 17) Where the caller's ground drifts off the probes' (relative to each one's natural ground), the
+        bank fades out over a metre instead of stopping at the tolerance: never a spike between two points."""
+        c17 = cr.Course([tuple(map(float, self.ll(x, 0.0))) for x in range(0, 3001, 50)], tv=17)
+        ys = np.full(41, CORE + 6.0)
+        la, lo = self.ll(np.full(len(ys), 1500.3), ys)
+        nat = self.ground(la, lo)
+        g = self.grade(la, lo, nat)
+        drift = np.linspace(0.0, 2.0, len(ys))         # (the caller's grading drifting off the probes')
+        mine = bk.banks(c17, self.profs, la, lo, nat, g + drift, self.grade, self.ground) - (g + drift)
+        self.assertGreater(abs(float(mine[0])), 0.5, "the bank")
+        self.assertEqual(float(mine[-1]), 0.0, "none past the fade")
+        self.assertLess(float(np.abs(np.diff(mine)).max()), 0.5 * abs(float(mine[0])), "fading, no step")
+        c16 = cr.Course([tuple(map(float, self.ll(x, 0.0))) for x in range(0, 3001, 50)], tv=16)
+        old = bk.banks(c16, self.profs, la, lo, nat, g + drift, self.grade, self.ground) - (g + drift)
+        self.assertGreater(float(np.abs(np.diff(old)).max()), 0.5, "(before: a step)")
+
     def test_version_1_keeps_the_step(self):
         old = cr.Course([tuple(map(float, self.ll(x, 0.0))) for x in range(0, 3001, 50)], tv=1)
         ys = np.arange(0.0, 20.0, 0.25)

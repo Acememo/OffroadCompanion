@@ -936,8 +936,20 @@ class TestInsideEarth(unittest.TestCase):
         self.assertLess(np.ptp(z), 0.1, f"flat across the core: {z}")
         self.assertGreater(np.ptp(elev(la, lo)), 0.5)
 
+    def test_bridges_the_course_goes_under_kept(self):
+        """(terrain 17; the user, 2026-11-13: "the bridge should be on top and dirt road below") The bridges the course
+        goes under off the roads or on a dirt road stay bridges (their ground dug down under them: shaping.py)."""
+        import roads as roadsmod
+        if self.earthpatch.state().current().paint.tv < 17:
+            self.skipTest("an older terrain version")
+        for x, fid in ((1500, "0cc3"), (1800, "0ff8"), (2200, "0ee5"), (2500, "0dd4"), (2700, "0ff6")):
+            f = self.roads(*ll(x, 0))
+            self.assertEqual([k for _, _, k in roadsmod.level_ranges(f, f.index(fid))], ["bridge"], fid)
+
     def test_creek_bridge_on_the_course_made_a_ground_road(self):
         import roads as roadsmod
+        if self.earthpatch.state().current().paint.tv >= 17:
+            self.skipTest("terrain 17 keeps it (test_bridges_the_course_goes_under_kept)")
         f = self.roads(*ll(1500, 0))
         i = f.index("0cc3")
         self.assertGreaterEqual(i, 0)
@@ -969,6 +981,8 @@ class TestInsideEarth(unittest.TestCase):
         course (a canyon), a crossing at grade where it cannot (a wash the elevation data filled in: the deck stood a
         metre over the course, a wall across it; the user's Libramiento de Ensenada, 2026-10-31)."""
         import roads as roadsmod
+        if self.earthpatch.state().current().paint.tv >= 17:
+            self.skipTest("terrain 17 keeps it (test_bridges_the_course_goes_under_kept)")
         f = self.roads(*ll(1800, 0))
         self.assertEqual([k for _, _, k in roadsmod.level_ranges(f, f.index("0ff8"))], [], "no headroom: at grade")
         g = self.roads(*ll(5500, 0))
@@ -990,7 +1004,8 @@ class TestInsideEarth(unittest.TestCase):
             for b in prof.get("ux") or ():
                 got[b["id"]] = b
         self.assertIn("0ff8", got)
-        self.assertEqual(got["0ff8"]["f"], 1, "the wash's: a crossing at grade")
+        self.assertEqual(got["0ff8"]["f"], 0 if course.tv >= 17 else 1,
+                         "the wash's: kept (terrain 17), a crossing at grade (before)")
         self.assertIn("0ff9", got)
         self.assertEqual(got["0ff9"]["f"], 0, "over the canyon: kept")
         self.assertGreater(got["0ff9"]["hw"], 3.0)
@@ -1631,7 +1646,10 @@ class TestInsideEarth(unittest.TestCase):
         self.assertTrue(np.allclose(lifted - flat_lifted, dz), "the same under the road mesh's lift")
         self.assertTrue(np.allclose(tunnel, flat[0]), "a tunnel's ends: none")
         self.assertGreater(np.ptp(rough[1] - flat[1]), 0.2, "along the mapped dirt road too")
-        self.assertTrue(np.allclose(rough[2], flat[2]), "none where it crosses the paved road")
+        # (terrain 17: the ramps off the road there feed the track's own profile, which BeamNG.Earth blends into the
+        # road's at the junction: a centimetre or two, whichever look built the plan first)
+        tol = 0.03 if st.current().paint.tv >= 17 else 1e-8
+        self.assertTrue(np.allclose(rough[2], flat[2], atol=tol), "none where it crosses the paved road")
         self.set_rough("auto")
         try:
             auto = graded(xs, np.zeros_like(xs))
@@ -1650,6 +1668,12 @@ class TestInsideEarth(unittest.TestCase):
         import roads as roadsmod
         if not hasattr(grading, "dirt_bumps"):
             self.skipTest("BeamNG.Earth before 1.8.2: no dirt road wear")
+        # (the wear alone: from terrain 17 the bridges over the dirt road the course follows, x 2200 - 2700, are kept
+        # and dug under, metres deep; shaping.py's own tests have those)
+        st = self.earthpatch.state()
+        keep_shape = st.shape_at
+        st.shape_at = lambda *a, **k: None
+        self.addCleanup(setattr, st, "shape_at", keep_shape)
         f = self.roads(*ll(1000, 0))
         rows = self.earthpatch.course_rows(f)
         self.assertTrue(rows, "the track's rows")

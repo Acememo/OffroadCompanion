@@ -558,12 +558,17 @@ def toll_like(f, i):
 
 
 # -- bridges ----------------------------------------------------------------------------------------------------------
-def bridges_to_flatten(roadsmod, f, lines, ground_fn=None, flatten_max_m=FLATTEN_MAX_M, elev_fn=None):
+def bridges_to_flatten(roadsmod, f, lines, ground_fn=None, flatten_max_m=FLATTEN_MAX_M, elev_fn=None,
+                       keep_under=False):
     """Indices of the road features of f whose bridge the course crosses off-road, or over the road the course is on
     too low to pass under (see the module doc). ground_fn(lon, lat) -> (M, 5) lon0, lat0, lon1, lat1, half width of
     the ground roads near the crossing (the underpass test; asked about the crossing point itself, so every cell
     holding the bridge decides alike); elev_fn(lats, lons) -> heights (m): the headroom test (without it an
-    underpass is kept). Pure given those."""
+    underpass is kept). keep_under (terrain 17 on, ground_fn then with a 6th column, 1: paved): only a bridge too low
+    over the paved road the course is on is made a ground road; every other one is kept, the course's ground dug
+    down under it (shaping.py). A short bridge made a ground road where the course went under it off the roads stood
+    its road's embankment across the course's dip (the user 2026-11-13: "the bridge should be on top and dirt road
+    below"). Pure given those."""
     if f is None or len(f) == 0 or not lines:
         return []
     allpts = np.concatenate(lines)
@@ -617,6 +622,9 @@ def bridges_to_flatten(roadsmod, f, lines, ground_fn=None, flatten_max_m=FLATTEN
             gl = np.maximum(np.hypot(*gv.T), 1e-9)
             align = np.abs(gv @ udir) / gl
             aligned = align >= math.cos(math.radians(35.0))
+            if keep_under:
+                pv = g[:, 5] >= 0.5 if g.shape[1] > 5 else np.zeros(len(g), bool)
+                aligned = aligned & pv
             if np.any((d <= gs[2] + UNDERPASS_PAD_M) & aligned):
                 # the course drives under it on a road: kept when the deck can be high enough over that road
                 under = True
@@ -626,6 +634,8 @@ def bridges_to_flatten(roadsmod, f, lines, ground_fn=None, flatten_max_m=FLATTEN
                     below = (gs[0][aligned], gs[1][aligned], gs[2][aligned])
                     if headroom(pl, q, arc, total, P, elev_fn, below) >= HEADROOM_M + HEADROOM_MARGIN_M:
                         continue
+        if not under and keep_under:
+            continue
         if not under and skip_offroad:
             # a motorway's bridge the course passes under off the roads (a wash under the highway): kept when its deck
             # can stand high enough over the course's ground there, else a crossing at grade. On 30 m elevation a

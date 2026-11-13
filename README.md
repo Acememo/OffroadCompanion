@@ -138,10 +138,12 @@ default), BeamNG.Earth's server leaves them out as the world streams in:
 - **buildings** whose footprint lies within 6 m of the course line (and their yard fences). Toll plazas stay:
   their islands, booths and flat plaza footprint are kept, so BeamNG.Earth (1.5.5 on) still draws West Coast USA's
   toll booths there; you drive through a lane as in life;
-- **short bridges the course crosses off-road** (at most 150 m long, not motorways). A creek that the map calls a
-  bridge becomes, in the game, a deck with parapet walls the course runs into. These are built as ordinary
-  ground roads instead, graded to the ground, so the course crosses at grade. A bridge over a road the course
-  follows (an underpass) stays as it is;
+- **short bridges the course crosses off-road** (at most 150 m long, not motorways), up to ground version 16. A
+  creek that the map calls a bridge becomes, in the game, a deck with parapet walls the course runs into. These are
+  built as ordinary ground roads instead, graded to the ground, so the course crosses at grade. A bridge over a road
+  the course follows (an underpass) stays as it is. From ground version 17 every bridge the course goes under off the
+  roads or on a dirt road stays a bridge, and the ground under it is dug down instead (see ground version 17 below):
+  turned into a ground road, its embankment stood across the course;
 - **low overpasses**: a short road bridge (BeamNG.Earth's own roads too, motorways included) over the road the
   course follows is kept only when BeamNG.Earth can build its deck at least 6.5 m over that road. That is judged the
   way BeamNG.Earth grades the ground: the road below is flat across its lanes and shoulder and blends up 1 m per
@@ -222,6 +224,14 @@ ground's small bumps, the banked corner's edge) stood on it as saw teeth and lon
 Now nothing is narrower than about 6 m or changes over less than about 3 m: whoops a little longer, the broken ground
 in long swells, the windrows and the turns' sand as wide soft mounds, the banked corner a smooth bowl with its lip just
 past the edge, and the tallest places easing into their limit instead of flattening off.
+
+**Ground version 17** keeps version 16's ground with three changes. The bridges the course goes under off the roads
+or on a dirt road stay bridges, the ground dug down under them; only a bridge too low over a paved road the course
+follows is still made a crossing at ground level. The dips and ramps are shaped along the track's own line, piece by
+piece, so at a hairpin or a tight bend the ground between the two legs is one smooth surface (before, two points a
+metre apart could each take the shape of a different leg: a wall of ground between them). And near a paved road a dip
+or ramp slopes up to the asphalt's edge at 1:1 at most, never a wall at it. The cut banks beside the track also fade
+out where the ground you see drifts off the measured one, instead of stopping at once.
 
 **Ground version 16** keeps version 15's ground, with a floor under every stretch of the course a bridge deck reaches
 over: crossing the course or running beside it, within the deck's width plus 8 m. The floor is 5 m under the deck's
@@ -786,7 +796,7 @@ OffroadCompanion/gpsd/geocode.py      the app's search: coordinates, Photon, Nom
 OffroadCompanion/gpsd/ruts.py         wheel ruts where the track blends into the ground (imagery contrast)
 OffroadCompanion/gpsd/relief.py       the track's relief: whoops, washes, berms, ledges, boulders (global hashes)
 OffroadCompanion/gpsd/variety.py      the track's sections: sand traps, rock sections, gravel, rock crawls
-OffroadCompanion/gpsd/shaping.py      dips under low bridges, ramps off paved roads cut into the ground (ground 13)
+OffroadCompanion/gpsd/shaping.py      dips under low bridges, ramps off paved roads cut into the ground (ground 13 on)
 OffroadCompanion/gpsd/terrain.py      the ground's version and seal (the rule for changing the ground: in its docstring)
 OffroadCompanion/gpsd/spots.py        where spectators gather: the jumps (relief's kickers, bit for bit) and paved crossings
 OffroadCompanion/gpsd/urban.py        how urban the course is along it (towns from OpenStreetMap): the Lots crowds' size

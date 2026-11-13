@@ -373,20 +373,22 @@ class _State:
                 self.segs.popitem(last=False)
         return got
 
-    def ground_near(self, md, kind):
-        """fn(lon, lat) -> (M, 5) lon0, lat0, lon1, lat1, half width of BeamNG.Earth's ground roads near the point."""
+    def ground_near(self, md, kind, paved=False):
+        """fn(lon, lat) -> (M, 5) lon0, lat0, lon1, lat1, half width of BeamNG.Earth's ground roads near the point
+        (paved: (M, 6), + 1 for asphalt or cobbles)."""
         def fn(lon, lat):
             pad = 60.0 / 111320.0
             padlo = pad / max(0.05, np.cos(np.radians(lat)))
             out = []
             for key in self.mapcells.cells_for_bbox(lat - pad, lon - padlo, lat + pad, lon + padlo):
-                e, hw = self.cell_segments(md, key, kind)
+                e, hw, pv = self.cell_roads(md, key, kind)
                 if len(e):
                     near = ((np.maximum(e[:, 0], e[:, 2]) >= lon - padlo) & (np.minimum(e[:, 0], e[:, 2]) <= lon + padlo) &
                             (np.maximum(e[:, 1], e[:, 3]) >= lat - pad) & (np.minimum(e[:, 1], e[:, 3]) <= lat + pad))
                     if near.any():
-                        out.append(np.concatenate([e[near], hw[near][:, None]], axis=1))
-            return np.concatenate(out) if out else np.zeros((0, 5))
+                        cols = [e[near], hw[near][:, None]] + ([pv[near].astype(np.float64)[:, None]] if paved else [])
+                        out.append(np.concatenate(cols, axis=1))
+            return np.concatenate(out) if out else np.zeros((0, 6 if paved else 5))
         return fn
 
     def road_segs_fn(self, md, kind):
@@ -740,9 +742,10 @@ class _State:
         lon = np.asarray(course.lon[c0:c1 + 1], np.float64)
         pad = 30.0 / 111320.0
         padlo = pad / max(0.05, math.cos(math.radians(float(lat.mean()))))
-        found, near = [], []
+        found, near, flat_ids = [], [], set()
         ef = self.elev(md)
         deck = getattr(course, "tv", 1) >= shaping.DECK_TV
+        keep = getattr(course, "tv", 1) >= shaping.KEEP_DECK_TV
         for key in self.mapcells.cells_for_bbox(float(lat.min()) - pad, float(lon.min()) - padlo,
                                                 float(lat.max()) + pad, float(lon.max()) + padlo):
             feats = self.orig_cell(md, key, ("roads",), kind).layers.get("roads")
@@ -754,12 +757,18 @@ class _State:
             if not xs and not ns:
                 continue
             lines = corridor.course_lines(course, key.bounds(), 200.0)
-            flat = set(corridor.bridges_to_flatten(self.roads, feats, lines, self.ground_near(md, kind),
-                                                   elev_fn=ef)) if lines else set()
+            flat = set(corridor.bridges_to_flatten(self.roads, feats, lines, self.ground_near(md, kind, keep),
+                                                   elev_fn=ef, keep_under=keep)) if lines else set()
+            flat_ids |= {str(feats.ids[i]) for i in flat}
             for x in xs + ns:
                 x["f"] = int(x.pop("i") in flat)
             found.append(xs)
             near.append(ns)
+        if keep:
+            # (terrain 17: a bridge made a ground road in any cell is one in all of them; a cell holding a clipped part
+            # of it that missed the course said otherwise, and the merge kept whichever part was longest)
+            for x in (y for lst in found + near for y in lst):
+                x["f"] = int(x["id"] in flat_ids)
         return shaping.merge_crossings(found), shaping.merge_near(near)
 
     def shape_at(self, grader, grade_fn, lat, lon, graded, ctx, near, lift=0.0):
@@ -774,7 +783,8 @@ class _State:
 
         def elev_fn(la, lo):
             return np.asarray(elev(np.asarray(la, np.float64), np.asarray(lo, np.float64)), np.float64)
-        if not any(p and (p.get("ux") or p.get("jn")) for p in profs.values()):
+        v17 = getattr(c, "tv", 1) >= shaping.KEEP_DECK_TV
+        if not any(p and (p.get("ux") or p.get("jn") or (v17 and p.get("ud"))) for p in profs.values()):
             return None
         plan = self.current()
         md = getattr(grader, "md", None) or self.md
@@ -791,9 +801,46 @@ class _State:
                            cleared=bool(plan is not None and plan.clearing), cache=cache, around=around)
         if not np.any(dz):
             return None
-        dz = self.paved_clear(md, lat, lon, dz, shaping.ASPHALT_IN_M, shaping.ASPHALT_FADE_M)
+        if v17:
+            dz = self.paved_hold(md, lat, lon, dz)
+        else:
+            dz = self.paved_clear(md, lat, lon, dz, shaping.ASPHALT_IN_M, shaping.ASPHALT_FADE_M)
         with self.lock:
             self.stats["shaped_points"] = self.stats.get("shaped_points", 0) + int(np.count_nonzero(dz))
+        return dz
+
+    def paved_roads_near(self, md, la, lo, pad_m=20.0):
+        """BeamNG.Earth's paved roads near the points: (segment ends (M, 4), half widths (M,))."""
+        pad = pad_m / 111320.0
+        padlo = pad / max(0.05, math.cos(math.radians(float(la.mean()))))
+        ends, hws = [], []
+        for key in self.mapcells.cells_for_bbox(float(la.min()) - pad, float(lo.min()) - padlo,
+                                                float(la.max()) + pad, float(lo.max()) + padlo):
+            e, hw, pv = self.cell_roads(md, key, "demand")
+            if len(e) and pv.any():
+                ends.append(e[pv])
+                hws.append(hw[pv])
+        if not ends:
+            return np.zeros((0, 4)), np.zeros(0)
+        return np.concatenate(ends), np.concatenate(hws)
+
+    def paved_hold(self, md, lat, lon, dz):
+        """dz held to shaping.PAVED17_SLOPE per m past the paved roads' asphalt (none on it, past ASPHALT_IN_M):
+        terrain 17's dips and ramps beside a road slope up to it, never a wall at its edge."""
+        dz = np.array(dz, np.float64)
+        flat = dz.reshape(-1)
+        idx = np.flatnonzero(flat)
+        if not len(idx):
+            return dz
+        la = np.asarray(lat, np.float64).reshape(-1)[idx]
+        lo = np.asarray(lon, np.float64).reshape(-1)[idx]
+        cap = float(np.max(np.abs(flat[idx]))) / shaping.PAVED17_SLOPE + shaping.ASPHALT_IN_M + 1.0
+        ends, hws = self.paved_roads_near(md, la, lo, cap + 10.0)
+        if not len(ends):
+            return dz
+        past = relief.paved_past(la, lo, ends, hws, cap)
+        lim = np.maximum(0.0, past - shaping.ASPHALT_IN_M) * shaping.PAVED17_SLOPE
+        flat[idx] = np.clip(flat[idx], -lim, lim)
         return dz
 
     def paved_clear(self, md, lat, lon, dz, in_m=None, fade_m=None):
@@ -1001,8 +1048,9 @@ class _State:
             for c in plan.clearing:
                 lines = corridor.course_lines(c, bounds, 200.0)
                 if lines:
-                    idx |= set(corridor.bridges_to_flatten(self.roads, base, lines, self.ground_near(md, kind),
-                                                           elev_fn=self.elev(md)))
+                    keep = getattr(c, "tv", 1) >= shaping.KEEP_DECK_TV
+                    idx |= set(corridor.bridges_to_flatten(self.roads, base, lines, self.ground_near(md, kind, keep),
+                                                           elev_fn=self.elev(md), keep_under=keep))
             if idx:
                 base = corridor.flatten(self.mapgeom, base, sorted(idx))
                 with self.lock:

@@ -81,6 +81,26 @@ DECK_NEAR_M = 8.0           # (the deck's parapet 1 m + a wide track's half widt
 DECK_STEP_M = 2.0
 DECK16_PAD_M = 6.0
 
+# (terrain 17; the user, 2026-11-13, screenshots of a short bridge the course went under turned into a block of ground
+# across its dip, and of tall spikes and sheets beside the roads at a hairpin by an overpass: "the bridge should be on
+# top and dirt road below", "the spiky section is worse"). From terrain 17:
+#   - a bridge the course goes under is kept (corridor.bridges_to_flatten keep_under), only one too low over the paved
+#     road the course is on made a ground road, and its id says so in every window (earthpatch.bridge_crossings);
+#   - the dips and ramps are worked out per piece of the track's middle line, never from the course sample nearest a
+#     point: each piece of a dip or ramp (every PROBE15_M along it) stands its design surface (the floor, the ramp's
+#     line) across the track with SIDE17 slopes either side curving steeper outward, and the ground is cut to the
+#     lowest of them and filled to the highest (ramps only), each piece's weight its own; terrain 15 and 16 took a
+#     point's distance along the course from relief.nearest, which jumps from one leg of a hairpin to the other, and
+#     each jump stood a wall the dip's depth high (the spikes and sheets);
+#   - near the paved roads a change is held to PAVED17_SLOPE per m from the asphalt's edge (in place of a fade over
+#     ASPHALT_FADE_M: a dip of metres beside a road stood a wall at the road's edge).
+KEEP_DECK_TV = 17
+SIDE17 = 0.33               # the slopes' rise per m at the flat's edge ...
+CURVE17 = 0.015             # ... + this per m squared (they meet any hillside short of ~1:1 within ~50 m)
+REACH17_M = (45.0, 15.0)    # past the track's edge: full this far, none this much further (a cliff's foot)
+PAVED17_SLOPE = 1.0
+CHUNK17 = 4096
+
 ASPHALT_IN_M = 0.3          # never on a paved road's asphalt (relief.paved_clear with these: the shoulder is shaped)
 ASPHALT_FADE_M = 1.0
 
@@ -327,9 +347,11 @@ def join_ramp(course, facts, jn, grade_fn, elev_fn, grade=JOIN_GRADE):
 
 def neighbours(course, ks):
     """The windows next to windows ks not among them: shape() reads the course's facts (its track's middle, width,
-    surface) up to a window's context past it, so it is given those too (needed_windows)."""
+    surface) up to a window's context past it, so it is given those too (needed_windows). From terrain 17 two each
+    way: the dips and ramps the next windows list are read too, and their facts reach a window past them."""
     ks = set(ks)
-    return sorted({j for k in ks for j in (k - 1, k + 1) if 0 <= j < getattr(course, "nwin", 0)} - ks)
+    r = 2 if getattr(course, "tv", 1) >= KEEP_DECK_TV else 1
+    return sorted({j for k in ks for j in range(k - r, k + r + 1) if 0 <= j < getattr(course, "nwin", 0)} - ks)
 
 
 def shape(course, profiles, lat, lon, graded, grade_fn, elev_fn, near=None, cleared=True, cache=None, around=None):
@@ -347,6 +369,10 @@ def shape(course, profiles, lat, lon, graded, grade_fn, elev_fn, near=None, clea
         return out.reshape(shp)
     profiles = {k: p for k, p in profiles.items() if p}
     if not profiles or not len(out):
+        return out.reshape(shp)
+    if getattr(course, "tv", 1) >= KEEP_DECK_TV:
+        out[:] = _shape17(course, profiles, around or {}, lat, lon, grade_fn, elev_fn, cleared,
+                          cache if cache is not None else {})
         return out.reshape(shp)
     xs, js, ds = {}, {}, {}
     for p in profiles.values():
@@ -562,3 +588,165 @@ def _earthworks(course, facts, xs, js, s, ad, hw, own, grade_fn, elev_fn, cache,
         e = _ease((tm - (t0 - 4.0)) / 4.0) * (1.0 - _ease((tm - (t0 + 0.75 * L)) / (0.25 * L)))
         dz[m] += e * (target - gm)
     return dz
+
+
+# -- terrain 17 -----------------------------------------------------------------------------------------------------
+def decks17(lists):
+    """One deck stretch per bridge and run of the course: the stretches of the same bridge that overlap (one window's
+    cut short by its context's end, another's whole) as one over all of them, its ends (a, b) the longest part's.
+    Pure."""
+    by = {}
+    for x in sorted((y for lst in lists for y in lst), key=lambda y: (y["id"], y["s0"], y["s1"], -y["len"])):
+        by.setdefault(x["id"], []).append(x)
+    out = []
+    for bid in sorted(by):
+        run = None
+        for x in by[bid]:
+            if run is not None and x["s0"] <= run["s1"] + DECK_STEP_M:
+                run["s1"] = max(run["s1"], x["s1"])
+                run["f"] = max(run["f"], int(x.get("f", 0)))
+                if x["len"] > run["len"]:
+                    run.update(a=x["a"], b=x["b"], hw=x["hw"], len=x["len"])
+                continue
+            run = {"id": bid, "s0": x["s0"], "s1": x["s1"], "a": x["a"], "b": x["b"], "hw": x["hw"],
+                   "len": x["len"], "f": int(x.get("f", 0))}
+            out.append(run)
+    return sorted(out, key=lambda x: (x["s0"], x["id"]))
+
+
+def _line17(course, facts, sp):
+    """The track's middle line at sp (m along the course): lat, lon, half widths, paved (0..1)."""
+    f = facts.at(sp)
+    la, lo = course_at(course, sp, f["ctr"])
+    return la, lo, f["hw"], f["pv"]
+
+
+def deck17(course, facts, x, grade_fn, elev_fn):
+    """Terrain 17's dip under deck stretch x along its line: (lat, lon, hw, H (the design surface), w (its weight))
+    every PROBE15_M, or None. Pure given the functions."""
+    r = deck_dip(course, facts, x, grade_fn, elev_fn)
+    if r is None:
+        return None
+    zT, depth, ramp, sp, gc = r
+    f0, f1 = x["s0"] - DECK16_PAD_M, x["s1"] + DECK16_PAD_M
+    out_d = np.maximum(0.0, np.maximum(f0 - sp, sp - f1))
+    g_edge = np.interp(np.clip(sp, f0, f1), sp, gc)
+    u = np.clip(g_edge - zT, 0.0, DIP_MAX_M) * (1.0 - _ease(out_d / ramp))
+    la, lo, hw, pv = _line17(course, facts, sp)
+    # (none where the dip has eased out, nor on a paved road: BeamNG.Earth lifts its decks over those)
+    w = np.clip(u / 0.5, 0.0, 1.0) * (1.0 - _ease(pv))
+    return la, lo, hw, gc - u, w, FLAT15_DIP_M
+
+
+def join17(course, facts, jn, grade_fn, elev_fn):
+    """Terrain 17's ramp off a paved road at join jn along its line, as deck17's, or None."""
+    r = join_ramp(course, facts, jn, grade_fn, elev_fn, JOIN15_GRADE)
+    if r is None:
+        return None
+    t0, L, z0, z1 = r["t0"], r["L"], r["z0"], r["z1"]
+    t = np.arange(t0 - 4.0, t0 + L + 1e-9, PROBE15_M)
+    sp = jn[0] * courseroads.STEP_M + int(jn[1]) * t
+    end = (len(course.lat) - 1) * courseroads.STEP_M
+    ok = (sp >= 0) & (sp <= end)
+    if ok.sum() < 2:
+        return None
+    t, sp = t[ok], sp[ok]
+    H = z0 + (z1 - z0) * _ease((t - t0) / L)
+    w = _ease((t - (t0 - 4.0)) / 4.0) * (1.0 - _ease((t - (t0 + 0.75 * L)) / (0.25 * L)))
+    la, lo, hw, _ = _line17(course, facts, sp)
+    return la, lo, hw, H, w, FLAT15_JOIN_M
+
+
+def _side17(xl):
+    return SIDE17 * xl + CURVE17 * xl * xl
+
+
+def _works17(piece, lat, lon, own, fill):
+    """One dip's or ramp's (piece: deck17's / join17's) cut (<= 0) and fill (>= 0, fill only) at the points: per piece
+    of its line the design surface across it, cut and fill each weighted by the piece's weight, the deepest cut and
+    the highest fill of the pieces. Continuous in the points (no nearest anything). Pure given own."""
+    la, lo, hw, H, w, flat = piece
+    n = len(lat)
+    cut, add = np.zeros(n), np.zeros(n)
+    if len(la) < 2 or not np.any(w > 0):
+        return cut, add
+    from .corridor import Plane
+    pl = Plane(float(la[len(la) // 2]), float(lo[len(lo) // 2]))   # (the piece's own: the same whoever asks)
+    q = pl.xy(np.stack([lo, la], 1))
+    reach = float(np.max(hw)) + flat + REACH17_M[0] + REACH17_M[1]
+    pxy = pl.xy(np.stack([lon, lat], 1))
+    lo_, hi_ = q.min(axis=0) - reach, q.max(axis=0) + reach
+    cand = np.flatnonzero(((pxy >= lo_) & (pxy <= hi_)).all(axis=1))
+    if not len(cand):
+        return cut, add
+    a, b = q[:-1], q[1:]
+    v = b - a
+    L2 = np.maximum((v * v).sum(axis=1), 1e-12)
+    for c0 in range(0, len(cand), CHUNK17):
+        ci = cand[c0:c0 + CHUNK17]
+        P = pxy[ci]
+        rx, ry = P[:, None, 0] - a[None, :, 0], P[:, None, 1] - a[None, :, 1]
+        tr = (rx * v[None, :, 0] + ry * v[None, :, 1]) / L2[None, :]
+        t = np.clip(tr, 0.0, 1.0)
+        Hk = H[:-1][None, :] + t * (H[1:] - H[:-1])[None, :]
+        hk = hw[:-1][None, :] + t * (hw[1:] - hw[:-1])[None, :]
+        wk = w[:-1][None, :] + t * (w[1:] - w[:-1])[None, :]
+        # (from the piece's strip: the track and its flat beside this piece only; past its ends the surface slopes
+        # away along the track as well as across it, so the track takes its own piece's height, never a lower one's
+        # a few metres back, and round a bend the strips' corners meet without a ridge)
+        ln = np.sqrt(L2)[None, :]
+        perp = np.abs(rx * v[None, :, 1] - ry * v[None, :, 0]) / ln
+        xl = np.hypot(np.maximum(0.0, perp - hk - flat), np.abs(tr - t) * ln)
+        wk = wk * (1.0 - _ease((xl - REACH17_M[0]) / REACH17_M[1]))
+        near = (wk > 0).any(axis=1)
+        if not near.any():
+            continue
+        ci, Hk, xl, wk = ci[near], Hk[near], xl[near], wk[near]
+        gp = own.at(ci)[:, None]
+        sd = _side17(xl)
+        cut[ci] = np.min(wk * np.minimum(0.0, Hk + sd - gp), axis=1)
+        if fill:
+            add[ci] = np.max(wk * np.maximum(0.0, Hk - sd - gp), axis=1)
+    return cut, add
+
+
+def _shape17(course, profiles, around, lat, lon, grade_fn, elev_fn, cleared, cache):
+    """Terrain 17's dips and ramps at the points (shape()'s): the deck stretches and joins every window at hand lists
+    (profiles and around), merged, each worked out along its own line (_works17). Pure given the functions (and the
+    cache they fill)."""
+    lat = np.asarray(lat, np.float64).ravel()
+    lon = np.asarray(lon, np.float64).ravel()
+    out = np.zeros(len(lat))
+    every = dict(profiles)
+    for k, p in around.items():
+        if p:
+            every.setdefault(k, p)
+    decks = [x for x in decks17([p.get("ud") or () for p in every.values()]) if not (cleared and x["f"])]
+    js = {}
+    for p in every.values():
+        for jn in p.get("jn") or ():
+            js[(int(jn[0]), int(jn[1]))] = jn
+    if not decks and not js:
+        return out
+    facts = relief._Facts(every)
+    # (the track's look is in the key: BeamNG.Earth's grading of the track, which the shapes are worked out on, wears
+    # it or not by it, and a shape kept from before the look changed was another ground's)
+    cid = (getattr(course, "cid", ""), getattr(course, "rough", None))
+    own = _OwnGround(lat, lon, grade_fn, elev_fn)
+    cut, add = np.zeros(len(lat)), np.zeros(len(lat))
+    for x in decks:
+        ck = (cid, "d17", x["id"], x["s0"], x["s1"], tuple(x["a"]), tuple(x["b"]))
+        if ck not in cache:
+            cache[ck] = deck17(course, facts, x, grade_fn, elev_fn)
+        if cache[ck] is not None:
+            c, _ = _works17(cache[ck], lat, lon, own, False)
+            cut = np.minimum(cut, c)
+    for key in sorted(js):
+        ck = (cid, "j17", key)
+        if ck not in cache:
+            cache[ck] = join17(course, facts, js[key], grade_fn, elev_fn)
+        if cache[ck] is not None:
+            c, a = _works17(cache[ck], lat, lon, own, True)
+            cut = np.minimum(cut, c)
+            add = np.maximum(add, a)
+    return cut + add

@@ -36,6 +36,8 @@ BANK_GRADE = 0.8            # rise per metre out, at least
 REACH_M = 15.0              # m out from the road's level the bank meets the natural ground at the latest
 BIN_M = 1.0                 # m of course between probes
 SAME_TOL_M = 0.5            # the caller's ground this near the probes' (relative to each one's natural ground)
+SOFT_TV = 17                # (the caller's ground off the probes': the bank fades out over SAME_FADE_M)
+SAME_FADE_M = 1.0
 OVER_TOL_M = 0.05           # only ground the grading left between the road's level and the natural ground is banked
 
 
@@ -149,7 +151,14 @@ def banks(course, profiles, lat, lon, base, graded, grade_fn, elev_fn, near=None
         zr_, x_, k_, w_ = zr[pre], x[pre], k[pre], w[pre]
         # (and only where the caller's ground stands to its own natural ground as the probes' does: not on another
         # road's fill the probes' grading does not have)
-        same = np.abs((out[idx[pre]] - base[idx[pre]]) - (g - nat)) <= SAME_TOL_M
+        off = np.abs((out[idx[pre]] - base[idx[pre]]) - (g - nat))
+        if getattr(course, "tv", FROM_TV) >= SOFT_TV:
+            # (terrain 17: fading out over SAME_FADE_M past the tolerance, not stopping at it: a bank of metres on one
+            # point and none on the next stood a spike wherever the two grounds drifted apart across it)
+            w_ = w_ * (1.0 - _ramp(off, SAME_TOL_M, SAME_TOL_M + SAME_FADE_M))
+            same = w_ > 0
+        else:
+            same = off <= SAME_TOL_M
         ok = (nat > zr_) & (g >= zr_ - OVER_TOL_M) & (g <= nat + OVER_TOL_M) & same
         if ok.any():
             new = bank(x_[ok], zr_[ok], nat[ok], k_[ok])

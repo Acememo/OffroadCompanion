@@ -3,6 +3,27 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.20 (2026-11-13)
+
+- **Ground version 17: the bridge on top, the track below.** Where the course went under a short bridge off the roads
+  or along a dirt road, the clear course turned that bridge into a ground road, and its embankment stood across the
+  dip dug for the course: a block of ground in the way. Now those bridges stay bridges and the ground under them is
+  dug down, 5 m under the girders. Only a bridge too low over a paved road the course follows is still made a crossing
+  at ground level. The windows that list the dips also agree now on which bridges were made ground roads (one cell
+  of the map could say a bridge was, the next that it wasn't).
+- **Ground version 17: no walls at hairpins.** The dips under bridges and the ramps off paved roads took each point's
+  place along the course from the nearest bit of course. At a hairpin or a tight bend, two points a metre apart could
+  each pick a different leg: one dug down metres, the next untouched, a wall or a sheet of ground between them. Now
+  each dip and ramp is shaped along the track's own line, piece by piece, so the ground between the two legs is one
+  smooth surface.
+- **Ground version 17: no wall at the road's edge.** Near a paved road a dip or a ramp now slopes up to the asphalt's
+  edge at 1:1 at most. Before, it stopped within a metre of the edge, a wall the dip's depth high.
+- **Ground version 17: cut banks fade out.** The cut banks beside the track are only built where the ground you see
+  matches the measured ground. Where the two drift apart the bank now fades out over a metre instead of stopping at
+  once (a spike).
+- 1.7.20 lays ground version 17, so everyone on a BeamMP server should update together. Older ground versions are
+  unchanged.
+
 ## 1.7.19 (2026-11-13)
 
 - **Ground version 16: a dip under every low deck the track passes.** Before, the ground was lowered only where a
