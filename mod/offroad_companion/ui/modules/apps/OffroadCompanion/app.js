@@ -1,7 +1,7 @@
 // Offroad Companion (the in-game app; lua/ge/extensions/offroadCompanion/main.lua): turn-by-turn road navigation and race-course guidance.
 // The game's UI browser cannot make web requests, so everything goes through the game's Lua (bngApi.engineLua);
 // the Lua side pushes 'OffroadCompanionUpdate' five times a second while this app is on screen.
-var EGPS_APP_BUILD = '2026-11-12 23:55'   // (main.lua M.BUILD: the same, or the game kept an older copy of one of them)
+var EGPS_APP_BUILD = '2026-11-12 23:59'   // (main.lua M.BUILD: the same, or the game kept an older copy of one of them)
 angular.module('beamng.apps')
 .directive('offroadCompanion', ['$sce', function ($sce) {
   'use strict'

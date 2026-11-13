@@ -312,5 +312,20 @@ class TestEarthworks(unittest.TestCase):
         z = g + sh.shape(self.c, profs, la, lo, g, grade, self.elev)
         self.assertTrue(np.allclose(z, floor, atol=1e-6))
 
+    def test_the_same_change_whatever_ground_the_caller_has(self):
+        """The change is worked out on the probes' own ground: a caller whose heights differ from it (a far ground
+        tile's coarser DEM, BeamNG.Earth's roughening of the land) gets the same change, never a spike or a pit
+        (1.7.17, the user 2026-11-12: a row of tall spikes beside the road)."""
+        n = self.c.inner(0)[1] + 1
+        profs = profile(self.c, jn=sh.joins(self.c, 0, [i <= 50 for i in range(n)]))
+        gx, gy = np.meshgrid(np.arange(490.0, 600.0, 3.0), np.arange(-25.0, 25.0, 3.0))
+        la, lo = self.ll(gx.ravel(), gy.ravel())
+        g = self.cut_grade(la, lo, None)
+        mine = sh.shape(self.c, profs, la, lo, g, self.cut_grade, self.elev, cache={})
+        coarse = g + 3.0 * np.sin(gx.ravel() / 7.0) + 1.5                 # (another ground, metres off)
+        theirs = sh.shape(self.c, profs, la, lo, coarse, self.cut_grade, self.elev, cache={})
+        self.assertTrue(np.any(mine))
+        self.assertTrue(np.array_equal(mine, theirs))
+
 if __name__ == "__main__":
     unittest.main()

@@ -3,6 +3,18 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.18 (2026-11-12)
+
+- **No more spikes and pits beside the road.** The dips under bridges and the ramps off paved roads (ground versions
+  13 to 15) aimed at heights measured on one version of the ground (BeamNG.Earth's road grading on its detailed
+  elevation), then set them against whatever ground the part of the game asking had. The ground you drive on, the
+  near ground you see and the far ground you see are each built from their own elevation (coarser far away, roughened
+  off the roads). In hills those differ by metres, so the same shape came out as a row of tall spikes in one and a pit
+  in another. Now each change is worked out entirely on the measured ground and only the change is added, so every part
+  of the game gets the same dip or ramp.
+- The same ground versions as 1.7.17 (up to 15), now as they were meant to be. 1.7.14 to 1.7.17 could build them
+  differently from place to place, so everyone on a BeamMP server should update to 1.7.18.
+
 ## 1.7.17 (2026-11-12)
 
 - **Ground version 15: road entrances and bridge dips done as earthworks.** In 1.7.14 a ramp off a paved road could

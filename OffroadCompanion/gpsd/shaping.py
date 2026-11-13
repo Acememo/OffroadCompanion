@@ -285,7 +285,6 @@ def shape(course, profiles, lat, lon, graded, grade_fn, elev_fn, near=None, clea
         return out.reshape(shp)
     lat = np.asarray(lat, np.float64).ravel()
     lon = np.asarray(lon, np.float64).ravel()
-    g_all = np.asarray(graded, np.float64).ravel()
     idx, d, s = near if near is not None else relief.nearest(course, profiles, lat, lon)
     if not len(idx):
         return out.reshape(shp)
@@ -300,7 +299,8 @@ def shape(course, profiles, lat, lon, graded, grade_fn, elev_fn, near=None, clea
     cache = cache if cache is not None else {}
     cid = getattr(course, "cid", "")
     if getattr(course, "tv", 1) >= ENVELOPE_TV:
-        out[idx] = _earthworks(course, facts, xs, js, s, ad, hw, g_all[idx], grade_fn, elev_fn, cache, cid)
+        own = _OwnGround(lat[idx], lon[idx], grade_fn, elev_fn)
+        out[idx] = _earthworks(course, facts, xs, js, s, ad, hw, own, grade_fn, elev_fn, cache, cid)
         return out.reshape(shp)
     dz = np.zeros(len(idx))
     # under the bridges
@@ -320,7 +320,7 @@ def shape(course, profiles, lat, lon, graded, grade_fn, elev_fn, near=None, clea
         w = 1.0 - _smooth((ad[m] - hw[m] - DIP_SIDE_FLAT_M) / fade)
         dz[m] = np.minimum(dz[m], -u * w)
     # off the paved roads
-    g = g_all[idx]
+    own = _OwnGround(lat[idx], lon[idx], grade_fn, elev_fn)
     for key in sorted(js):
         jn = js[key]
         ck = (cid, "j", key)
@@ -340,7 +340,7 @@ def shape(course, profiles, lat, lon, graded, grade_fn, elev_fn, near=None, clea
         # (near the road the ground itself is set to the ramp: the cut bank goes, whichever way it runs across the
         # track; further on the track's own cross shape is moved to it, so it meets the ground where the ramp ends)
         a = 1.0 - _smooth((tm - t0 - 0.5 * L) / (0.3 * L))
-        corr = a * (h - g[m]) + (1.0 - a) * (h - gc)
+        corr = a * (h - own.at(m)) + (1.0 - a) * (h - gc)
         fade = JOIN_SIDE_FADE[0] + JOIN_SIDE_FADE[1] * np.abs(corr)
         w = 1.0 - _smooth((ad[m] - hw[m] - JOIN_SIDE_FLAT_M) / fade)
         dz[m] += corr * w
@@ -352,11 +352,36 @@ def _ease(t):
     return _smooth(np.asarray(t, np.float64))
 
 
-def _earthworks(course, facts, xs, js, s, ad, hw, g, grade_fn, elev_fn, cache, cid):
+class _OwnGround:
+    """The points' heights as the probes along the course have them (grade_fn on elev_fn's ground), read only where a
+    dip or a ramp reaches. Every shape is worked out against these, never against the heights the caller passed:
+    those are the caller's own ground (the physics block's DEM, a far ground tile's coarser one, BeamNG.Earth's
+    roughening of the land), metres from the probes' in hills, so a target height from the probes set against them
+    stood spikes and pits in some grounds and not in others (1.7.17, the user 2026-11-12: a row of tall spikes beside
+    the road). The change worked out here (dz) is the same whoever asks, and is added to the caller's own."""
+
+    def __init__(self, lat, lon, grade_fn, elev_fn):
+        self.lat, self.lon = np.asarray(lat, np.float64), np.asarray(lon, np.float64)
+        self.v = np.full(len(self.lat), np.nan)
+        self.grade_fn, self.elev_fn = grade_fn, elev_fn
+
+    def at(self, m):
+        need = np.zeros(len(self.v), bool)
+        need[m] = True
+        need &= np.isnan(self.v)
+        if need.any():
+            la, lo = self.lat[need], self.lon[need]
+            nat = np.asarray(self.elev_fn(la, lo), np.float64).ravel()
+            self.v[need] = np.asarray(self.grade_fn(la, lo, nat), np.float64).ravel()
+        return self.v[m]
+
+
+def _earthworks(course, facts, xs, js, s, ad, hw, own, grade_fn, elev_fn, cache, cid):
     """Terrain 15's dips and ramps at the points (s along the course, ad from the track's middle, hw its half width
     there, g their graded heights): a design surface along the track, flat FLAT15 past its edges, sloping SIDE15 out,
     the ground cut down to it (a dip: never filled) or cut and filled to it (a ramp), easing in and out along the
-    course. Pure given the functions (and the cache they fill)."""
+    course; own: the points' heights as the probes have them (_OwnGround). Pure given the functions (and the cache
+    they fill)."""
     dz = np.zeros(len(s))
     # under the bridges: the floor UNDER_CLEAR_M under the girders all the way under the deck and past it
     for key in sorted(xs):
@@ -380,7 +405,8 @@ def _earthworks(course, facts, xs, js, s, ad, hw, g, grade_fn, elev_fn, cache, c
         u = depth * (1.0 - _ease((np.abs(s[m] - x["s"]) - floor) / ramp))
         H = np.interp(s[m], sp, gc) - u
         xl = np.maximum(0.0, ad[m] - hw[m] - FLAT15_DIP_M)
-        cut = np.minimum(g[m], H + SIDE15 * xl) - g[m]          # (<= 0: only ever down)
+        gm = own.at(m)
+        cut = np.minimum(gm, H + SIDE15 * xl) - gm              # (<= 0: only ever down)
         e = np.clip(u / 0.5, 0.0, 1.0)                           # (none where the dip has eased out)
         dz[m] = np.minimum(dz[m], e * cut)
     # off the paved roads: the ramp's line from the road's level to the ground's
@@ -400,8 +426,9 @@ def _earthworks(course, facts, xs, js, s, ad, hw, g, grade_fn, elev_fn, cache, c
         tm = t[m]
         H = z0 + (z1 - z0) * _ease((tm - t0) / L)
         xl = np.maximum(0.0, ad[m] - hw[m] - FLAT15_JOIN_M)
-        target = np.clip(g[m], H - SIDE15 * xl, H + SIDE15 * xl)
+        gm = own.at(m)
+        target = np.clip(gm, H - SIDE15 * xl, H + SIDE15 * xl)
         # (easing in from the road's edge, out where the ramp has met the ground)
         e = _ease((tm - (t0 - 4.0)) / 4.0) * (1.0 - _ease((tm - (t0 + 0.75 * L)) / (0.25 * L)))
-        dz[m] += e * (target - g[m])
+        dz[m] += e * (target - gm)
     return dz

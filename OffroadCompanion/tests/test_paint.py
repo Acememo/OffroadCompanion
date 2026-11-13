@@ -1459,8 +1459,10 @@ class TestInsideEarth(unittest.TestCase):
         from gpsd import courseroads as cr_
         ep = self.earthpatch
         st = ep.state()
-        course = st.current().paint
-        k = course.nwin - 1          # (the far end of the course: no other read of the test world plans it meanwhile)
+        live = st.current().paint
+        # (a course of its own, the same line a hair wider: no other read of the test world plans its windows meanwhile)
+        course = cr_.Course(list(zip(live.lat, live.lon)), live.scale * 1.001, "Race test", live.tv)
+        k = 3
         try:                                # (no car on the course: no prefetcher plans these windows meanwhile)
             os.unlink(self.paintfile.pose_path())
         except OSError:
@@ -1492,6 +1494,8 @@ class TestInsideEarth(unittest.TestCase):
         calls = []
 
         def flaky(*a, **kw):
+            if not a or a[0] is not course:     # (another course's window planned meanwhile: as it is)
+                return real(*a, **kw)
             calls.append(1)
             if len(calls) == 1:
                 raise ValueError("cell not downloaded yet")
