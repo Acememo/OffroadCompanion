@@ -121,6 +121,19 @@ class TestBanks(unittest.TestCase):
         out = bk.banks(self.course, self.profs, la, lo, nat, g, self.grade, self.ground)
         self.assertTrue(np.array_equal(g, out))
 
+    def test_the_same_change_on_another_ground(self):
+        """A caller whose ground is metres off the probes' (a far ground tile's coarser elevation) gets the same bank
+        change, never a spike (the user, 2026-11-12)."""
+        ys = np.arange(0.0, 26.0, 0.25)
+        la, lo = self.ll(np.full(len(ys), 1500.3), ys)
+        nat = self.ground(la, lo)
+        g = self.grade(la, lo, nat)
+        mine = bk.banks(self.course, self.profs, la, lo, nat, g, self.grade, self.ground) - g
+        off = 2.5 * np.sin(ys / 3.0)
+        theirs = bk.banks(self.course, self.profs, la, lo, nat + off, g + off, self.grade, self.ground) - (g + off)
+        self.assertGreater(np.abs(mine).max(), 0.5)
+        self.assertTrue(np.allclose(mine, theirs, atol=1e-9))
+
     def test_the_same_whoever_asks(self):
         ys = np.arange(0.0, 20.0, 0.3)
         xs = np.full(len(ys), 1234.5)

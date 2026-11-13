@@ -576,7 +576,9 @@ class _State:
                                          self.land_fn(md, kind) if ground else None,
                                          self.waters_fn(md, kind) if ground else None)
             if getattr(course, "tv", 1) >= shaping.FROM_TV:
-                prof["ux"] = self.bridge_crossings(md, course, k, kind)      # (terrain 13: the dips under them)
+                prof["ux"], ud = self.bridge_crossings(md, course, k, kind)  # (terrain 13: the dips under them)
+                if getattr(course, "tv", 1) >= shaping.DECK_TV:
+                    prof["ud"] = ud                                          # (terrain 16: under and beside decks)
             if ef.fallback:
                 prof["dem"] = "fallback"        # (kept all the same: the first ground planned is the course's)
                 log.info("course painter: relief window %d planned on BeamNG.Earth's fallback elevation", k)
@@ -738,8 +740,9 @@ class _State:
         lon = np.asarray(course.lon[c0:c1 + 1], np.float64)
         pad = 30.0 / 111320.0
         padlo = pad / max(0.05, math.cos(math.radians(float(lat.mean()))))
-        found = []
+        found, near = [], []
         ef = self.elev(md)
+        deck = getattr(course, "tv", 1) >= shaping.DECK_TV
         for key in self.mapcells.cells_for_bbox(float(lat.min()) - pad, float(lon.min()) - padlo,
                                                 float(lat.max()) + pad, float(lon.max()) + padlo):
             feats = self.orig_cell(md, key, ("roads",), kind).layers.get("roads")
@@ -747,15 +750,17 @@ class _State:
                 continue
             specs = self.roads.road_specs(feats, None, None)
             xs = shaping.bridge_crossings(self.roads, feats, specs, course, k)
-            if not xs:
+            ns = shaping.bridge_near(self.roads, feats, specs, course, k) if deck else []
+            if not xs and not ns:
                 continue
             lines = corridor.course_lines(course, key.bounds(), 200.0)
             flat = set(corridor.bridges_to_flatten(self.roads, feats, lines, self.ground_near(md, kind),
                                                    elev_fn=ef)) if lines else set()
-            for x in xs:
+            for x in xs + ns:
                 x["f"] = int(x.pop("i") in flat)
             found.append(xs)
-        return shaping.merge_crossings(found)
+            near.append(ns)
+        return shaping.merge_crossings(found), shaping.merge_near(near)
 
     def shape_at(self, grader, grade_fn, lat, lon, graded, ctx, near, lift=0.0):
         """Metres the course's dips under bridges and ramps off paved roads add to graded (shaping.py: terrain 13), off

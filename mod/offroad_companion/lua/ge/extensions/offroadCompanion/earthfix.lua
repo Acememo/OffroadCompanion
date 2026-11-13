@@ -48,8 +48,32 @@ local function towers()
   return true
 end
 
+-- Closing the game in a BeamMP session (the user, 2026-11-12: "beamng still hangs when closing, this is tested on our
+-- BeamMP server"; the game's log ends with BeamMP leaving the server, then BeamNG.Earth's and Offroad Companion's own
+-- mods "switched back on", then nothing): BeamMP leaves the server as the game closes, and BeamNG.Earth's
+-- beammp.onServerLeave switches its local mod back on there, loading its scripts and extensions into a game that is
+-- shutting down. Once the game is closing (onPreExit / onExit: exiting) it is left off; the next start finds it as the
+-- player left it (BeamMP switches it off again on joining anyway).
+M.exiting = false
+function M.holdOnExit()
+  local bm = package.loaded['beamngEarth/beammp']
+  if type(bm) ~= 'table' or type(bm.onServerLeave) ~= 'function' or bm._offroadExitHold then return false end
+  local orig = bm.onServerLeave
+  bm.onServerLeave = function(...)
+    if M.exiting then
+      if log then log('I', 'offroadCompanion', 'BeamMP: left the server as the game closes: BeamNG.Earth\'s mod left as it is') end
+      return false
+    end
+    return orig(...)
+  end
+  bm._offroadExitHold = true
+  M.applied.exitHold = true
+  return true
+end
+
 -- Every so often (BeamNG.Earth's extensions load after ours, and again after a level change): the fixes in place.
 function M.apply()
+  pcall(M.holdOnExit)
   pcall(mapState)
   pcall(towers)
 end

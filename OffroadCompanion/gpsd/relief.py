@@ -307,6 +307,7 @@ def window_profile(course, k, pieces, road_fn, elev_fn, water_fn=None, land_fn=N
     hw = np.full(n, np.nan)
     ctr = np.zeros(n)               # the road's middle, m left (+) of the course line (the course on a road it follows)
     paved = np.zeros(n, bool)
+    paved_on = np.zeros(n, bool)    # (the course on a paved road it follows or crosses, crisp: terrain 16's "pv")
     road = np.zeros(n)              # on a mapped road it follows (not its own track)
     if len(segs):
         A, B, H, P = segs[:, 0:2], segs[:, 2:4], segs[:, 4], segs[:, 5] > 0.5
@@ -326,6 +327,7 @@ def window_profile(course, k, pieces, road_fn, elev_fn, water_fn=None, land_fn=N
         j = dd.argmin(axis=1)
         on = np.isfinite(dd[np.arange(n), j])
         paved |= on & P[j]
+        paved_on = (on & P[j]) | ((dist <= H[None]) & P[None]).any(axis=1)
         hw = np.where(on, H[j], hw)
         road = on.astype(np.float64)
         qj = q[np.arange(n), j]
@@ -388,6 +390,8 @@ def window_profile(course, k, pieces, road_fn, elev_fn, water_fn=None, land_fn=N
     if getattr(course, "tv", 1) >= 13:             # (terrain 13: where the course comes off a paved road: shaping.py)
         from . import shaping
         prof["jn"] = shaping.joins(course, k, paved)
+        if getattr(course, "tv", 1) >= shaping.DECK_TV:
+            prof["pv"] = out(paved_on.astype(np.float64), 1)
     if getattr(course, "tv", 1) >= VARIETY_TV:     # (terrain 7: the grade along the course, for the alluvial fans)
         prof["grade"] = out(_mean(np.abs(np.gradient(zc)) / STEP if n > 1 else np.zeros(n), 5 if wide else 3), 4)
     from . import surfaces
@@ -399,7 +403,7 @@ def window_profile(course, k, pieces, road_fn, elev_fn, water_fn=None, land_fn=N
 
 # -- the relief at points -------------------------------------------------------------------------------------------
 FACT_FIELDS = ("hw", "ctr", "rough", "rock", "turn", "lake", "canyon", "road", "arid", "wetl", "cover", "grass",
-               "grade", "washn", "sean")      # (the last three: from terrain version 7, variety.py)   # (the last four: from
+               "grade", "washn", "sean", "pv")      # (pv: from terrain version 16, shaping.py)      # (the last three: from terrain version 7, variety.py)   # (the last four: from
                                                                                                 # terrain version 3)
 
 

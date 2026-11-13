@@ -3,6 +3,27 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.19 (2026-11-13)
+
+- **Ground version 16: a dip under every low deck the track passes.** Before, the ground was lowered only where a
+  bridge's line crossed the course at 20 degrees or more, and never where the course came within 4 m of a paved road,
+  so in town (every street paved) a low overpass sat right over the track. Now every stretch of the course a deck
+  reaches over (crossing it or running beside it, within its width plus 8 m) gets a floor 5 m under the deck's girders
+  all along that stretch and 6 m past it, easing in and out at 10% at most. The one exception is where the course is
+  on a paved road itself, because BeamNG.Earth lifts its decks over roads.
+- **No more spikes beside the track's cut banks.** The natural cut banks beside the track (ground version 2 on) had
+  the same mismatch 1.7.18 fixed for the dips and ramps: worked out on one version of the ground and set against
+  another, they stood as spikes in the far ground you see. They're now worked out on the measured ground, and only the
+  change is added.
+- **BeamNG.drive closes in BeamMP.** As the game closed, BeamMP left the server, and BeamNG.Earth and this app each
+  switched their own mod back on, loading scripts into a game that was shutting down. Your log ended right there.
+  Neither mod is switched back on while the game is closing now; leaving a server during play is unchanged.
+- **The ground code is always in Settings**, with its Copy button and the box to paste a friend's code. Before, it only
+  showed while the track was being laid.
+- **Courses opens on My files (tracks folder).**
+- 1.7.19 lays ground version 16, so everyone on a BeamMP server should update together. Older ground versions are
+  unchanged.
+
 ## 1.7.18 (2026-11-12)
 
 - **No more spikes and pits beside the road.** The dips under bridges and the ramps off paved roads (ground versions

@@ -327,5 +327,89 @@ class TestEarthworks(unittest.TestCase):
         self.assertTrue(np.any(mine))
         self.assertTrue(np.array_equal(mine, theirs))
 
+
+@unittest.skipUnless(HAVE_NP, "numpy")
+class TestDecks(unittest.TestCase):
+    """Terrain 16 (the user, 2026-11-12: "Bridge doesn't have the dip to clear; there is no terrain long dip under
+    it"): a floor under every stretch a deck reaches over, beside the course as well as across it, in a town too."""
+
+    def setUp(self):
+        self.ll, self.xy = frame()
+        self.c = straight(tv=16)
+
+    def elev(self, lat, lon):
+        return np.zeros(np.size(lat))
+
+    def grade(self, lat, lon, nat):
+        x, y = self.xy(np.asarray(lat).ravel(), np.asarray(lon).ravel())
+        ends = ((np.abs(x - 380.0) < 3.0) | (np.abs(x - 620.0) < 3.0)) & (np.abs(y - 9.0) < 3.0)
+        return np.where(ends, 3.0, 0.0)
+
+    def deck(self, **kw):
+        """A road on a deck from x 380 to 620 running beside the course, its middle 9 m to the left (half width 5 m:
+        its edge right over the track's)."""
+        class F:
+            ids = ["deck"]
+            attrs = {"class": np.array(["primary"])}
+
+            def __len__(self):
+                return 1
+        a, b = self.ll(380.0, 9.0), self.ll(620.0, 9.0)
+
+        class R:
+            @staticmethod
+            def level_ranges(f, i):
+                return [(0.0, 1.0, "bridge")]
+
+            @staticmethod
+            def bridge_parts(f, i):
+                return [np.array([[float(a[1]), float(a[0])], [float(b[1]), float(b[0])]])]
+
+        class Spec:
+            width = 10.0
+        ud = sh.bridge_near(R, F(), [Spec()], self.c, 0)
+        for x in ud:
+            x["f"] = 0
+            x.pop("i")
+        n = self.c.inner(0)[1] + 1
+        return profile(self.c, ud=ud, pv=kw.get("pv", [0.0] * n))
+
+    def test_floor_beside_and_under(self):
+        profs = self.deck()
+        ud = profs[0]["ud"]
+        self.assertEqual(len(ud), 1)
+        self.assertLess(ud[0]["s0"], 385.0)
+        self.assertGreater(ud[0]["s1"], 615.0)
+        zT = 3.0 - sh.DECK_UNDER_M - sh.UNDER_CLEAR_M
+        xs = np.arange(300.0, 700.0, 2.0)
+        la, lo = self.ll(xs, np.zeros(len(xs)))
+        g = self.grade(la, lo, None)
+        z = g + sh.shape(self.c, profs, la, lo, g, self.grade, self.elev)
+        under = (xs >= 380.0) & (xs <= 620.0)
+        self.assertTrue(np.allclose(z[under], zT), "the floor all along the deck")
+        self.assertLessEqual(float((np.abs(np.diff(z)) / 2.0).max()), sh.DIP_GRADE * 1.05)
+        # across: under the deck's edge (the track's left side) the floor too
+        ys = np.arange(0.0, 9.1, 0.5)
+        la, lo = self.ll(np.full(len(ys), 500.0), ys)
+        g = self.grade(la, lo, None)
+        z = g + sh.shape(self.c, profs, la, lo, g, self.grade, self.elev)
+        self.assertTrue(np.allclose(z, zT))
+
+    def test_not_on_a_paved_road(self):
+        n = self.c.inner(0)[1] + 1
+        profs = self.deck(pv=[1.0] * n)
+        xs = np.arange(300.0, 700.0, 5.0)
+        la, lo = self.ll(xs, np.zeros(len(xs)))
+        g = self.grade(la, lo, None)
+        self.assertFalse(np.any(sh.shape(self.c, profs, la, lo, g, self.grade, self.elev)))
+
+    def test_older_versions_use_crossings_only(self):
+        self.c = straight(tv=15)
+        profs = self.deck()
+        xs = np.arange(300.0, 700.0, 5.0)
+        la, lo = self.ll(xs, np.zeros(len(xs)))
+        g = self.grade(la, lo, None)
+        self.assertFalse(np.any(sh.shape(self.c, profs, la, lo, g, self.grade, self.elev)), "no crossing: none")
+
 if __name__ == "__main__":
     unittest.main()

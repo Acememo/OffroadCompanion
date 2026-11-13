@@ -33,8 +33,8 @@ M.CHECK_S = 0.2
 M.REROUTE_S = 8
 M.SETTINGS_FILE = '/settings/offroadCompanion.json'
 M.OLD_SETTINGS_FILE = '/settings/earthGps.json'   -- (the project was BeamNG.Earth GPS before 1.2.0)
-M.VERSION = '1.7.18'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
-M.BUILD = '2026-11-12 23:59'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
+M.VERSION = '1.7.19'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
+M.BUILD = '2026-11-13 01:00'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
 
 local settings = { lang = 'en', units = 'auto', ribbon = true, autoRoute = true, zoom = 600, paint = true, paintSize = 1.0,
                    clearCourse = true, clearRoute = true, streets = true, markers = 'checkpoints', ruts = 'off', rough = 'auto',
@@ -1088,6 +1088,10 @@ end
 function M.uiPasteCode(code)
   code = tostring(code or ''):gsub('^%s+', ''):gsub('%s+$', '')
   if code == '' then return { ok = false } end
+  if not crs then
+    paint.codeNote, paint.codeErr = 'Load the same course first, then paste the code', true
+    return { ok = false }
+  end
   if not (link.connected() and companion.features and companion.features.ground_code) then
     paint.codeNote, paint.codeErr = 'Needs the Offroad Companion running (1.5.9 or newer)', true
     return { ok = false }
@@ -1284,6 +1288,11 @@ end
 -- a player without it: nothing (the mod manager has no such mod).
 M.LOCAL_MOD = 'offroad_companion'
 function M.onBeamMPServerLeave()
+  -- (not while the game is closing: BeamMP leaves the server then too, and a mod switched back on there loads its
+  -- scripts and extensions into a game that is shutting down: the game hung there and never closed, the user's
+  -- beamng.log 2026-11-12, its last lines this mod's and BeamNG.Earth's "switched back on". earthfix holds
+  -- BeamNG.Earth's own the same way)
+  if earthfix.exiting then return false end
   local mm = rawget(_G, 'core_modmanager')
   if type(mm) ~= 'table' or type(mm.getModDB) ~= 'function' or type(mm.activateMod) ~= 'function' then return false end
   local ok, entry = pcall(mm.getModDB, M.LOCAL_MOD)
@@ -1302,6 +1311,8 @@ M.onExtensionUnloaded = function() pcall(tracks.uninstall); pcall(wet.clear); pc
 -- crowds' sound loops (3D sources still playing), the spectators, signs and their lights, the puddles, the track's
 -- pieces, the companion's socket. (The level's end does the same; quitting from a level skipped it.)
 M.onExit = function()
+  earthfix.exiting = true
+  pcall(earthfix.holdOnExit)
   pcall(crowdsound.stopAll)
   pcall(crowds.clear)
   pcall(markers.clear)

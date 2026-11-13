@@ -69,6 +69,18 @@ DIP15_FLOOR_PAD_M = 8.0     # the floor past the deck's edge (+ its parapet), al
 JOIN15_GRADE = 0.10         # the ramp off a paved road, steepest
 PROBE15_M = 2.0
 
+# (terrain 16; the user, 2026-11-12, screenshots of a low deck right over the track with no dip, one beside it along
+# the track: "Bridge doesn't have the dip to clear"). Terrain 13-15 dug only where a bridge's line crosses the course at
+# 20 degrees or more, and not where the course was within 4 m of any paved road (every town street). From terrain 16
+# every stretch of the course a deck reaches over (its line within its half width + DECK_NEAR_M of the course line,
+# crossing it or running beside it: bridge_near) gets a floor UNDER_CLEAR_M under the girders, the whole stretch and
+# DECK16_PAD_M past it, unless the course is on a paved road there itself (its crisp flag "pv": BeamNG.Earth lifts its
+# decks over roads).
+DECK_TV = 16
+DECK_NEAR_M = 8.0           # (the deck's parapet 1 m + a wide track's half width 5 m + 2 m)
+DECK_STEP_M = 2.0
+DECK16_PAD_M = 6.0
+
 ASPHALT_IN_M = 0.3          # never on a paved road's asphalt (relief.paved_clear with these: the shoulder is shaped)
 ASPHALT_FADE_M = 1.0
 
@@ -141,6 +153,69 @@ def bridge_crossings(roadsmod, f, specs, course, k):
                             "hw": round(float(sp.width) / 2.0, 2), "len": round(float(seg.sum()), 1),
                             "id": str(f.ids[i]), "i": i})
     return merge_crossings([out])           # (a bridge over a sample: the segments either side both cross it)
+
+
+def bridge_near(roadsmod, f, specs, course, k):
+    """The stretches of window k's context the bridges of road features f reach over: [{s0, s1 (m along the course),
+    a, b (the part's ends, lon / lat), hw, len, id, i}], each a run of the course (every DECK_STEP_M) whose line passes
+    within the part's half width + DECK_NEAR_M of the deck's line. Pure."""
+    c0, c1 = course.context(k)
+    lat = np.asarray(course.lat[c0:c1 + 1], np.float64)
+    lon = np.asarray(course.lon[c0:c1 + 1], np.float64)
+    if len(lat) < 2 or f is None or not len(f):
+        return []
+    from .corridor import Plane, _seg_dist
+    pl = Plane(float(lat.mean()), float(lon.mean()))
+    cxy = pl.xy(np.stack([lon, lat], 1))
+    seg = np.hypot(*np.diff(cxy, axis=0).T)
+    cum = np.r_[0.0, np.cumsum(seg)]
+    sl = np.arange(0.0, cum[-1] + 1e-9, DECK_STEP_M)
+    px = np.interp(sl, cum, cxy[:, 0])
+    py = np.interp(sl, cum, cxy[:, 1])
+    pts = np.stack([px, py], 1)
+    s_at = c0 * courseroads.STEP_M + np.interp(sl, cum, np.arange(len(cum)) * courseroads.STEP_M)
+    cls = f.attrs.get("class")
+    out = []
+    for i in range(len(f)):
+        if cls is not None and str(cls[i]) in FOOT_CLASSES:
+            continue
+        sp = specs[i] if specs is not None and i < len(specs) else None
+        if sp is None or not any(kk == "bridge" for _, _, kk in roadsmod.level_ranges(f, i)):
+            continue
+        for p in roadsmod.bridge_parts(f, i) or ():
+            ll = np.asarray(p, np.float64)[:, :2]
+            if len(ll) < 2:
+                continue
+            q = pl.xy(ll)
+            lo_, hi_ = q.min(axis=0) - 60.0, q.max(axis=0) + 60.0
+            if not ((pts >= lo_) & (pts <= hi_)).all(axis=1).any():
+                continue
+            hw = float(sp.width) / 2.0
+            d = _seg_dist(pts, q[:-1], q[1:]).min(axis=1)
+            hit = d <= hw + DECK_NEAR_M
+            if not hit.any():
+                continue
+            idx = np.flatnonzero(hit)
+            runs = np.split(idx, np.flatnonzero(np.diff(idx) > 1) + 1)
+            for r in runs:
+                out.append({"s0": round(float(s_at[r[0]]), 1), "s1": round(float(s_at[r[-1]]), 1),
+                            "a": [round(float(ll[0, 0]), 7), round(float(ll[0, 1]), 7)],
+                            "b": [round(float(ll[-1, 0]), 7), round(float(ll[-1, 1]), 7)],
+                            "hw": round(hw, 2), "len": round(float(np.hypot(*np.diff(q, axis=0).T).sum()), 1),
+                            "id": str(f.ids[i]), "i": i})
+    return merge_near([out])
+
+
+def merge_near(lists):
+    """One list of the deck stretches found in several cells (and windows): one per bridge and place (the longest part
+    seen), in order along the course. Pure."""
+    best = {}
+    for x in (y for lst in lists for y in lst):
+        key = (x["id"], int(round(x["s0"] / 10.0)))
+        if key not in best or x["len"] > best[key]["len"] or \
+                (x["len"] == best[key]["len"] and x["s1"] - x["s0"] > best[key]["s1"] - best[key]["s0"]):
+            best[key] = x
+    return sorted(best.values(), key=lambda x: (x["s0"], x["id"]))
 
 
 def merge_crossings(lists):
@@ -273,15 +348,19 @@ def shape(course, profiles, lat, lon, graded, grade_fn, elev_fn, near=None, clea
     profiles = {k: p for k, p in profiles.items() if p}
     if not profiles or not len(out):
         return out.reshape(shp)
-    xs, js = {}, {}
+    xs, js, ds = {}, {}, {}
     for p in profiles.values():
+        for x in (p.get("ud") or ()) if getattr(course, "tv", 1) >= DECK_TV else ():
+            if cleared and x.get("f"):
+                continue
+            ds[(x["id"], int(round(x["s0"] / 10.0)))] = x
         for x in p.get("ux") or ():
             if cleared and x.get("f"):
                 continue
             xs[(x["id"], int(round(x["s"] / 5.0)))] = x
         for jn in p.get("jn") or ():
             js[(int(jn[0]), int(jn[1]))] = jn
-    if not xs and not js:
+    if not xs and not js and not ds:
         return out.reshape(shp)
     lat = np.asarray(lat, np.float64).ravel()
     lon = np.asarray(lon, np.float64).ravel()
@@ -300,7 +379,9 @@ def shape(course, profiles, lat, lon, graded, grade_fn, elev_fn, near=None, clea
     cid = getattr(course, "cid", "")
     if getattr(course, "tv", 1) >= ENVELOPE_TV:
         own = _OwnGround(lat[idx], lon[idx], grade_fn, elev_fn)
-        out[idx] = _earthworks(course, facts, xs, js, s, ad, hw, own, grade_fn, elev_fn, cache, cid)
+        if getattr(course, "tv", 1) >= DECK_TV:
+            xs = {}                             # (terrain 16: the decks' stretches in their place)
+        out[idx] = _earthworks(course, facts, xs, js, s, ad, hw, own, grade_fn, elev_fn, cache, cid, ds)
         return out.reshape(shp)
     dz = np.zeros(len(idx))
     # under the bridges
@@ -376,7 +457,32 @@ class _OwnGround:
         return self.v[m]
 
 
-def _earthworks(course, facts, xs, js, s, ad, hw, own, grade_fn, elev_fn, cache, cid):
+def deck_dip(course, facts, x, grade_fn, elev_fn):
+    """Terrain 16's dip for deck stretch x: (floor height zT, depth at most, its ramp (m), probes s, their graded
+    heights) or None (deep enough already, or the course on a paved road all along it). Pure given the functions."""
+    end = (len(course.lat) - 1) * courseroads.STEP_M
+    f0, f1 = x["s0"] - DECK16_PAD_M, x["s1"] + DECK16_PAD_M
+    sf = np.arange(max(0.0, f0), min(end, f1) + 1e-9, PROBE15_M)
+    if not len(sf):
+        return None
+    pv = facts.at(sf)["pv"]
+    if np.all(pv >= 0.5):
+        return None
+    ends = np.asarray([x["a"], x["b"]], np.float64)
+    nat = np.asarray(elev_fn(ends[:, 1], ends[:, 0]), np.float64)
+    z_ends = np.asarray(grade_fn(ends[:, 1], ends[:, 0], nat), np.float64).ravel()
+    zT = float(z_ends.min()) - DECK_UNDER_M - UNDER_CLEAR_M
+    gf = _graded(course, facts, sf, grade_fn, elev_fn)
+    depth = min(DIP_MAX_M, float(np.max(gf - zT)))
+    if depth < DIP_MIN_M:
+        return None
+    ramp = max(DIP_RAMP_MIN_M, 1.5 * depth / DIP_GRADE)
+    sp = np.arange(max(0.0, f0 - ramp), min(end, f1 + ramp) + 1e-9, PROBE15_M)
+    gc = _graded(course, facts, sp, grade_fn, elev_fn)
+    return zT, depth, ramp, sp, gc
+
+
+def _earthworks(course, facts, xs, js, s, ad, hw, own, grade_fn, elev_fn, cache, cid, ds=None):
     """Terrain 15's dips and ramps at the points (s along the course, ad from the track's middle, hw its half width
     there, g their graded heights): a design surface along the track, flat FLAT15 past its edges, sloping SIDE15 out,
     the ground cut down to it (a dip: never filled) or cut and filled to it (a ramp), easing in and out along the
@@ -408,6 +514,30 @@ def _earthworks(course, facts, xs, js, s, ad, hw, own, grade_fn, elev_fn, cache,
         gm = own.at(m)
         cut = np.minimum(gm, H + SIDE15 * xl) - gm              # (<= 0: only ever down)
         e = np.clip(u / 0.5, 0.0, 1.0)                           # (none where the dip has eased out)
+        dz[m] = np.minimum(dz[m], e * cut)
+    # (terrain 16) under and beside the decks: the floor zT all along the stretch the deck reaches over and past it
+    for key in sorted(ds or {}):
+        x = ds[key]
+        ck = (cid, "d16", key)
+        if ck not in cache:
+            cache[ck] = deck_dip(course, facts, x, grade_fn, elev_fn)
+        r = cache[ck]
+        if r is None:
+            continue
+        zT, depth, ramp, sp, gc = r
+        f0, f1 = x["s0"] - DECK16_PAD_M, x["s1"] + DECK16_PAD_M
+        m = (s >= f0 - ramp) & (s <= f1 + ramp)
+        if not m.any():
+            continue
+        sm = s[m]
+        out_d = np.maximum(0.0, np.maximum(f0 - sm, sm - f1))
+        g_edge = np.interp(np.clip(sm, f0, f1), sp, gc)
+        u = np.clip(g_edge - zT, 0.0, DIP_MAX_M) * (1.0 - _ease(out_d / ramp))
+        H = np.interp(sm, sp, gc) - u
+        xl = np.maximum(0.0, ad[m] - hw[m] - FLAT15_DIP_M)
+        gm = own.at(m)
+        cut = np.minimum(gm, H + SIDE15 * xl) - gm
+        e = np.clip(u / 0.5, 0.0, 1.0)
         dz[m] = np.minimum(dz[m], e * cut)
     # off the paved roads: the ramp's line from the road's level to the ground's
     for key in sorted(js):

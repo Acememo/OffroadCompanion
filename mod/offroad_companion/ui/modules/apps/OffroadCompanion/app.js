@@ -1,7 +1,7 @@
 // Offroad Companion (the in-game app; lua/ge/extensions/offroadCompanion/main.lua): turn-by-turn road navigation and race-course guidance.
 // The game's UI browser cannot make web requests, so everything goes through the game's Lua (bngApi.engineLua);
 // the Lua side pushes 'OffroadCompanionUpdate' five times a second while this app is on screen.
-var EGPS_APP_BUILD = '2026-11-12 23:59'   // (main.lua M.BUILD: the same, or the game kept an older copy of one of them)
+var EGPS_APP_BUILD = '2026-11-13 01:00'   // (main.lua M.BUILD: the same, or the game kept an older copy of one of them)
 angular.module('beamng.apps')
 .directive('offroadCompanion', ['$sce', function ($sce) {
   'use strict'
@@ -384,9 +384,9 @@ angular.module('beamng.apps')
 '      <button ng-class="{on: ui.rough === \'extra\'}" ng-click="choose(\'rough\', \'extra\')" title="The same roughness all along the course. Other dirt roads lean to one side only rarely">Extra</button>' +
 '      <button ng-class="{on: ui.rough === \'off\'}" ng-click="choose(\'rough\', \'off\')" title="As the elevation data has it (graded smooth), and every dirt road without BeamNG.Earth 1.8.2\'s potholes and leans, as before 1.8.2">Flat</button></span></div>' +
 '    <div class="note" ng-if="ui.paint === \'on\'">{{ paintNote() }}</div>' +
-'    <div class="set" ng-if="d.paint.seal"><span title="The name of exactly this ground: the course, its track settings and the terrain version. The same code on another computer is the same ground, bump for bump. Copy it to send to friends: pasted here with the same course loaded, it sets their track settings to yours">Ground code <b class="code">{{ d.paint.code || d.paint.seal }}</b>{{ d.paint.replayGround ? \' (as the replay was recorded)\' : \'\' }}</span><span class="seg">' +
+'    <div class="set"><span title="The name of exactly this ground: the course, its track settings and the terrain version. The same code on another computer is the same ground, bump for bump. Copy it to send to friends: pasted here with the same course loaded, it sets their track settings to yours">Ground code <b class="code">{{ d.paint.code || d.paint.seal || (d.course ? \'(being worked out)\' : \'(load a course)\') }}</b>{{ d.paint.replayGround ? \' (as the replay was recorded)\' : \'\' }}</span><span class="seg">' +
 '      <button ng-click="copyCode()" ng-disabled="!d.paint.code" title="To the clipboard, to send to your friends">Copy</button></span></div>' +
-'    <div class="row" ng-if="d.course"><input class="codein" type="text" ng-model="ui.pasteCode" placeholder="Paste a friend\'s ground code" ng-focus="typing(true)" ng-blur="typing(false)" ng-keyup="$event.keyCode === 13 && pasteCode()">' +
+'    <div class="row"><input class="codein" type="text" ng-model="ui.pasteCode" placeholder="Paste a friend\'s ground code (load the same course first)" ng-focus="typing(true)" ng-blur="typing(false)" ng-keyup="$event.keyCode === 13 && pasteCode()">' +
 '      <button ng-click="pasteCode()" ng-disabled="!ui.pasteCode || d.paint.codeBusy" title="Load the same course first: this sets your track settings to the ones that made that ground">Use</button></div>' +
 '    <div class="note" ng-if="d.paint.codeNote" ng-class="{err: d.paint.codeErr}">{{ d.paint.codeNote }}</div>' +
 '    <div class="set"><span title="After rain (the real rain of the last days where you are, or the game\'s own rain falling): the ground grips less, more the wetter it is, and the track\'s closed dips hold water when it is soaked. The same for everyone near at the same time">Wet ground after rain</span><span class="seg">' +
@@ -692,7 +692,9 @@ angular.module('beamng.apps')
         scope.tab = scope.tab === t ? null : t
         if (t === 'make') return
         if (scope.tab === 'courses' && !scope.ui.source && scope.d.sources.length) {
-          scope.ui.source = scope.d.sources[0].id
+          // (My files first: the user, 2026-11-12, "On courses, the first selected source should be 'my files'")
+          var mine = scope.d.sources.filter(function (x) { return x.id === 'local' })[0]
+          scope.ui.source = (mine || scope.d.sources[0]).id
           scope.listSource()
         }
       }

@@ -223,6 +223,11 @@ Now nothing is narrower than about 6 m or changes over less than about 3 m: whoo
 in long swells, the windrows and the turns' sand as wide soft mounds, the banked corner a smooth bowl with its lip just
 past the edge, and the tallest places easing into their limit instead of flattening off.
 
+**Ground version 16** keeps version 15's ground, with a floor under every stretch of the course a bridge deck reaches
+over: crossing the course or running beside it, within the deck's width plus 8 m. The floor is 5 m under the deck's
+girders all along that stretch and 6 m past it, easing in and out at 10% at most, in towns too. The one exception is
+where the course is on a paved road itself, because BeamNG.Earth lifts its decks over roads.
+
 **Ground version 15** keeps version 14's ground, with the dips under bridges and the ramps off paved roads built as
 earthworks: a surface along the track (the ramp at 10% at most, the dip's floor deep enough for 5 m under the deck's
 girders, flat 6 m past the track's edges and 8 m past the deck's), with 1:3 slopes on either side cut back (or, for a

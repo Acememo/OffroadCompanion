@@ -26,5 +26,18 @@ fix.apply()
 check(trees2.NO_COLLIDE.pylon == true, 'again after BeamNG.Earth reloaded')
 package.loaded['beamngEarth/trees'] = nil
 
+-- closing the game in BeamMP: BeamNG.Earth's mod not switched back on then
+local calls = 0
+local bm = { onServerLeave = function() calls = calls + 1; return true end }
+package.loaded['beamngEarth/beammp'] = bm
+fix.apply()
+check(bm.onServerLeave() == true and calls == 1, 'leaving a server in play: switched back on as before')
+fix.exiting = true
+check(bm.onServerLeave() == false and calls == 1, 'the game closing: left as it is')
+fix.apply()
+fix.exiting = false
+check(bm.onServerLeave() == true and calls == 2, 'wrapped once')
+package.loaded['beamngEarth/beammp'] = nil
+
 print(pass .. ' passed, ' .. fail .. ' failed')
 if fail > 0 then os.exit(1) end

@@ -35,6 +35,7 @@ JUMP_M = (0.45, 0.7)        # m the ground rises between two probes: a slope .. 
 BANK_GRADE = 0.8            # rise per metre out, at least
 REACH_M = 15.0              # m out from the road's level the bank meets the natural ground at the latest
 BIN_M = 1.0                 # m of course between probes
+SAME_TOL_M = 0.5            # the caller's ground this near the probes' (relative to each one's natural ground)
 OVER_TOL_M = 0.05           # only ground the grading left between the road's level and the natural ground is banked
 
 
@@ -136,10 +137,21 @@ def banks(course, profiles, lat, lon, base, graded, grade_fn, elev_fn, near=None
         return v[p0] + (v[p1] - v[p0]) * t
     zr, af, w, k = lerp(z_road), lerp(a_flat), lerp(wall), lerp(grade)
     x = ad - af
-    g, nat = out[idx], base[idx]
-    ok = ((w > 0) & (x > 0) & (x < REACH_M) & (nat > zr) &
-          (g >= zr - OVER_TOL_M) & (g <= nat + OVER_TOL_M))
-    if ok.any():
-        new = bank(x[ok], zr[ok], nat[ok], k[ok])
-        out[idx[ok]] = g[ok] + w[ok] * (new - g[ok])
+    # (the bank is worked out on the probes' own ground, the points' heights as grade_fn and elev_fn have them, and only
+    # its change is added to the caller's: the far ground tiles' coarser elevation and BeamNG.Earth's roughening of
+    # the land are metres off it in hills, and set against the probes' road level they stood a row of spikes beside
+    # the track in one ground and none in another. The user, 2026-11-12: "How can we avoid this from happening?")
+    pre = np.flatnonzero((w > 0) & (x > 0) & (x < REACH_M))
+    if len(pre):
+        la, lo = lat[idx[pre]], lon[idx[pre]]
+        nat = np.asarray(elev_fn(la, lo), np.float64).ravel()
+        g = np.asarray(grade_fn(la, lo, nat), np.float64).ravel()
+        zr_, x_, k_, w_ = zr[pre], x[pre], k[pre], w[pre]
+        # (and only where the caller's ground stands to its own natural ground as the probes' does: not on another
+        # road's fill the probes' grading does not have)
+        same = np.abs((out[idx[pre]] - base[idx[pre]]) - (g - nat)) <= SAME_TOL_M
+        ok = (nat > zr_) & (g >= zr_ - OVER_TOL_M) & (g <= nat + OVER_TOL_M) & same
+        if ok.any():
+            new = bank(x_[ok], zr_[ok], nat[ok], k_[ok])
+            out[idx[pre[ok]]] += w_[ok] * (new - g[ok])
     return out.reshape(shape)
