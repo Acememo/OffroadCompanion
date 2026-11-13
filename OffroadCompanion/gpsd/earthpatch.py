@@ -757,8 +757,9 @@ class _State:
             if not xs and not ns:
                 continue
             lines = corridor.course_lines(course, key.bounds(), 200.0)
+            kf = shaping.DECK18_OVER_M if getattr(course, "tv", 1) >= shaping.AT_GRADE_TV else None
             flat = set(corridor.bridges_to_flatten(self.roads, feats, lines, self.ground_near(md, kind, keep),
-                                                   elev_fn=ef, keep_under=keep)) if lines else set()
+                                                   elev_fn=ef, keep_under=keep, keep_from_m=kf)) if lines else set()
             flat_ids |= {str(feats.ids[i]) for i in flat}
             for x in xs + ns:
                 x["f"] = int(x.pop("i") in flat)
@@ -797,8 +798,24 @@ class _State:
         cache = self.shape_cache.setdefault(round(float(lift), 3), {})
         if len(cache) > 4096:
             cache.clear()
-        dz = shaping.shape(c, profs, lat, lon, graded, grade_fn, elev_fn, near=near,
-                           cleared=bool(plan is not None and plan.clearing), cache=cache, around=around)
+        got = shaping.shape(c, profs, lat, lon, graded, grade_fn, elev_fn, near=near,
+                            cleared=bool(plan is not None and plan.clearing), cache=cache, around=around,
+                            parts=getattr(c, "tv", 1) >= shaping.AT_GRADE_TV)
+        if isinstance(got, tuple):
+            # (terrain 18: the dips held to 1:1 off the asphalt past its kerb, the ramps cut right up to it)
+            dc, jc, ja = got
+            if not (np.any(dc) or np.any(jc) or np.any(ja)):
+                return None
+            dc = self.paved_hold(md, lat, lon, dc, shaping.DIP18_HOLD_IN_M)
+            jc = self.paved_clear(md, lat, lon, jc, shaping.ASPHALT_IN_M, shaping.ASPHALT_FADE_M)
+            ja = self.paved_clear(md, lat, lon, ja, shaping.ASPHALT_IN_M, shaping.ASPHALT_FADE_M)
+            dz = np.minimum(dc, jc) + ja
+            if not np.any(dz):
+                return None
+            with self.lock:
+                self.stats["shaped_points"] = self.stats.get("shaped_points", 0) + int(np.count_nonzero(dz))
+            return dz
+        dz = got
         if not np.any(dz):
             return None
         if v17:
@@ -824,7 +841,7 @@ class _State:
             return np.zeros((0, 4)), np.zeros(0)
         return np.concatenate(ends), np.concatenate(hws)
 
-    def paved_hold(self, md, lat, lon, dz):
+    def paved_hold(self, md, lat, lon, dz, in_m=None):
         """dz held to shaping.PAVED17_SLOPE per m past the paved roads' asphalt (none on it, past ASPHALT_IN_M):
         terrain 17's dips and ramps beside a road slope up to it, never a wall at its edge."""
         dz = np.array(dz, np.float64)
@@ -834,12 +851,13 @@ class _State:
             return dz
         la = np.asarray(lat, np.float64).reshape(-1)[idx]
         lo = np.asarray(lon, np.float64).reshape(-1)[idx]
-        cap = float(np.max(np.abs(flat[idx]))) / shaping.PAVED17_SLOPE + shaping.ASPHALT_IN_M + 1.0
+        in_m = shaping.ASPHALT_IN_M if in_m is None else in_m
+        cap = float(np.max(np.abs(flat[idx]))) / shaping.PAVED17_SLOPE + in_m + 1.0
         ends, hws = self.paved_roads_near(md, la, lo, cap + 10.0)
         if not len(ends):
             return dz
         past = relief.paved_past(la, lo, ends, hws, cap)
-        lim = np.maximum(0.0, past - shaping.ASPHALT_IN_M) * shaping.PAVED17_SLOPE
+        lim = np.maximum(0.0, past - in_m) * shaping.PAVED17_SLOPE
         flat[idx] = np.clip(flat[idx], -lim, lim)
         return dz
 
@@ -1049,8 +1067,9 @@ class _State:
                 lines = corridor.course_lines(c, bounds, 200.0)
                 if lines:
                     keep = getattr(c, "tv", 1) >= shaping.KEEP_DECK_TV
+                    kf = shaping.DECK18_OVER_M if getattr(c, "tv", 1) >= shaping.AT_GRADE_TV else None
                     idx |= set(corridor.bridges_to_flatten(self.roads, base, lines, self.ground_near(md, kind, keep),
-                                                           elev_fn=self.elev(md), keep_under=keep))
+                                                           elev_fn=self.elev(md), keep_under=keep, keep_from_m=kf))
             if idx:
                 base = corridor.flatten(self.mapgeom, base, sorted(idx))
                 with self.lock:

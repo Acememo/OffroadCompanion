@@ -616,6 +616,83 @@ class TestBridgesKept(unittest.TestCase):
     def test_too_low_over_a_paved_road(self):
         self.assertEqual(self.flat(self.ground(1), keep=True), [0])
 
+    def test_terrain_18_kept_only_standing_over_the_course(self):
+        """(terrain 18) Kept where the deck can stand DECK18_OVER_M over the course's ground; lower, the course meets
+        it at its own height: a crossing at grade again."""
+        from gpsd import corridor
+        def run(elev):
+            return corridor.bridges_to_flatten(self.R, self.F, self.lines, None, elev_fn=elev, keep_under=True,
+                                               keep_from_m=sh.DECK18_OVER_M)
+        flat = lambda la, lo: np.zeros(np.size(la))
+        _, xy = frame()
+
+        def creek(la, lo):
+            x, y = xy(np.asarray(la, np.float64), np.asarray(lo, np.float64))
+            return np.where((np.abs(y) < 12.0) & (np.abs(x - 500.0) < 30.0), -5.0, 0.0)
+        self.assertEqual(run(flat), [0], "on the flat (its deck a metre over the course): at grade")
+        self.assertEqual(run(creek), [], "over the creek the course runs in: kept")
+
+
+@unittest.skipUnless(HAVE_NP, "numpy")
+class TestAtGrade(unittest.TestCase):
+    """Terrain 18 (the user, 2026-11-13, 1.7.20's pits by bridges' ends: "it seriously affected negativity on other
+    parts"): dug only where the deck stands over the track; beside or across a bridge's end, nothing."""
+
+    def setUp(self):
+        self.ll, self.xy = frame()
+
+    def elev(self, lat, lon):
+        return np.zeros(np.size(lat))
+
+    def grade_with(self, ends_z, x0, x1):
+        def grade(lat, lon, nat):
+            x, y = self.xy(np.asarray(lat).ravel(), np.asarray(lon).ravel())
+            ends = ((np.abs(x - x0) < 3.0) | (np.abs(x - x1) < 3.0)) & (np.abs(y - 9.0) < 3.0)
+            return np.where(ends, ends_z, 0.0)
+        return grade
+
+    def profs(self, c, x0, x1):
+        return all_profiles(c, ud={k: v for k in range(c.nwin)
+                                   for v in [deck_near(c, k, (x0, 9.0), (x1, 9.0), self.ll)] if v})
+
+    def run_line(self, tv, ends_z, x0, x1):
+        c = straight(tv=tv)
+        grade = self.grade_with(ends_z, x0, x1)
+        xs = np.arange(x0 - 150.0, x1 + 150.0, 2.0)
+        la, lo = self.ll(xs, np.zeros(len(xs)))
+        return xs, sh.shape(c, self.profs(c, x0, x1), la, lo, np.zeros(len(xs)), grade, self.elev, cache={})
+
+    def test_a_deck_over_the_track_dug_under(self):
+        xs, dz = self.run_line(18, 3.0, 380.0, 620.0)
+        under = (xs >= 380.0) & (xs <= 620.0)
+        self.assertTrue(np.allclose(dz[under], 3.0 - sh.DECK_UNDER_M - sh.UNDER_CLEAR_M), "the floor all along")
+
+    def test_a_short_bridge_at_the_tracks_height_left(self):
+        xs, dz = self.run_line(18, 0.5, 480.0, 520.0)
+        self.assertFalse(np.any(dz), "the course meets the deck at its own height: nothing dug")
+        _, dz17 = self.run_line(17, 0.5, 480.0, 520.0)
+        self.assertLess(float(dz17.min()), -5.0, "(terrain 17 dug a pit there, and still does)")
+
+    def test_a_long_low_bridge_only_where_it_stands_over(self):
+        xs, dz = self.run_line(18, 1.0, 300.0, 700.0)
+        floor = 1.0 - sh.DECK_UNDER_M - sh.UNDER_CLEAR_M
+        self.assertTrue(np.all(dz[(xs >= 300.0) & (xs <= 312.0)] > floor + 0.1), "by its end: the ramp down to it")
+        self.assertTrue(np.allclose(dz[(xs >= 330.0) & (xs <= 670.0)], floor), "the floor where it stands over")
+        self.assertTrue(np.all(dz[(xs >= 450.0) & (xs <= 550.0)] < -1.0), "under its middle: dug")
+
+    def test_the_parts_add_up(self):
+        c = straight(tv=18)
+        grade = self.grade_with(3.0, 380.0, 620.0)
+        n = c.inner(0)[1] + 1
+        profs = self.profs(c, 380.0, 620.0)
+        profs[0]["jn"] = sh.joins(c, 0, [i <= 20 for i in range(n)])
+        gx, gy = np.meshgrid(np.arange(150.0, 700.0, 4.0), np.arange(-30.0, 30.0, 4.0))
+        la, lo = self.ll(gx.ravel(), gy.ravel())
+        whole = sh.shape(c, profs, la, lo, np.zeros(la.size), grade, self.elev, cache={})
+        dc, jc, ja = sh.shape(c, profs, la, lo, np.zeros(la.size), grade, self.elev, cache={}, parts=True)
+        self.assertTrue(np.any(dc))
+        self.assertTrue(np.array_equal(whole, np.minimum(dc, jc) + ja))
+
 
 if __name__ == "__main__":
     unittest.main()

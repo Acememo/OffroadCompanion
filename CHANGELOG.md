@@ -3,6 +3,22 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.21 (2026-11-13)
+
+- **Ground version 18: no pits by bridges you don't go under.** 1.7.20 dug under every bridge deck the course came
+  near. Where the course only passed a bridge's end, or crossed the road right at it, the deck was at the course's own
+  height, so there was nothing to go under. It still dug a pit metres deep there, and in a parking lot it left the
+  aisles standing between the pits. Now the ground is dug only where the deck stands at least 2.5 m over the track,
+  so the course really goes under it. A short bridge the course crosses with its deck less than 2.5 m over the
+  course's ground is a crossing at ground level again, as before 1.7.20. Bridges you drive under keep their dug floor.
+- **Ground version 18: road entrances cut right up to the road again.** 1.7.20 held the ground to a 1:1 slope from
+  the asphalt's edge. Where the course leaves or crosses a road in a cutting, that left the road's bank standing where
+  the track meets the road: the steep entrance again, with the track drawn over it as a torn pile. The ramp now cuts
+  right up to the asphalt, as in 1.7.14 to 1.7.19, but keeps 1.7.20's smooth shaping at hairpins. Only a dip under a
+  bridge keeps the 1:1 slope, from 2 m past the asphalt so it never undercuts a kerb or sidewalk.
+- 1.7.21 lays ground version 18, so everyone on a BeamMP server should update together. Older ground versions
+  (including 1.7.20's 17) are unchanged.
+
 ## 1.7.20 (2026-11-13)
 
 - **Ground version 17: the bridge on top, the track below.** Where the course went under a short bridge off the roads

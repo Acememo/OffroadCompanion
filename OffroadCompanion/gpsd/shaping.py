@@ -101,6 +101,22 @@ REACH17_M = (45.0, 15.0)    # past the track's edge: full this far, none this mu
 PAVED17_SLOPE = 1.0
 CHUNK17 = 4096
 
+# (terrain 18; the user, 2026-11-13, screenshots of 1.7.20: "The bridges work great but it seriously affected
+# negativity on other parts": pits metres deep where the course crosses a road at a bridge's end or passes a bridge's
+# abutment in a parking lot, the parking aisles left standing as causeways between them, and torn piles where the
+# course crosses a road in a cutting). From terrain 18:
+#   - a deck stretch is dug under only where the deck stands DECK18_OVER_M or more over the track's ground (its height
+#     reckoned from its ends' road heights climbing at corridor.DECK_MAX_GRADE): the course passing under it. Beside or
+#     across a bridge's end the course meets the deck at its own height: nothing to dig under (deck18);
+#   - such a bridge the course crosses is made a ground road again (corridor.bridges_to_flatten keep_from_m);
+#   - the ramps off the paved roads cut right up to the asphalt again (terrain 13-16's ASPHALT_IN_M, ASPHALT_FADE_M):
+#     terrain 17's 1:1 from the asphalt's edge left the road's cut bank standing where the track meets the road, the
+#     steep entrance again (and the track drawn over it a torn pile); only the dips keep that 1:1, from DIP18_HOLD_IN_M
+#     past the asphalt (its kerb and sidewalk).
+AT_GRADE_TV = 18
+DECK18_OVER_M = 2.5
+DIP18_HOLD_IN_M = 2.0
+
 ASPHALT_IN_M = 0.3          # never on a paved road's asphalt (relief.paved_clear with these: the shoulder is shaped)
 ASPHALT_FADE_M = 1.0
 
@@ -354,7 +370,8 @@ def neighbours(course, ks):
     return sorted({j for k in ks for j in range(k - r, k + r + 1) if 0 <= j < getattr(course, "nwin", 0)} - ks)
 
 
-def shape(course, profiles, lat, lon, graded, grade_fn, elev_fn, near=None, cleared=True, cache=None, around=None):
+def shape(course, profiles, lat, lon, graded, grade_fn, elev_fn, near=None, cleared=True, cache=None, around=None,
+          parts=False):
     """Metres to add to graded (BeamNG.Earth's heights at the points, any shape) for the dips under bridges and the
     ramps off paved roads (terrain FROM_TV on; zeros before). profiles: the relief windows near the points (near:
     relief.nearest's answer with them); around: the windows next to them (neighbours()), whose facts the dips and
@@ -362,7 +379,9 @@ def shape(course, profiles, lat, lon, graded, grade_fn, elev_fn, near=None, clea
     height would depend on which windows were at hand (1.7.14: ground tiles that disagreed with the physics block, the
     user 2026-11-12: "it appears as if the new fixes are non collidable"). cleared: the course is cleared (its bridges
     made crossings at grade have no deck: no dip). cache: a dict kept between calls (the heights read from the
-    grading). Pure given the functions (and a cache filled by them)."""
+    grading). parts (terrain 18 on): (the dips' change, the ramps' cut, the ramps' fill) each, for the caller to hold
+    off the paved roads each its own way (their sum: min of the first two + the third). Pure given the functions (and
+    a cache filled by them)."""
     shp = np.shape(graded)
     out = np.zeros(int(np.prod(shp)) if shp else 1)
     if getattr(course, "tv", 1) < FROM_TV:
@@ -371,8 +390,11 @@ def shape(course, profiles, lat, lon, graded, grade_fn, elev_fn, near=None, clea
     if not profiles or not len(out):
         return out.reshape(shp)
     if getattr(course, "tv", 1) >= KEEP_DECK_TV:
-        out[:] = _shape17(course, profiles, around or {}, lat, lon, grade_fn, elev_fn, cleared,
-                          cache if cache is not None else {})
+        dc, jc, ja = _shape17(course, profiles, around or {}, lat, lon, grade_fn, elev_fn, cleared,
+                              cache if cache is not None else {})
+        if parts and getattr(course, "tv", 1) >= AT_GRADE_TV:
+            return dc.reshape(shp), jc.reshape(shp), ja.reshape(shp)
+        out[:] = np.minimum(dc, jc) + ja
         return out.reshape(shp)
     xs, js, ds = {}, {}, {}
     for p in profiles.values():
@@ -638,6 +660,37 @@ def deck17(course, facts, x, grade_fn, elev_fn):
     return la, lo, hw, gc - u, w, FLAT15_DIP_M
 
 
+def deck18(course, facts, x, grade_fn, elev_fn):
+    """Terrain 18's dip under deck stretch x: deck17's over the part of it where the deck stands DECK18_OVER_M or more
+    over the track's ground (off the paved roads), or None (nowhere: the course meets the deck at its own height, by a
+    bridge's end, or beside it). The deck's height: its ends' road heights climbing at corridor.DECK_MAX_GRADE, the
+    lower. Pure given the functions."""
+    from .corridor import DECK_MAX_GRADE, Plane
+    end = (len(course.lat) - 1) * courseroads.STEP_M
+    sf = np.arange(max(0.0, x["s0"]), min(end, x["s1"]) + 1e-9, PROBE15_M)
+    if not len(sf):
+        return None
+    f = facts.at(sf)
+    la, lo = course_at(course, sf, f["ctr"])
+    nat = np.asarray(elev_fn(la, lo), np.float64)
+    gf = np.asarray(grade_fn(la, lo, nat), np.float64).ravel()
+    ends = np.asarray([x["a"], x["b"]], np.float64)
+    zn = np.asarray(elev_fn(ends[:, 1], ends[:, 0]), np.float64)
+    za, zb = (float(v) for v in np.asarray(grade_fn(ends[:, 1], ends[:, 0], zn), np.float64).ravel())
+    pl = Plane(float(ends[0, 1]), float(ends[0, 0]))
+    a, b = pl.xy(ends[:1])[0], pl.xy(ends[1:])[0]
+    v = b - a
+    L2 = max(float(v @ v), 1e-9)
+    p = pl.xy(np.stack([lo, la], 1))
+    t = np.clip(((p - a) @ v) / L2, 0.0, 1.0)
+    length = max(float(x["len"]), math.sqrt(L2))
+    deck = np.minimum(za + DECK_MAX_GRADE * t * length, zb + DECK_MAX_GRADE * (1.0 - t) * length)
+    over = (deck - gf >= DECK18_OVER_M) & (f["pv"] < 0.5)
+    if not over.any():
+        return None
+    return deck17(course, facts, dict(x, s0=float(sf[over].min()), s1=float(sf[over].max())), grade_fn, elev_fn)
+
+
 def join17(course, facts, jn, grade_fn, elev_fn):
     """Terrain 17's ramp off a paved road at join jn along its line, as deck17's, or None."""
     r = join_ramp(course, facts, jn, grade_fn, elev_fn, JOIN15_GRADE)
@@ -727,20 +780,21 @@ def _shape17(course, profiles, around, lat, lon, grade_fn, elev_fn, cleared, cac
         for jn in p.get("jn") or ():
             js[(int(jn[0]), int(jn[1]))] = jn
     if not decks and not js:
-        return out
+        return out, out.copy(), out.copy()
     facts = relief._Facts(every)
     # (the track's look is in the key: BeamNG.Earth's grading of the track, which the shapes are worked out on, wears
     # it or not by it, and a shape kept from before the look changed was another ground's)
     cid = (getattr(course, "cid", ""), getattr(course, "rough", None))
     own = _OwnGround(lat, lon, grade_fn, elev_fn)
-    cut, add = np.zeros(len(lat)), np.zeros(len(lat))
+    dcut, cut, add = np.zeros(len(lat)), np.zeros(len(lat)), np.zeros(len(lat))
+    v18 = getattr(course, "tv", 1) >= AT_GRADE_TV
     for x in decks:
-        ck = (cid, "d17", x["id"], x["s0"], x["s1"], tuple(x["a"]), tuple(x["b"]))
+        ck = (cid, "d18" if v18 else "d17", x["id"], x["s0"], x["s1"], tuple(x["a"]), tuple(x["b"]))
         if ck not in cache:
-            cache[ck] = deck17(course, facts, x, grade_fn, elev_fn)
+            cache[ck] = (deck18 if v18 else deck17)(course, facts, x, grade_fn, elev_fn)
         if cache[ck] is not None:
             c, _ = _works17(cache[ck], lat, lon, own, False)
-            cut = np.minimum(cut, c)
+            dcut = np.minimum(dcut, c)
     for key in sorted(js):
         ck = (cid, "j17", key)
         if ck not in cache:
@@ -749,4 +803,4 @@ def _shape17(course, profiles, around, lat, lon, grade_fn, elev_fn, cleared, cac
             c, a = _works17(cache[ck], lat, lon, own, True)
             cut = np.minimum(cut, c)
             add = np.maximum(add, a)
-    return cut + add
+    return dcut, cut, add

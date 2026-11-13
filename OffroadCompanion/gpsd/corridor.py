@@ -559,7 +559,7 @@ def toll_like(f, i):
 
 # -- bridges ----------------------------------------------------------------------------------------------------------
 def bridges_to_flatten(roadsmod, f, lines, ground_fn=None, flatten_max_m=FLATTEN_MAX_M, elev_fn=None,
-                       keep_under=False):
+                       keep_under=False, keep_from_m=None):
     """Indices of the road features of f whose bridge the course crosses off-road, or over the road the course is on
     too low to pass under (see the module doc). ground_fn(lon, lat) -> (M, 5) lon0, lat0, lon1, lat1, half width of
     the ground roads near the crossing (the underpass test; asked about the crossing point itself, so every cell
@@ -568,7 +568,10 @@ def bridges_to_flatten(roadsmod, f, lines, ground_fn=None, flatten_max_m=FLATTEN
     over the paved road the course is on is made a ground road; every other one is kept, the course's ground dug
     down under it (shaping.py). A short bridge made a ground road where the course went under it off the roads stood
     its road's embankment across the course's dip (the user 2026-11-13: "the bridge should be on top and dirt road
-    below"). Pure given those."""
+    below"). keep_from_m (terrain 18, with keep_under): such a bridge is kept only where its deck can stand this high
+    over the course's ground (headroom; over a dirt road the course is on, that road graded as BeamNG.Earth grades
+    it): lower, the course meets the deck at about its height (a creek's culvert, the bridge's end), and digging under
+    it stood a pit metres deep beside the road (the user 2026-11-13, 1.7.20). Pure given those."""
     if f is None or len(f) == 0 or not lines:
         return []
     allpts = np.concatenate(lines)
@@ -615,6 +618,7 @@ def bridges_to_flatten(roadsmod, f, lines, ground_fn=None, flatten_max_m=FLATTEN
         if ground_fn is not None:
             g = np.asarray(ground_fn(*pl.ll(float(P[0]), float(P[1]))), np.float64)
         under = False
+        dirt_below = None
         if g is not None and len(g):
             gs = (pl.xy(g[:, 0:2]), pl.xy(g[:, 2:4]), g[:, 4])
             d = _seg_dist(P[None, :], gs[0], gs[1])[0]
@@ -624,6 +628,9 @@ def bridges_to_flatten(roadsmod, f, lines, ground_fn=None, flatten_max_m=FLATTEN
             aligned = align >= math.cos(math.radians(35.0))
             if keep_under:
                 pv = g[:, 5] >= 0.5 if g.shape[1] > 5 else np.zeros(len(g), bool)
+                dirt = (d <= gs[2] + UNDERPASS_PAD_M) & aligned & ~pv
+                if dirt.any():
+                    dirt_below = (gs[0][dirt], gs[1][dirt], gs[2][dirt])
                 aligned = aligned & pv
             if np.any((d <= gs[2] + UNDERPASS_PAD_M) & aligned):
                 # the course drives under it on a road: kept when the deck can be high enough over that road
@@ -635,6 +642,11 @@ def bridges_to_flatten(roadsmod, f, lines, ground_fn=None, flatten_max_m=FLATTEN
                     if headroom(pl, q, arc, total, P, elev_fn, below) >= HEADROOM_M + HEADROOM_MARGIN_M:
                         continue
         if not under and keep_under:
+            if keep_from_m is None or elev_fn is None:
+                continue
+            if headroom(pl, q, arc, total, P, elev_fn, dirt_below) >= keep_from_m:
+                continue
+            out.append(i)
             continue
         if not under and skip_offroad:
             # a motorway's bridge the course passes under off the roads (a wash under the highway): kept when its deck

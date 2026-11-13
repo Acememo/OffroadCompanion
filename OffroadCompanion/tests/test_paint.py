@@ -940,15 +940,15 @@ class TestInsideEarth(unittest.TestCase):
         """(terrain 17; the user, 2026-11-13: "the bridge should be on top and dirt road below") The bridges the course
         goes under off the roads or on a dirt road stay bridges (their ground dug down under them: shaping.py)."""
         import roads as roadsmod
-        if self.earthpatch.state().current().paint.tv < 17:
-            self.skipTest("an older terrain version")
+        if self.earthpatch.state().current().paint.tv != 17:
+            self.skipTest("terrain 17 only (18 keeps those standing over the course: test_terrain_18_bridges)")
         for x, fid in ((1500, "0cc3"), (1800, "0ff8"), (2200, "0ee5"), (2500, "0dd4"), (2700, "0ff6")):
             f = self.roads(*ll(x, 0))
             self.assertEqual([k for _, _, k in roadsmod.level_ranges(f, f.index(fid))], ["bridge"], fid)
 
     def test_creek_bridge_on_the_course_made_a_ground_road(self):
         import roads as roadsmod
-        if self.earthpatch.state().current().paint.tv >= 17:
+        if self.earthpatch.state().current().paint.tv == 17:
             self.skipTest("terrain 17 keeps it (test_bridges_the_course_goes_under_kept)")
         f = self.roads(*ll(1500, 0))
         i = f.index("0cc3")
@@ -965,8 +965,13 @@ class TestInsideEarth(unittest.TestCase):
         self.assertEqual([k for _, _, k in roadsmod.level_ranges(h, h.index("0ee5"))], [], "the low overpass flattened")
         # one over the road in a cutting: the hills are high, but its ends are graded down to the road (and a motorway)
         c = self.roads(*ll(2700, 0))
-        self.assertEqual([k for _, _, k in roadsmod.level_ranges(c, c.index("0ff6"))], [],
-                         "the overpass in a cutting flattened")
+        if self.earthpatch.state().current().paint.tv >= 18:
+            # (terrain 18: over a dirt road its deck can still stand a few metres over it: kept, dug under)
+            self.assertEqual([k for _, _, k in roadsmod.level_ranges(c, c.index("0ff6"))], ["bridge"],
+                             "the overpass in a cutting over the dirt road kept")
+        else:
+            self.assertEqual([k for _, _, k in roadsmod.level_ranges(c, c.index("0ff6"))], [],
+                             "the overpass in a cutting flattened")
         # the road tile at the crossing: no bridge deck, the dirt track crossing the road
         frame = self.geodesy.EnuFrame(*ll(1500, 0), 0.0)
         tx, ty = int(math.floor(0 / roadsmod.TILE)), int(math.floor(0 / roadsmod.TILE))
@@ -981,7 +986,7 @@ class TestInsideEarth(unittest.TestCase):
         course (a canyon), a crossing at grade where it cannot (a wash the elevation data filled in: the deck stood a
         metre over the course, a wall across it; the user's Libramiento de Ensenada, 2026-10-31)."""
         import roads as roadsmod
-        if self.earthpatch.state().current().paint.tv >= 17:
+        if self.earthpatch.state().current().paint.tv == 17:
             self.skipTest("terrain 17 keeps it (test_bridges_the_course_goes_under_kept)")
         f = self.roads(*ll(1800, 0))
         self.assertEqual([k for _, _, k in roadsmod.level_ranges(f, f.index("0ff8"))], [], "no headroom: at grade")
@@ -1004,7 +1009,7 @@ class TestInsideEarth(unittest.TestCase):
             for b in prof.get("ux") or ():
                 got[b["id"]] = b
         self.assertIn("0ff8", got)
-        self.assertEqual(got["0ff8"]["f"], 0 if course.tv >= 17 else 1,
+        self.assertEqual(got["0ff8"]["f"], 0 if course.tv == 17 else 1,
                          "the wash's: kept (terrain 17), a crossing at grade (before)")
         self.assertIn("0ff9", got)
         self.assertEqual(got["0ff9"]["f"], 0, "over the canyon: kept")

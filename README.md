@@ -143,7 +143,9 @@ default), BeamNG.Earth's server leaves them out as the world streams in:
   built as ordinary ground roads instead, graded to the ground, so the course crosses at grade. A bridge over a road
   the course follows (an underpass) stays as it is. From ground version 17 every bridge the course goes under off the
   roads or on a dirt road stays a bridge, and the ground under it is dug down instead (see ground version 17 below):
-  turned into a ground road, its embankment stood across the course;
+  turned into a ground road, its embankment stood across the course. From ground version 18 that is so only where
+  its deck can stand at least 2.5 m over the course's ground; a lower one (the course meeting it at about its height)
+  is a crossing at ground level again;
 - **low overpasses**: a short road bridge (BeamNG.Earth's own roads too, motorways included) over the road the
   course follows is kept only when BeamNG.Earth can build its deck at least 6.5 m over that road. That is judged the
   way BeamNG.Earth grades the ground: the road below is flat across its lanes and shoulder and blends up 1 m per
@@ -224,6 +226,13 @@ ground's small bumps, the banked corner's edge) stood on it as saw teeth and lon
 Now nothing is narrower than about 6 m or changes over less than about 3 m: whoops a little longer, the broken ground
 in long swells, the windrows and the turns' sand as wide soft mounds, the banked corner a smooth bowl with its lip just
 past the edge, and the tallest places easing into their limit instead of flattening off.
+
+**Ground version 18** keeps version 17's ground with two changes. The ground is dug down only where a bridge's deck
+stands at least 2.5 m over the track (its height reckoned from its ends, climbing at most 6%), so the course really
+goes under it; by a bridge's end, where the course meets the deck at its own height, nothing is dug. A short bridge
+the course crosses whose deck can't stand 2.5 m over the course's ground is made a crossing at ground level again. And
+the ramps off paved roads cut right up to the asphalt again (version 17's 1:1 slope from the asphalt's edge left the
+road's bank standing where the track meets the road); only the dips keep that 1:1 slope, from 2 m past the asphalt.
 
 **Ground version 17** keeps version 16's ground with three changes. The bridges the course goes under off the roads
 or on a dirt road stay bridges, the ground dug down under them; only a bridge too low over a paved road the course
