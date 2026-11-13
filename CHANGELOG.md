@@ -3,6 +3,27 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.16 (2026-11-12)
+
+- **The track is one dirt road, not a patchwork.** BeamNG.Earth 1.8 draws a dirt road as a rutted strip in one of
+  four shades, picked per road, and starts its texture over at each road's start. The course's track is many short
+  pieces (a new one wherever its width steps), so it came out as blocks of light and dark dirt a few metres long,
+  their ruts starting over at each. Now the whole track has one shade and one texture length, and its ruts run on
+  from piece to piece.
+- **Ground version 14: natural boundaries.** Where the ground changes along the course (packed and loose dirt, sand,
+  gravel, mud, grass), the boundaries were ruler-straight: straight across the track where a fact about the place
+  crossed its threshold, and parallel to the track at a fixed distance from its edge. Now:
+  - the place's facts (dry land, plants, rock, canyon, the grade, washes nearby) are averaged along the course over
+    about 100 m, so the ground no longer flips from sample to sample;
+  - each boundary wanders with a noise of the place, as ragged tongues of one ground into the other, and the track's
+    edge, its loose sides, a wash's sand and a bank's mud wander by a metre or so;
+  - no stretch of sand trap or drawn dirt inside the track is shorter than 40 m.
+  Older ground versions (ground codes) are unchanged. 1.7.16 lays ground version 14, so everyone on a BeamMP server
+  should update together.
+- **Closing the game.** When BeamNG.drive closes, the app now removes everything it made first: the crowds' sounds, the
+  spectators, signs and their lights, the puddles, the track's pieces, and its connection to the companion. Before,
+  quitting straight from a level skipped that cleanup.
+
 ## 1.7.15 (2026-11-12)
 
 - **The dips under bridges and the ramps off paved roads are solid now.** In 1.7.14 their shape near the edge of a

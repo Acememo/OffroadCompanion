@@ -221,6 +221,71 @@
    "surfaces": "271b26bd4b3ab201"
   }
  },
+ "14": {
+  "banks": "2b570bcf260bf92f",
+  "cid": "77d89e4871b2",
+  "heights": {
+   "auto": "7063b3463d61262d",
+   "extra": "f2afc010b06b2c5c",
+   "mild": "d454c051913d2b4e",
+   "on": "9cd84af905046710"
+  },
+  "paved_clear": {
+   "extra": "b42414351b0aa42c",
+   "mild": "a0c1043b3f0d5d97",
+   "on": "42ff55ba5aef1ca4"
+  },
+  "paved_join": "795dda8a3db82404",
+  "pieces": "4f364d93b9d4c39a",
+  "pieces_n": 77,
+  "profiles": "ce14c268a7793bb4",
+  "rocks": {
+   "auto": "7bec95deee1b784c",
+   "auto_n": 729,
+   "plain": "060f679008be89f7",
+   "plain_n": 111
+  },
+  "rocks_off_roads": [
+   "87a421a9c78bb7d7",
+   707
+  ],
+  "ruts": {
+   "auto": "960758b3aa08cf0e",
+   "extra": "1e8158f38164ec00",
+   "mild": "22b1aacd8c732823",
+   "on": "76db3cf0d3b53b01"
+  },
+  "seal": "T14-98be6a",
+  "shaping": {
+   "dz": "886c0a1b93ab3faf",
+   "jn": [
+    [
+     [
+      70,
+      1
+     ]
+    ],
+    []
+   ],
+   "max": 0.275,
+   "min": -4.47
+  },
+  "surfaces": [
+   "e6176e74bd19cc18",
+   "5238e866d7519811"
+  ],
+  "variety": {
+   "auto": "63753dfc7a1650b6",
+   "extra": "08ad47d92b564a4d",
+   "mild": "e6b39c6e683a03ff",
+   "on": "f7a09d09d63d1921",
+   "pieces": "0aa274dfed888c9f",
+   "profiles": "5398ebe2bd36f426",
+   "rocks": "8f187e3925493e68",
+   "ruts": "f00685a422c5dd43",
+   "surfaces": "0837afbd827f5028"
+  }
+ },
  "2": {
   "banks": "2b570bcf260bf92f",
   "cid": "b6f5554f9011",

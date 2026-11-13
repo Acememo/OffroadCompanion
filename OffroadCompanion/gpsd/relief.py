@@ -363,7 +363,9 @@ def window_profile(course, k, pieces, road_fn, elev_fn, water_fn=None, land_fn=N
     rr = (z[1 + len(offs):] - zc).max(axis=0)
     canyon = _ramp(np.minimum(rl, rr), *CANYON_RISE)
     hill = _ramp(np.maximum(rl, rr), *HILL_RISE)
-    rock = _mean(np.maximum(canyon, 0.6 * hill), 2)
+    tv = getattr(course, "tv", 1)
+    wide = tv >= 14                 # (terrain 14: the facts smoothed further along the course: surfaces.NATURAL_TV)
+    rock = _mean(np.maximum(canyon, 0.6 * hill), 4 if wide else 2)
 
     # the turn at each sample (degrees per sample, left positive)
     hd = np.degrees(np.arctan2(ty, tx))
@@ -387,7 +389,7 @@ def window_profile(course, k, pieces, road_fn, elev_fn, water_fn=None, land_fn=N
         from . import shaping
         prof["jn"] = shaping.joins(course, k, paved)
     if getattr(course, "tv", 1) >= VARIETY_TV:     # (terrain 7: the grade along the course, for the alluvial fans)
-        prof["grade"] = out(_mean(np.abs(np.gradient(zc)) / STEP if n > 1 else np.zeros(n), 3), 4)
+        prof["grade"] = out(_mean(np.abs(np.gradient(zc)) / STEP if n > 1 else np.zeros(n), 5 if wide else 3), 4)
     from . import surfaces
     if getattr(course, "tv", 1) >= surfaces.FROM_TV:
         prof.update(surfaces.window_facts(lat, lon, x, y, tx, ty, pl, canyon, road, s0, s1, land_fn, waters_fn,

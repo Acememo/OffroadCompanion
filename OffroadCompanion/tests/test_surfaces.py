@@ -246,3 +246,71 @@ class TestSurfaces(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(HAVE_NP, "numpy")
+class TestNaturalBoundaries(unittest.TestCase):
+    """Terrain 14 (the user, 2026-11-12: "Can we do something to make the terrain transitions look more natural"): no
+    blocks of one ground and another a few metres long along the track, and no ruler-straight boundaries."""
+
+    def world(self, tv):
+        ll, xy = frame()
+        course = cr.Course([tuple(map(float, ll(x, 0.0))) for x in range(0, 3001, 50)], tv=tv)
+
+        def land(lat, lon):         # scrubby desert, patches of grass every 20 m or so
+            x, y = xy(np.asarray(lat, np.float64), np.asarray(lon, np.float64))
+            grass = (np.floor((x + 3.0 * y) / 17.0) % 2 == 0) & (x > 500) & (x < 2500)
+            return np.where(grass, 30, 60).tolist()
+        profs = {k: rf.window_profile(course, k, [], lambda *a: [], lambda la, lo: [0.0] * len(la), None, land,
+                                      lambda *a: []) for k in range(course.nwin)}
+        return ll, course, profs
+
+    def along(self, tv, y):
+        ll, course, profs = self.world(tv)
+        xs = np.arange(600.0, 2400.0, 2.0)
+        ys = np.full(len(xs), y)
+        la, lo = ll(xs, ys)
+        idx = np.where(np.abs(ys) <= 2.5, MATS["DIRT"], MATS["LOOSE"]).astype(np.uint8)
+        return sf.course_surfaces(idx, la, lo, course, profs, MATS)
+
+    def test_facts_smoothed_along_the_course(self):
+        """Land cover that changes every sample or two (a patchy WorldCover): terrain 14's dry-land share along the
+        course varies far less from sample to sample than terrain 13's, so the track does not flip between packed dirt,
+        loose dirt and plain dirt in blocks."""
+        ll, xy = frame()
+
+        def land(lat, lon):
+            x, _ = xy(np.asarray(lat, np.float64), np.asarray(lon, np.float64))
+            b = np.floor(x / 10.0).astype(np.int64)
+            return np.where(rf._hash(b, np.zeros_like(b), 7) < 0.5, 30, 60).tolist()
+        steps = {}
+        for tv in (13, 14):
+            course = cr.Course([tuple(map(float, ll(x, 0.0))) for x in range(0, 3001, 50)], tv=tv)
+            prof = rf.window_profile(course, 1, [], lambda *a: [], lambda la, lo: [0.0] * len(la), None, land,
+                                     lambda *a: [])
+            steps[tv] = float(np.mean(np.abs(np.diff(prof["arid"]))))
+        self.assertLess(steps[14], steps[13] * 0.6, steps)
+
+    def test_edges_wander(self):
+        ll, course, profs = self.world(14)
+        xs = np.arange(100.0, 500.0, 2.0)          # (open desert: the track's loose sides, then the land's own)
+        edge = []
+        for x in xs:
+            ys = np.arange(0.0, 8.0, 0.25)
+            la, lo = ll(np.full(len(ys), x), ys)
+            idx = np.where(ys <= 2.5, MATS["DIRT"], MATS["GRASS"]).astype(np.uint8)
+            got = sf.course_surfaces(idx, la, lo, course, profs, MATS)
+            edge.append(ys[np.flatnonzero(got == MATS["GRASS"])[0]])
+        self.assertGreater(np.ptp(edge), 0.4, "the track's edge is not a ruler line")
+        self.assertLess(np.ptp(edge), 2.5)
+
+    def test_the_same_whoever_asks(self):
+        ll, course, profs = self.world(14)
+        xs = np.arange(600.0, 900.0, 3.0)
+        ys = np.linspace(-6, 6, len(xs))
+        la, lo = ll(xs, ys)
+        idx = np.full(len(xs), MATS["LOOSE"], np.uint8)
+        whole = sf.course_surfaces(idx, la, lo, course, profs, MATS)
+        for i in (0, 13, 50, len(xs) - 1):
+            one = sf.course_surfaces(idx[i:i + 1], la[i:i + 1], lo[i:i + 1], course, profs, MATS)
+            self.assertEqual(int(one[0]), int(whole[i]))

@@ -33,8 +33,8 @@ M.CHECK_S = 0.2
 M.REROUTE_S = 8
 M.SETTINGS_FILE = '/settings/offroadCompanion.json'
 M.OLD_SETTINGS_FILE = '/settings/earthGps.json'   -- (the project was BeamNG.Earth GPS before 1.2.0)
-M.VERSION = '1.7.15'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
-M.BUILD = '2026-11-12 22:30'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
+M.VERSION = '1.7.16'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
+M.BUILD = '2026-11-12 23:30'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
 
 local settings = { lang = 'en', units = 'auto', ribbon = true, autoRoute = true, zoom = 600, paint = true, paintSize = 1.0,
                    clearCourse = true, clearRoute = true, streets = true, markers = 'checkpoints', ruts = 'off', rough = 'auto',
@@ -1288,6 +1288,22 @@ M.onUpdate = onUpdate
 M.onPreRender = onPreRender
 M.onExtensionLoaded = function() loadSettings(); pcall(tracks.install); pcall(markers.ensureMaterials) end
 M.onExtensionUnloaded = function() pcall(tracks.uninstall); pcall(wet.clear); pcall(wet.restore); pcall(wet.restoreLook) end
+-- The game closing (the user, 2026-11-12: "every time I close beamng when the offroadcompanion is running the beamng
+-- exe freezes and doesn't close completely"): everything this mod made goes first, while the engine still runs: the
+-- crowds' sound loops (3D sources still playing), the spectators, signs and their lights, the puddles, the track's
+-- pieces, the companion's socket. (The level's end does the same; quitting from a level skipped it.)
+M.onExit = function()
+  pcall(crowdsound.stopAll)
+  pcall(crowds.clear)
+  pcall(markers.clear)
+  pcall(wet.clear)
+  pcall(wet.restore)
+  pcall(wet.restoreLook)
+  pcall(tracks.uninstall)
+  pcall(link.close)
+end
+M.onPreExit = M.onExit
+
 M.onClientEndMission = function()
   pcall(wet.clear)
   pcall(wet.restore)

@@ -871,6 +871,28 @@ class TestInsideEarth(unittest.TestCase):
         paved = list(surface.PHOTO_ROAD_RGBA).index("paved")
         return [] if got is None else [k for k in got[2] if k == paved]
 
+    def test_one_strip_look_along_the_track(self):
+        """BeamNG.Earth 1.8's dirt strips over the course's track: every piece the same variation and texture length,
+        its texture running on from the piece before (strip_look; the user, 2026-11-12: the track a patchwork of light
+        and dark blocks)."""
+        import roads as roadsmod
+        if not getattr(roadsmod, "DIRT_STRIPS", False) or not hasattr(roadsmod, "DIRT_LOOK"):
+            self.skipTest("no dirt strips in this BeamNG.Earth")
+        from gpsd import courseroads as cr_
+        frame = self.geodesy.EnuFrame(*ll(600, 0), 0.0)
+        tx, ty = 0, 0
+        cells = [self.md.cell(k, layers=("roads",)).layers["roads"] for k in roadsmod.cells_of_tile(frame, tx, ty)]
+        ids = {str(i) for f in cells if f is not None for i in f.ids if str(i).startswith(cr_.ID_PREFIX)}
+        self.assertGreater(len(ids), 1, "the track in pieces here")
+        chunks = roadsmod.build_tile(frame, tx, ty, cells, lambda la, lo: ground(la, lo))
+        vary = set(roadsmod.DIRT_LOOK["dirt"].get("vary") or ())
+        strips = [c for c in chunks if c.get("m") in vary and c.get("s0") is not None]
+        self.assertTrue(strips, "dirt strips drawn")
+        self.assertEqual(len({c["m"] for c in strips}), 1, "one variation along the track")
+        self.assertEqual({c["tl"] for c in strips}, {round(roadsmod.DIRT_LOOK["dirt"]["aspect"] *
+                                                           self.earthpatch.STRIP_WIDTH_M, 2)})
+        self.assertGreater(max(c["s0"] for c in strips), 100.0, "the pieces' distance along the course")
+
     def test_road_tiles_and_grading(self):
         import grading
         import roads as roadsmod
@@ -1418,7 +1440,7 @@ class TestInsideEarth(unittest.TestCase):
         ep = self.earthpatch
         st = ep.state()
         course = st.current().paint
-        k = 3
+        k = course.nwin - 1          # (the far end of the course: no other read of the test world plans it meanwhile)
         try:                                # (no car on the course: no prefetcher plans these windows meanwhile)
             os.unlink(self.paintfile.pose_path())
         except OSError:

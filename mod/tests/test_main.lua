@@ -638,5 +638,9 @@ do
   check(R(false, '1,3', '1,2', false, 'yes', 1e9) == false, 'no route: not')
 end
 
+-- 1.7.16: the game closing: everything the mod made goes (onExit, onPreExit), never an error
+check(type(M.onExit) == 'function' and M.onPreExit == M.onExit, 'exit hooks there')
+check(pcall(M.onExit), 'the exit cleanup runs')
+
 print(string.format('%d passed, %d failed', pass, fail))
 os.exit(fail == 0 and 0 or 1)

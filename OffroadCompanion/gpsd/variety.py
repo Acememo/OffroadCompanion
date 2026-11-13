@@ -76,6 +76,8 @@ CRAWL_LANE = (0.45, 55.0, 1.6)      # the line between the boulders: weaving thi
 #                                   this many m, this wide each side of its middle
 CRAWL_ROCK_SLOTS, CRAWL_SIDE_SLOTS = 4, 4
 BARE_W = 0.5                # sections from this weight on are drawn as the ground itself (no dirt track decal)
+NATURAL_TV = 14             # (surfaces.NATURAL_TV: from terrain 14 no bare or drawn stretch inside a piece is shorter ...
+BARE_MIN_N = 4              # ... than this many samples: min_runs)
 
 
 def _desert(f):
@@ -177,6 +179,23 @@ def bare(course, profiles, s):
     return np.maximum(np.maximum(ws, wr), wc) >= BARE_W
 
 
+def min_runs(b, n):
+    """b (bools along a piece) with every run between two others shorter than n samples taken into the run before it
+    (terrain 14: no blocks of sand and dirt a sample or two long; a piece's first and last runs as they are). Pure."""
+    b = np.array(b, bool)
+    changed = True
+    while changed:
+        changed = False
+        starts = [0] + [k for k in range(1, len(b)) if b[k] != b[k - 1]]
+        ends = starts[1:] + [len(b)]
+        for r in range(1, len(starts) - 1):         # (the interior runs, first to last)
+            if ends[r] - starts[r] < n:
+                b[starts[r]:ends[r]] = b[starts[r] - 1]
+                changed = True
+                break
+    return b
+
+
 def split_bare(course, profiles, ps):
     """The pieces ps (courseroads.window_pieces) cut where a stretch is drawn as the ground itself (bare()): each run a
     piece of its own, its "surface" "rock" (BeamNG.Earth then draws no decal there: its terrain_surface) or "dirt";
@@ -195,6 +214,8 @@ def split_bare(course, profiles, ps):
             complete = False
             out.append(p)
             continue
+        if getattr(course, "tv", 1) >= NATURAL_TV:
+            b = min_runs(b, BARE_MIN_N)
         if not b.any():
             out.append(p)
             continue

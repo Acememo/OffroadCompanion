@@ -263,6 +263,7 @@ class _State:
         self.veg_plan = None                # the course key the vegetation's own memory was made for
         self.water = OrderedDict()  # cell key str -> [(lonlat ring (k, 2)...)] of dry / salt lakes
         self.shape_cache = {}       # lift -> {(cid, "x" / "j", key): what shaping.py read from the grading}
+        self.piece_s = OrderedDict()    # the track's piece id -> m along the course to its first sample (strip_look)
         self.followed_ids = {}      # (road id, half width) -> followed by the course (followed_rows), for ...
         self.followed_plan = None   # ... this course
         self.bld = OrderedDict()    # (cell key str, layer, course key) -> Features
@@ -1021,6 +1022,13 @@ class _State:
                 complete = complete and done
             else:
                 complete = False
+        if ps:                                  # (where each piece starts along the course: strip_look)
+            with self.lock:
+                for p in ps:
+                    if "i0" in p:
+                        self.piece_s[str(p["id"])] = float(p["i0"]) * courseroads.STEP_M
+                while len(self.piece_s) > 20000:
+                    self.piece_s.popitem(last=False)
         if not ps:
             out = base
         else:
@@ -1632,6 +1640,11 @@ def install():
         roadmesh.layer_of = layer_of
     except Exception:                       # (an older BeamNG.Earth: DecalRoads, render priority orders them)
         pass
+    # BeamNG.Earth 1.8's dirt strips over the course's track: one look along it (install_strip_look)
+    try:
+        install_strip_look(st)
+    except Exception as e:                  # (BeamNG.Earth before 1.8: no strips)
+        log.debug("course painter: no strip look hook (%s: %s)", type(e).__name__, e)
     # BeamNG.Earth 1.8's mapped props on the road tiles (fences, noise walls, containers, barns, billboards, towers,
     # picnic tables, bus shelters): none in the course's way (corridor.props_off)
     try:
@@ -1952,6 +1965,77 @@ def _followed_roads(roads, course_xy):
 
 
 DIRT_KINDS = ("dirt", "gravel")
+
+
+STRIP_WIDTH_M = 8.0         # the course's strips' texture length: their look's aspect times this (strip_look)
+
+
+def strip_look(look, fid, cid, s_at):
+    """The look of BeamNG.Earth 1.8's dirt strip (roads.look_of's: material, texture length "tl") for a piece of the
+    course's track (fid: its id): the user, 2026-11-12, a screenshot of the track as a patchwork of light and dark
+    blocks: "Can we do something to make the terrain transitions look more natural". The track is many pieces (a new
+    one wherever its width steps), and BeamNG.Earth gives every road one of its four dirt variations by the road's id,
+    its texture length by its width, and starts its texture at the road's start: each piece a different shade, its
+    ruts starting over. Here every piece of a course gets the same variation (by the course), one texture length
+    (STRIP_WIDTH_M), and "_egps_s0", how far along the course it starts (s_at(fid), None unknown), so its ruts run on
+    from the piece before. Other roads' looks as they are. Pure."""
+    if not isinstance(look, dict) or not look.get("aspect") or not str(fid or "").startswith(courseroads.ID_PREFIX):
+        return look
+    import roads as roadsmod
+    out = dict(look)
+    vary = (getattr(roadsmod, "DIRT_LOOK", {}).get("dirt") or {}).get("vary")
+    if vary and out.get("m") in vary:
+        n = int.from_bytes(hashlib.blake2s(str(cid).encode(), digest_size=2).digest(), "little")
+        out["m"] = vary[n % len(vary)]
+    out["tl"] = round(float(look["aspect"]) * STRIP_WIDTH_M, 2)
+    s0 = s_at(str(fid))
+    if s0 is not None:
+        out["_egps_s0"] = float(s0)
+    return out
+
+
+def install_strip_look(st):
+    """Hooks roads.look_of (strip_look for the course's pieces) and roads._surface_pieces (a piece's chunks carry their
+    distance along the course: its "_egps_s0" added to their s0 / s1, roadmesh._ribbon_v's v)."""
+    import roads as roadsmod
+    if not hasattr(roadsmod, "look_of") or not hasattr(roadsmod, "_surface_pieces"):
+        return False
+    orig_look, orig_pieces = roadsmod.look_of, roadsmod._surface_pieces
+    if getattr(orig_look, "_earthgps", False):
+        return True
+
+    def s_at(fid):
+        with st.lock:
+            return st.piece_s.get(fid)
+
+    def look_of(spec, fid=None):
+        look = orig_look(spec, fid)
+        try:
+            plan = st.current()
+            c = plan.paint if plan is not None else None
+            if c is not None:
+                return strip_look(look, fid, c.cid, s_at)
+        except Exception as e:              # (BeamNG.Earth's own look then)
+            log.debug("course painter: strip look: %s: %s", type(e).__name__, e)
+        return look
+
+    def _surface_pieces(look, width, line, box, ends=(True, True)):
+        out = orig_pieces(look, width, line, box, ends)
+        s0 = look.get("_egps_s0") if isinstance(look, dict) else None
+        if s0:
+            for ch in out:
+                # (the fades at a strip's open ends are measured along it from 0 to slen: slen moved too, and a
+                # piece whose start is open, where its strip fades in from 0, keeps its own)
+                if ch.get("s0") is not None and ch.get("s1") is not None and ch.get("slen") is not None and \
+                        not (ch.get("fends") or [0])[0]:
+                    ch["s0"] = round(float(ch["s0"]) + s0, 3)
+                    ch["s1"] = round(float(ch["s1"]) + s0, 3)
+                    ch["slen"] = round(float(ch["slen"]) + s0, 2)
+        return out
+    look_of._earthgps = True
+    _surface_pieces._earthgps = True
+    roadsmod.look_of, roadsmod._surface_pieces = look_of, _surface_pieces
+    return True
 
 
 def install_props(st):

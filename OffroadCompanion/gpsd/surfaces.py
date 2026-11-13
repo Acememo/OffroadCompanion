@@ -74,6 +74,19 @@ SKIP_CLASSES = ("drain", "ditch", "fish_pass", "fountain", "swimming_pool", "ref
 M_PER_DEG = 111320.0
 # (terrain 7: the track's sections, variety.py: sand traps, rock sections, gravel, rock crawls)
 VARIETY_TV = 7
+# (terrain 14; the user, 2026-11-12, a screenshot of the track in blocks of sand and dirt a few metres long, square
+# edges: "Can we do something to make the terrain transitions look more natural"). The facts the ground's kinds are
+# chosen by flickered from sample to sample (10 m) about their thresholds, and every boundary was a straight line: across
+# the track where a fact crossed its threshold, along it at a fixed distance from its edge. From terrain 14 the facts
+# are smoothed along the course over ~100 m (window_facts, relief.window_profile), each threshold is moved about by a
+# noise of the place (DITHER: patches tens of metres across, so a change comes as ragged tongues of one ground into
+# the other) and every distance by another (JITTER: the track's edge, its loose sides, a wash's sand, a bank's mud
+# wander by a metre or so).
+NATURAL_TV = 14
+DITHER_M, DITHER_A = 35.0, 0.45     # the thresholds' noise: its size (m), its swing (of a 0 .. 1 fact, peak to peak)
+JITTER_M = 9.0                      # the distances' noise: its size (m) ...
+JITTER = {"track": 0.8, "packed": 0.12, "berm": 0.8, "canyon": 2.5, "wash": 1.5, "beach": 10.0, "bank": 2.0,
+          "variety": 1.2}           # ... and its swing (m, peak to peak; packed: of the half width's share)
 WASH_NEAR_M = (3.0, 15.0)   # the course line this near a dry wash's edge: in it .. not by it
 SEA_NEAR_M = (20.0, 60.0)
 
@@ -180,10 +193,11 @@ def window_facts(lat, lon, x, y, tx, ty, pl, canyon, road, s0, s1, land_fn=None,
     the window, clipped to its box. Pure given the functions (they raise while their data is missing)."""
     from .relief import _mean
     n = len(lat)
+    r = 5 if tv >= NATURAL_TV else 2        # (terrain 14: smoothed along the course over ~100 m: NATURAL_TV)
 
     def out(v, nd=3):
         return [round(float(u), nd) for u in np.asarray(v)[s0:s1]]
-    facts = {"canyon": out(_mean(np.asarray(canyon, np.float64), 2)), "road": out(road, 2)}
+    facts = {"canyon": out(_mean(np.asarray(canyon, np.float64), 4 if tv >= NATURAL_TV else 2)), "road": out(road, 2)}
     if land_fn is not None:
         qx, qy = [x], [y]
         for o in LAND_OFFS_M[1:]:
@@ -194,12 +208,12 @@ def window_facts(lat, lon, x, y, tx, ty, pl, canyon, road, s0, s1, land_fn=None,
         cls = np.asarray(land_fn(np.asarray(qla).tolist(), np.asarray(qlo).tolist()), np.int64).reshape(len(qx), n)
         dry = np.isin(cls, DRY_CLASSES).mean(axis=0)
         wet = np.isin(cls, WET_CLASSES).mean(axis=0)
-        facts["arid"] = out(_mean(dry, 2))
-        facts["wetl"] = out(_mean(wet, 2))
+        facts["arid"] = out(_mean(dry, r))
+        facts["wetl"] = out(_mean(wet, r))
         if tv >= COVER_TV:                  # (terrain 4: the plants beside the track, not on its line)
             beside = cls[1:]
-            facts["cover"] = out(_mean(np.isin(beside, COVER_CLASSES).mean(axis=0), 2))
-            facts["grass"] = out(_mean(np.isin(beside, GRASS_CLASSES).mean(axis=0), 2))
+            facts["cover"] = out(_mean(np.isin(beside, COVER_CLASSES).mean(axis=0), r))
+            facts["grass"] = out(_mean(np.isin(beside, GRASS_CLASSES).mean(axis=0), r))
     if waters_fn is not None:
         pad_la = WATER_PAD_M / M_PER_DEG
         pad_lo = pad_la / max(0.05, math.cos(math.radians(float(np.mean(lat)))))
@@ -219,8 +233,9 @@ def window_facts(lat, lon, x, y, tx, ty, pl, canyon, road, s0, s1, land_fn=None,
         facts["waters"] = ws
         if tv >= VARIETY_TV:                # (terrain 7: how near the course line runs to a dry wash, to the sea)
             dist = water_distances(ws, lat, lon)
-            facts["washn"] = out(_mean(1.0 - _ramp_(dist["wash"], *WASH_NEAR_M), 1))
-            facts["sean"] = out(_mean(1.0 - _ramp_(dist["sea"], *SEA_NEAR_M), 1))
+            rw = 3 if tv >= NATURAL_TV else 1
+            facts["washn"] = out(_mean(1.0 - _ramp_(dist["wash"], *WASH_NEAR_M), rw))
+            facts["sean"] = out(_mean(1.0 - _ramp_(dist["sea"], *SEA_NEAR_M), rw))
     return facts
 
 
@@ -314,40 +329,62 @@ def course_surfaces(idx, lat, lon, course, profiles, mats, near=None):
     f = {k: v[sel] for k, v in f.items()}
     waters = [w for p in profiles.values() for w in (p.get("waters") or ())]
     dist = water_distances(waters, lat[pts], lon[pts])
-    arid = f["arid"] >= ARID
-    track = ad <= hw + 0.3
+    # (terrain 14: ragged boundaries, NATURAL_TV; zeros before)
+    th, jit = _natural(lat[pts], lon[pts], getattr(course, "tv", 1) >= NATURAL_TV)
+    arid = f["arid"] + th(1) >= ARID
+    track = ad <= hw + 0.3 + jit(2, "track")
     rock = here == M.get("ROCK", -1)
     new = here.copy()
     # the track itself: packed or loose by the country it crosses
     desert = track & arid
-    new[desert] = np.where(ad[desert] <= hw[desert] * PACKED_SHARE, M["DUSTY"], M["LOOSE"])
+    new[desert] = np.where(ad[desert] <= hw[desert] * (PACKED_SHARE + jit(3, "packed")[desert]), M["DUSTY"],
+                           M["LOOSE"])
     new[track & ~arid] = M["DIRT"]
-    new[track & (f["rock"] >= ROCKY)] = M["GRAVEL"]
-    road = track & (f["road"] >= 0.5)
+    new[track & (f["rock"] + th(4) >= ROCKY)] = M["GRAVEL"]
+    road = track & (f["road"] + th(5) >= 0.5)
     new[road] = np.where(arid[road] & (ad[road] > hw[road] - EDGE_IN_M), M["LOOSE"], M["DIRT"])
-    new[track & (f["lake"] >= 0.5)] = M["DIRT"]            # a dry lake bed: packed hard
+    new[track & (f["lake"] + th(6) >= 0.5)] = M["DIRT"]            # a dry lake bed: packed hard
     # loose dirt pushed to the outside of the desert's turns
     outside = np.where(f["turn"] > 0, dd < 0, dd > 0) & (np.abs(f["turn"]) >= TURN_DEG)
-    berm = arid & outside & (ad > hw - EDGE_IN_M) & (ad <= hw + EDGE_OUT_M) & ~rock
+    berm = arid & outside & (ad > hw - EDGE_IN_M) & (ad <= hw + EDGE_OUT_M + jit(7, "berm")) & ~rock
     new[berm] = M["LOOSE"]
     # the natural ground (on the track and beside it)
-    canyon = arid & (f["canyon"] >= CANYON_SAND) & (ad <= hw + CANYON_REACH_M) & (f["lake"] < 0.5) & ~rock
+    canyon = arid & (f["canyon"] + th(8) >= CANYON_SAND) & (ad <= hw + CANYON_REACH_M + jit(9, "canyon")) & \
+        (f["lake"] < 0.5) & ~rock
     new[canyon] = M["SAND"]
-    wash = (dist["wash"] <= WASH_MARGIN_M) & ~rock
+    wash = (dist["wash"] <= WASH_MARGIN_M + jit(10, "wash")) & ~rock
     new[wash] = np.where(arid[wash], M["SAND"], M["GRAVEL"])
-    beach = (dist["sea"] <= BEACH_M) & ~rock
+    beach = (dist["sea"] <= BEACH_M + jit(11, "beach")) & ~rock
     new[beach] = M["SAND"]
-    bank = ((dist["bank"] <= BANK_M) | (f["wetl"] >= WETLAND)) & ~rock
+    bank = ((dist["bank"] <= BANK_M + jit(12, "bank")) | (f["wetl"] + th(13) >= WETLAND)) & ~rock
     new[bank] = M["MUD"]
     if getattr(course, "tv", 1) >= VARIETY_TV:
-        new = _variety(new, M, course, ad, hw, f, s[sel] if np.ndim(s) else s, rock)
+        new = _variety(new, M, course, ad, hw, f, s[sel] if np.ndim(s) else s, rock, jit(14, "variety"))
     if getattr(course, "tv", 1) >= COVER_TV:
         new = _cover(new, here, M, track, arid, ad, hw, f, s[sel] if np.ndim(s) else s, rock)
     out[pts] = new
     return out.reshape(shape)
 
 
-def _variety(new, M, course, ad, hw, f, s, rock):
+def _natural(lat, lon, on):
+    """(th(salt), jit(salt, kind)): per point, a threshold's shift (DITHER) and a distance's (JITTER[kind]), each its own
+    noise of the place; zeros when not on (before NATURAL_TV). Pure."""
+    n = len(lat)
+    if not on or not n:
+        z = np.zeros(n)
+        return (lambda salt: z), (lambda salt, kind: z)
+    from . import relief
+    gx, gy = relief.global_xy(lat, lon)
+
+    def th(salt):
+        return (relief.fbm(gx / DITHER_M, gy / DITHER_M, 900 + salt, 2) - 0.5) * DITHER_A * 2.0
+
+    def jit(salt, kind):
+        return (relief.fbm(gx / JITTER_M, gy / JITTER_M, 950 + salt, 2) - 0.5) * JITTER[kind] * 2.0
+    return th, jit
+
+
+def _variety(new, M, course, ad, hw, f, s, rock, jitter=0.0):
     """Terrain 7's sections (variety.py) on the ground: a sand trap's sand over the track and past its edges, a rock
     section's rock over the track with loose gravel at its edges, gravel over the track, a crawl's rock; never on mud or
     BeamNG.Earth's own steep rock (it stays). Pure."""
@@ -358,14 +395,15 @@ def _variety(new, M, course, ad, hw, f, s, rock):
     wc = variety.crawl_weight(course, s, f) if auto else np.zeros(len(s))
     free = (new != M["MUD"]) & ~rock
     on = variety.BARE_W
-    g = free & (wg * (1 - wc) >= on) & (ad <= hw + variety.GRAVEL_REACH_M)
+    j = jitter
+    g = free & (wg * (1 - wc) >= on) & (ad <= hw + variety.GRAVEL_REACH_M + j)
     new[g] = M["GRAVEL"]
     r = free & (wr * (1 - wc) >= on)
-    new[r & (ad <= hw + variety.ROCK_EDGE_M)] = M["GRAVEL"]
-    new[r & (ad <= hw)] = M["ROCK"]
-    sd = free & (ws * (1 - wc) >= on) & (ad <= hw + variety.SAND_REACH_M)
+    new[r & (ad <= hw + variety.ROCK_EDGE_M + j)] = M["GRAVEL"]
+    new[r & (ad <= hw + 0.5 * j)] = M["ROCK"]
+    sd = free & (ws * (1 - wc) >= on) & (ad <= hw + variety.SAND_REACH_M + j)
     new[sd] = M["SAND"]
-    c = free & (wc >= on) & (ad <= hw + variety.CRAWL_REACH_M)
+    c = free & (wc >= on) & (ad <= hw + variety.CRAWL_REACH_M + j)
     new[c] = M["ROCK"]
     return new
 

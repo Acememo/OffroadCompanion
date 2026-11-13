@@ -223,6 +223,13 @@ Now nothing is narrower than about 6 m or changes over less than about 3 m: whoo
 in long swells, the windrows and the turns' sand as wide soft mounds, the banked corner a smooth bowl with its lip just
 past the edge, and the tallest places easing into their limit instead of flattening off.
 
+**Ground version 14** keeps version 13's ground, with natural boundaries where the ground changes along the course.
+The facts the ground's kinds are chosen by (dry land, plants, rock, a canyon, the grade, a wash nearby) are averaged
+along the course over about 100 m, so the track no longer flips between packed dirt, loose dirt and sand from one 10 m
+sample to the next. Every boundary wanders with a noise of the place (ragged tongues of one ground into the other,
+tens of metres across), and the track's edge, its loose sides, a wash's sand and a bank's mud wander by a metre or so.
+No stretch of sand trap or drawn dirt inside the track is shorter than 40 m.
+
 **Ground version 13** keeps version 12's ground with two changes. Where the track passes under a road bridge that
 BeamNG.Earth keeps, the ground under it goes down into a wide dip: a flat floor under the deck and 5 m past it each
 way, eased banks no steeper than 10% down and back up, sloped sides, deep enough for 5 m between the track and the
