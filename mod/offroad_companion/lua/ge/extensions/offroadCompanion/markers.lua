@@ -22,7 +22,13 @@ local M = {}
 
 M.mode = 'checkpoints'      -- 'off' | 'checkpoints' | 'full'
 M.enabled = true            -- (mode ~= 'off'; kept for callers that switch it)
-M.SPAWN_M, M.DESPAWN_M = 1200, 1500   -- (1.7.13: was 600)
+M.SPAWN_M, M.DESPAWN_M = 2400, 2750   -- (1.7.13: 1200, was 600; 1.7.17: Settings' Props distance, DISTANCES)
+M.DISTANCES = { near = { 1200, 1500 }, far = { 2400, 2750 }, farthest = { 3600, 4000 } }
+function M.setDistance(v)
+  local d = M.DISTANCES[v] and v or 'far'
+  M.SPAWN_M, M.DESPAWN_M = M.DISTANCES[d][1], M.DISTANCES[d][2]
+  return d
+end
 M.SURE_M = 350              -- within this the ground under the car's block is real: heights checked every update
 M.FIX_DZ_M, M.FIX_XY_M = 0.25, 1.0
 M.SIDE_M = 6.0              -- a sign this far beside the course line, while the track's width there is not known ...

@@ -1,7 +1,7 @@
 // Offroad Companion (the in-game app; lua/ge/extensions/offroadCompanion/main.lua): turn-by-turn road navigation and race-course guidance.
 // The game's UI browser cannot make web requests, so everything goes through the game's Lua (bngApi.engineLua);
 // the Lua side pushes 'OffroadCompanionUpdate' five times a second while this app is on screen.
-var EGPS_APP_BUILD = '2026-11-12 23:30'   // (main.lua M.BUILD: the same, or the game kept an older copy of one of them)
+var EGPS_APP_BUILD = '2026-11-12 23:55'   // (main.lua M.BUILD: the same, or the game kept an older copy of one of them)
 angular.module('beamng.apps')
 .directive('offroadCompanion', ['$sce', function ($sce) {
   'use strict'
@@ -401,6 +401,10 @@ angular.module('beamng.apps')
 '      <button ng-class="{on: ui.spectators === \'some\'}" ng-click="choose(\'spectators\', \'some\')">Some</button>' +
 '      <button ng-class="{on: ui.spectators === \'lots\'}" ng-click="choose(\'spectators\', \'lots\')" title="The course lined like a Baja race: people packed behind a fence, canopies and trucks behind them; bigger the nearer a town">Lots</button>' +
 '      <button ng-class="{on: ui.spectators === \'off\'}" ng-click="choose(\'spectators\', \'off\')">Off</button></span></div>' +
+'    <div class="set" ng-if="ui.spectators !== \'off\' || ui.markers !== \'off\'"><span title="How far ahead the spectators, canopies, trucks and course signs are put up. Farther shows them sooner but puts more objects in the world">Props distance</span><span class="seg">' +
+'      <button ng-class="{on: ui.propDistance === \'near\'}" ng-click="choose(\'propDistance\', \'near\')" title="Crowds from 900 m, signs from 1.2 km">Near</button>' +
+'      <button ng-class="{on: ui.propDistance === \'far\'}" ng-click="choose(\'propDistance\', \'far\')" title="Crowds from 1.8 km, signs from 2.4 km">Far</button>' +
+'      <button ng-class="{on: ui.propDistance === \'farthest\'}" ng-click="choose(\'propDistance\', \'farthest\')" title="Crowds from 2.7 km, signs from 3.6 km">Farthest</button></span></div>' +
 '    <div class="set" ng-if="ui.spectators !== \'off\'"><span title="After sunset (the game\'s time of day, where you are): campfires behind the crowds, lanterns under the canopies, light towers at the start, finish and checkpoints. The nearest ones light the ground">Night lights</span><span class="seg">' +
 '      <button ng-class="{on: ui.nightLights === \'on\'}" ng-click="choose(\'nightLights\', \'on\')">On</button>' +
 '      <button ng-class="{on: ui.nightLights === \'bright\'}" ng-click="choose(\'nightLights\', \'bright\')" title="More light from each">Bright</button>' +
@@ -446,7 +450,7 @@ angular.module('beamng.apps')
       scope.call = { svg: trust(tulip(0)), idle: 'Search for a place or load a course' }
       scope.ui = { q: '', results: [], source: null, items: [], filter: '', radius: '25000', url: '',
                    lang: 'en', units: 'auto', ribbon: 'on', autoRoute: 'on', clearRoute: 'on', streets: 'on',
-                   rough: 'auto', notes: 'top', spectators: 'some', nightLights: 'on', crowdSound: 'on', wetGround: 'on',
+                   rough: 'auto', notes: 'top', spectators: 'some', nightLights: 'on', crowdSound: 'on', wetGround: 'on', propDistance: 'far',
                    pasteCode: '', trackName: '', sure: false }
       var settingsSynced = false
 
@@ -1388,6 +1392,7 @@ angular.module('beamng.apps')
             scope.ui.markers = mk === false || mk === 'off' ? 'off' : (mk === 'full' ? 'full' : 'checkpoints')
             scope.ui.spectators = data.settings.spectators === 'off' || data.settings.spectators === 'lots' ? data.settings.spectators : 'some'
             scope.ui.nightLights = data.settings.nightLights === 'off' || data.settings.nightLights === 'bright' ? data.settings.nightLights : 'on'
+            scope.ui.propDistance = data.settings.propDistance === 'near' || data.settings.propDistance === 'farthest' ? data.settings.propDistance : 'far'
             scope.ui.crowdSound = data.settings.crowdSound === false ? 'off' : 'on'
             scope.ui.wetGround = data.settings.wetGround === false ? 'off' : 'on'
             scope.ui.ruts = data.settings.ruts || 'off'

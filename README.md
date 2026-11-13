@@ -223,6 +223,12 @@ Now nothing is narrower than about 6 m or changes over less than about 3 m: whoo
 in long swells, the windrows and the turns' sand as wide soft mounds, the banked corner a smooth bowl with its lip just
 past the edge, and the tallest places easing into their limit instead of flattening off.
 
+**Ground version 15** keeps version 14's ground, with the dips under bridges and the ramps off paved roads built as
+earthworks: a surface along the track (the ramp at 10% at most, the dip's floor deep enough for 5 m under the deck's
+girders, flat 6 m past the track's edges and 8 m past the deck's), with 1:3 slopes on either side cut back (or, for a
+ramp up onto a road on a fill, filled) to wherever they meet the ground. Nothing beyond those slopes is touched, and
+neither is the road.
+
 **Ground version 14** keeps version 13's ground, with natural boundaries where the ground changes along the course.
 The facts the ground's kinds are chosen by (dry land, plants, rock, a canyon, the grade, a wash nearby) are averaged
 along the course over about 100 m, so the track no longer flips between packed dirt, loose dirt and sand from one 10 m
@@ -439,6 +445,11 @@ companion fetched it at another time could see slightly different crowd sizes.
 Up close the spectators and the parked trucks are drawn in detail (rounded limbs, hands, faces, caps and sombreros;
 round wheels, windows, grilles, mirrors); from about 40 m (a truck a little further) the game switches each to a simple
 model of its own, so a big crowd costs about what it did.
+
+**How far ahead** (Settings, **Props distance**): the spectators, canopies and trucks are put up from 1.8 km ahead
+and the course signs from 2.4 km (Far, the default). **Near** halves that (fewer objects in the world at once), and
+**Farthest** puts them up from 2.7 and 3.6 km. Far out they stand on the distant ground BeamNG.Earth has there, and are
+set on the real ground once you are within a few hundred metres.
 
 **After dark** (Settings, **Night lights**: On, Bright or Off) the crowds light up once the sun has set where you are
 (the game's time of day): a campfire behind each crowd, a lantern under every canopy, and towable light towers at

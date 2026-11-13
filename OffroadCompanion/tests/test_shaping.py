@@ -249,5 +249,68 @@ class TestWhicheverWindows(unittest.TestCase):
         self.assertEqual(sh.neighbours(c, [1]), [0])
         self.assertEqual(sh.neighbours(c, [0, 1]), [])
 
+
+@unittest.skipUnless(HAVE_NP, "numpy")
+class TestEarthworks(unittest.TestCase):
+    """Terrain 15 (the user, 2026-11-12: "it should not affect the road and needs to be smoother than a huge hole";
+    "the bridges are having enough clearance on the middle not on the edges"): the ground cut (or filled) to a design
+    surface, flat across the track and past it, its sides sloping 1:3 back to the ground: never a pit or a trench."""
+
+    def setUp(self):
+        self.ll, self.xy = frame()
+        self.c = straight(tv=15)
+
+    def elev(self, lat, lon):
+        return np.zeros(np.size(lat))
+
+    def cut_grade(self, lat, lon, nat):
+        # the paved road to x 500, cut 4 m into a hill rising 0.25 per m to the left of the course (a hillside)
+        x, y = self.xy(np.asarray(lat).ravel(), np.asarray(lon).ravel())
+        return np.clip((x - 504.0) * 2.0, 0.0, 4.0) + np.maximum(0.0, y) * 0.25 * (x > 504.0)
+
+    def test_ramp_no_pit(self):
+        n = self.c.inner(0)[1] + 1
+        profs = profile(self.c, jn=sh.joins(self.c, 0, [i <= 50 for i in range(n)]))
+        xs = np.arange(490.0, 640.0, 0.5)
+        la, lo = self.ll(xs, np.zeros(len(xs)))
+        g = self.cut_grade(la, lo, None)
+        z = g + sh.shape(self.c, profs, la, lo, g, self.cut_grade, self.elev)
+        self.assertLessEqual(float((np.abs(np.diff(z)) / 0.5).max()), sh.JOIN15_GRADE * 1.05, "the ramp")
+        self.assertAlmostEqual(float(z[0]), 0.0, places=6, msg="the road untouched")
+        ramp = dict(zip(xs.tolist(), z.tolist()))
+        for x in (510.0, 525.0, 540.0):
+            ys = np.arange(-30.0, 30.0, 0.5)
+            la, lo = self.ll(np.full(len(ys), x), ys)
+            g = self.cut_grade(la, lo, None)
+            zz = g + sh.shape(self.c, profs, la, lo, g, self.cut_grade, self.elev)
+            self.assertGreaterEqual(float(zz.min()), ramp[x] - 1e-6, f"no pit below the ramp's line at x {x}")
+            self.assertLessEqual(float((np.abs(np.diff(zz)) / 0.5).max()), 0.6, f"its sides gentle at x {x}")
+            self.assertTrue(np.all(zz <= g + 1e-9), "only cut here (the ground above the road)")
+
+    def test_dip_room_under_the_whole_deck(self):
+        ll = self.ll
+        a, b = ll(500.0, -40.0), ll(500.0, 40.0)
+        x = {"s": 500.0, "sin": 1.0, "a": [float(a[1]), float(a[0])], "b": [float(b[1]), float(b[0])], "hw": 5.0,
+             "len": 80.0, "id": "bridge", "f": 0}
+        profs = profile(self.c, ux=[x])
+
+        def grade(lat, lon, nat):
+            xx, yy = self.xy(np.asarray(lat).ravel(), np.asarray(lon).ravel())
+            return np.where(np.abs(yy) >= 39.0, 3.0, 0.0) + 0.05 * yy      # (the ground tilted across)
+        floor = (3.0 - 0.05 * 40.0) - sh.DECK_UNDER_M - sh.UNDER_CLEAR_M     # (the lower end's road)
+        ys = np.arange(-30.0, 30.1, 0.5)
+        la, lo = ll(np.full(len(ys), 500.0), ys)
+        g = grade(la, lo, None)
+        z = g + sh.shape(self.c, profs, la, lo, g, grade, self.elev)
+        edge = np.abs(ys) <= 3.0 + sh.FLAT15_DIP_M                 # (the track's half width 3 m + the flat)
+        self.assertTrue(np.allclose(z[edge], floor), "the floor's clearance across the track and past it")
+        self.assertLessEqual(float((np.abs(np.diff(z)) / 0.5).max()), sh.SIDE15 + 0.05 + 1e-6, "gentle sides")
+        # along: at the deck's edges (its half width 5 m + 1 m parapet) the floor too
+        xs = np.array([494.0, 506.0])
+        la, lo = ll(xs, np.zeros(2))
+        g = grade(la, lo, None)
+        z = g + sh.shape(self.c, profs, la, lo, g, grade, self.elev)
+        self.assertTrue(np.allclose(z, floor, atol=1e-6))
+
 if __name__ == "__main__":
     unittest.main()

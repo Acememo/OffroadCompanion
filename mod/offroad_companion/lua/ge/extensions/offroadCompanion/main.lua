@@ -33,13 +33,14 @@ M.CHECK_S = 0.2
 M.REROUTE_S = 8
 M.SETTINGS_FILE = '/settings/offroadCompanion.json'
 M.OLD_SETTINGS_FILE = '/settings/earthGps.json'   -- (the project was BeamNG.Earth GPS before 1.2.0)
-M.VERSION = '1.7.16'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
-M.BUILD = '2026-11-12 23:30'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
+M.VERSION = '1.7.17'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
+M.BUILD = '2026-11-12 23:55'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
 
 local settings = { lang = 'en', units = 'auto', ribbon = true, autoRoute = true, zoom = 600, paint = true, paintSize = 1.0,
                    clearCourse = true, clearRoute = true, streets = true, markers = 'checkpoints', ruts = 'off', rough = 'auto',
                    replays = true, notes = 'top', spectators = 'some', crowdSound = true,
                    nightLights = 'on', wetGround = true,
+                   propDistance = 'far',  -- Settings' Props distance: near / far / farthest (crowds.DISTANCES)
                    uiScale = 1.0,       -- Settings' App size: the app's text and controls (0.7-2.5)
                    -- a ground code pasted for a course (Settings): the terrain version it was made with, for that course
                    groundTv = 0, groundTvFor = '',
@@ -173,6 +174,8 @@ local function loadSettings()
   settings.markers = markers.setMode(settings.markers)   -- (true / false before 2026-10-22)
   settings.spectators = crowds.setLevel(settings.spectators)
   settings.nightLights = crowds.setLights(settings.nightLights)
+  settings.propDistance = crowds.setDistance(settings.propDistance)
+  markers.setDistance(settings.propDistance)
   settings.crowdSound = crowdsound.setEnabled(settings.crowdSound ~= false)
   settings.wetGround = wet.setEnabled(settings.wetGround ~= false)
   replaysync.setEnabled(settings.replays ~= false)
@@ -1039,6 +1042,7 @@ function M.uiSet(key, value)
   if key == 'notes' and value ~= 'top' and value ~= 'bottom' and value ~= 'left' and value ~= 'right' then value = 'top' end
   if key == 'spectators' and value ~= 'off' and value ~= 'some' and value ~= 'lots' then value = 'some' end
   if key == 'nightLights' and value ~= 'off' and value ~= 'on' and value ~= 'bright' then value = 'on' end
+  if key == 'propDistance' and value ~= 'near' and value ~= 'far' and value ~= 'farthest' then value = 'far' end
   if key == 'crowdSound' or key == 'wetGround' then value = value and true or false end
   if key == 'rough' and value ~= 'off' and value ~= 'mild' and value ~= 'on' and value ~= 'extra' and value ~= 'auto'
       and value ~= 'default' then     -- (auto: the app's Baja; default: BeamNG.Earth's own track)
@@ -1051,6 +1055,11 @@ function M.uiSet(key, value)
   if key == 'markers' then settings.markers = markers.setMode(value); markersAt = -math.huge end
   if key == 'spectators' then settings.spectators = crowds.setLevel(value); markersAt = -math.huge end
   if key == 'nightLights' then settings.nightLights = crowds.setLights(value); markersAt = -math.huge end
+  if key == 'propDistance' then
+    settings.propDistance = crowds.setDistance(value)
+    markers.setDistance(value)
+    markersAt = -math.huge
+  end
   if key == 'crowdSound' then crowdsound.setEnabled(value) end
   if key == 'wetGround' then settings.wetGround = wet.setEnabled(value) end
   -- (a track setting changed by hand: the pasted code's terrain version no longer holds)

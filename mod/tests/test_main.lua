@@ -642,5 +642,19 @@ end
 check(type(M.onExit) == 'function' and M.onPreExit == M.onExit, 'exit hooks there')
 check(pcall(M.onExit), 'the exit cleanup runs')
 
+-- 1.7.17: Settings' Props distance (default far: twice 1.7.16's)
+do
+  local cr = require('offroadCompanion/crowds')
+  local mk = require('offroadCompanion/markers')
+  check(cr.SPAWN_M == 1800 and mk.SPAWN_M == 2400, 'far by default: crowds 1.8 km, signs 2.4 km')
+  local st = M.uiSet('propDistance', 'near').settings
+  check(st.propDistance == 'near' and cr.SPAWN_M == 900 and mk.SPAWN_M == 1200, 'near: 1.7.16\'s distances')
+  st = M.uiSet('propDistance', 'nonsense').settings
+  check(st.propDistance == 'far' and cr.SPAWN_M == 1800 and cr.DESPAWN_M > cr.SPAWN_M, 'anything else: far')
+  M.uiSet('propDistance', 'farthest')
+  check(cr.SPAWN_M == 2700 and mk.SPAWN_M == 3600, 'farthest')
+  M.uiSet('propDistance', 'far')
+end
+
 print(string.format('%d passed, %d failed', pass, fail))
 os.exit(fail == 0 and 0 or 1)

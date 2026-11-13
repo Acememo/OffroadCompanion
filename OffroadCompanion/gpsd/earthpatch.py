@@ -263,7 +263,7 @@ class _State:
         self.veg_plan = None                # the course key the vegetation's own memory was made for
         self.water = OrderedDict()  # cell key str -> [(lonlat ring (k, 2)...)] of dry / salt lakes
         self.shape_cache = {}       # lift -> {(cid, "x" / "j", key): what shaping.py read from the grading}
-        self.piece_s = OrderedDict()    # the track's piece id -> m along the course to its first sample (strip_look)
+        self.piece_s = OrderedDict()    # the track's piece id -> (m along the course to its first sample, its shade)
         self.followed_ids = {}      # (road id, half width) -> followed by the course (followed_rows), for ...
         self.followed_plan = None   # ... this course
         self.bld = OrderedDict()    # (cell key str, layer, course key) -> Features
@@ -1022,11 +1022,21 @@ class _State:
                 complete = complete and done
             else:
                 complete = False
-        if ps:                                  # (where each piece starts along the course: strip_look)
+        if ps:                                  # (where each piece starts along the course, its shade: strip_look)
+            shade = {}
+            try:
+                rp = {k: self.relief_window(md, course, k, "peek") for k in course.windows_in(bounds)}
+                for p in ps:
+                    if "i0" in p:
+                        v = strip_shade(course, rp, int(p["i0"]) + len(p.get("ll") or ()) // 2)
+                        if v is not None:
+                            shade[str(p["id"])] = v
+            except Exception as e:
+                log.debug("course painter: strip shades: %s: %s", type(e).__name__, e)
             with self.lock:
                 for p in ps:
                     if "i0" in p:
-                        self.piece_s[str(p["id"])] = float(p["i0"]) * courseroads.STEP_M
+                        self.piece_s[str(p["id"])] = (float(p["i0"]) * courseroads.STEP_M, shade.get(str(p["id"])))
                 while len(self.piece_s) > 20000:
                     self.piece_s.popitem(last=False)
         if not ps:
@@ -1968,27 +1978,62 @@ DIRT_KINDS = ("dirt", "gravel")
 
 
 STRIP_WIDTH_M = 8.0         # the course's strips' texture length: their look's aspect times this (strip_look)
+SHADE_STRETCH_N = 50        # the track's shade is chosen per stretch of this many samples (500 m, half a window) ...
+# ... from how bare and dry the land there is: BeamNG.Earth's four dirt variations, darkest to lightest
+# (dirtroad.materials.json's baseColorFactor 0.50, 0.72, 0.80, 0.89), from this tone on each
+SHADE_ORDER = (2, 0, 1, 3)          # (indices into roads.DIRT_VARIATIONS: 03, 01, 02, 04)
+SHADE_FROM = (0.0, 0.2, 0.45, 0.7)
+
+
+def strip_shade(course, profiles, i):
+    """The dirt variation (index into roads.DIRT_VARIATIONS) for the track at sample i: by the stretch of
+    SHADE_STRETCH_N samples it is in (inside one window), from its land's tone (dry, bare land light; green or rocky
+    land darker; a dry lake bed lightest): the same for every piece of that stretch, every tile and process. None when
+    that window's relief profile is not at hand (or has no land facts). Pure."""
+    k = int(i) // courseroads.WINDOW
+    p = profiles.get(k) if profiles else None
+    if not p or p.get("arid") is None:
+        return None
+    a = int(p["a"])
+    b0 = (int(i) // SHADE_STRETCH_N) * SHADE_STRETCH_N
+    lo, hi = max(b0, a) - a, min(b0 + SHADE_STRETCH_N - 1, int(p["b"])) - a
+    if hi < lo:
+        return None
+
+    def mean(key):
+        v = p.get(key)
+        return float(np.mean(v[lo:hi + 1])) if v else 0.0
+    tone = mean("arid") * (1.0 - mean("cover")) + 0.5 * mean("lake") - 0.4 * mean("rock")
+    band = int(np.searchsorted(SHADE_FROM, tone, side="right")) - 1
+    return SHADE_ORDER[max(0, min(len(SHADE_ORDER) - 1, band))]
 
 
 def strip_look(look, fid, cid, s_at):
     """The look of BeamNG.Earth 1.8's dirt strip (roads.look_of's: material, texture length "tl") for a piece of the
     course's track (fid: its id): the user, 2026-11-12, a screenshot of the track as a patchwork of light and dark
-    blocks: "Can we do something to make the terrain transitions look more natural". The track is many pieces (a new
-    one wherever its width steps), and BeamNG.Earth gives every road one of its four dirt variations by the road's id,
-    its texture length by its width, and starts its texture at the road's start: each piece a different shade, its
-    ruts starting over. Here every piece of a course gets the same variation (by the course), one texture length
-    (STRIP_WIDTH_M), and "_egps_s0", how far along the course it starts (s_at(fid), None unknown), so its ruts run on
-    from the piece before. Other roads' looks as they are. Pure."""
+    blocks ("Can we do something to make the terrain transitions look more natural"; then: "I like the variety of the
+    environments ... I just want to fix when the changes are quick enough to look not realistic"). The track is many
+    pieces (a new one wherever its width steps), and BeamNG.Earth gives every road one of its four dirt variations by
+    the road's id, its texture length by its width, and starts its texture at the road's start: each piece a different
+    shade, its ruts starting over. Here a piece takes the shade of its stretch of the course (strip_shade: by the land
+    there, half a kilometre at a time; s_at(fid) -> (m along the course, shade or None) or None), one texture length
+    (STRIP_WIDTH_M), and "_egps_s0", how far along the course it starts, so its ruts run on from the piece before.
+    Other roads' looks as they are. Pure."""
     if not isinstance(look, dict) or not look.get("aspect") or not str(fid or "").startswith(courseroads.ID_PREFIX):
         return look
     import roads as roadsmod
     out = dict(look)
+    got = s_at(str(fid))
+    s0, shade = got if got is not None else (None, None)
     vary = (getattr(roadsmod, "DIRT_LOOK", {}).get("dirt") or {}).get("vary")
     if vary and out.get("m") in vary:
-        n = int.from_bytes(hashlib.blake2s(str(cid).encode(), digest_size=2).digest(), "little")
-        out["m"] = vary[n % len(vary)]
+        if shade is not None and 0 <= shade < len(vary):
+            out["m"] = vary[shade]
+        else:                               # (the land not at hand: by the course and the stretch, still not per piece)
+            b = int(s0 // (SHADE_STRETCH_N * courseroads.STEP_M)) if s0 is not None else 0
+            n = int.from_bytes(hashlib.blake2s(f"{cid}:{b}".encode(), digest_size=2).digest(), "little")
+            out["m"] = vary[n % len(vary)]
     out["tl"] = round(float(look["aspect"]) * STRIP_WIDTH_M, 2)
-    s0 = s_at(str(fid))
     if s0 is not None:
         out["_egps_s0"] = float(s0)
     return out

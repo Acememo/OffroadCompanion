@@ -871,10 +871,27 @@ class TestInsideEarth(unittest.TestCase):
         paved = list(surface.PHOTO_ROAD_RGBA).index("paved")
         return [] if got is None else [k for k in got[2] if k == paved]
 
+    def test_strip_shade_by_the_land(self):
+        """The track's shade by its land, half a kilometre at a time: bare desert the lightest dirt, green country the
+        darkest; one shade for a whole stretch; none without the land's facts."""
+        from gpsd import courseroads as cr_
+        ep = self.earthpatch
+        c = cr_.Course([ll(x, 0.0) for x in range(0, 2001, 50)], 1.0, "Shade", 14)
+        n = 101
+        desert = {"a": 0, "b": 100, "arid": [1.0] * n, "cover": [0.0] * n, "lake": [0.0] * n, "rock": [0.0] * n}
+        green = dict(desert, arid=[0.1] * n, cover=[0.9] * n)
+        self.assertEqual(ep.strip_shade(c, {0: desert}, 10), 3)
+        self.assertEqual(ep.strip_shade(c, {0: green}, 10), 2)
+        mixed = dict(desert, arid=[1.0] * 50 + [0.1] * 51, cover=[0.0] * 50 + [0.9] * 51)
+        self.assertEqual({ep.strip_shade(c, {0: mixed}, i) for i in range(0, 50)}, {3}, "one shade per stretch")
+        self.assertEqual({ep.strip_shade(c, {0: mixed}, i) for i in range(50, 100)}, {2})
+        self.assertIsNone(ep.strip_shade(c, {0: {"a": 0, "b": 100}}, 10))
+        self.assertIsNone(ep.strip_shade(c, {}, 10))
+
     def test_one_strip_look_along_the_track(self):
-        """BeamNG.Earth 1.8's dirt strips over the course's track: every piece the same variation and texture length,
-        its texture running on from the piece before (strip_look; the user, 2026-11-12: the track a patchwork of light
-        and dark blocks)."""
+        """BeamNG.Earth 1.8's dirt strips over the course's track: the pieces of a stretch one shade (by its land), one
+        texture length, its texture running on from the piece before (strip_look; the user, 2026-11-12: the track a
+        patchwork of light and dark blocks)."""
         import roads as roadsmod
         if not getattr(roadsmod, "DIRT_STRIPS", False) or not hasattr(roadsmod, "DIRT_LOOK"):
             self.skipTest("no dirt strips in this BeamNG.Earth")
@@ -888,7 +905,10 @@ class TestInsideEarth(unittest.TestCase):
         vary = set(roadsmod.DIRT_LOOK["dirt"].get("vary") or ())
         strips = [c for c in chunks if c.get("m") in vary and c.get("s0") is not None]
         self.assertTrue(strips, "dirt strips drawn")
-        self.assertEqual(len({c["m"] for c in strips}), 1, "one variation along the track")
+        by = {}
+        for c in strips:
+            by.setdefault(int(c["s0"] // (self.earthpatch.SHADE_STRETCH_N * cr_.STEP_M)), set()).add(c["m"])
+        self.assertTrue(all(len(v) == 1 for v in by.values()), f"one shade per stretch of the course: {by}")
         self.assertEqual({c["tl"] for c in strips}, {round(roadsmod.DIRT_LOOK["dirt"]["aspect"] *
                                                            self.earthpatch.STRIP_WIDTH_M, 2)})
         self.assertGreater(max(c["s0"] for c in strips), 100.0, "the pieces' distance along the course")

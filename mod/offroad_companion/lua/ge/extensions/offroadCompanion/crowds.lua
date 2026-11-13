@@ -27,7 +27,17 @@ M.BIN_M = { some = 1600, lots = 800 }
 M.SCALE = { some = 1.0, lots = 1.7 }
 M.GATE_CLEAR_M = 300        -- no other crowd this near a gate's
 M.HAIRPIN_DEG = 110
-M.SPAWN_M, M.DESPAWN_M = 900, 1150   -- (1.7.13: was 450, the user 2026-11-12: "props take too long to appear")
+M.SPAWN_M, M.DESPAWN_M = 1800, 2100  -- (1.7.13: 900, was 450, the user 2026-11-12: "props take too long to appear";
+                                       --  1.7.17: Settings' Props distance, its default "far" twice that: DISTANCES)
+-- Settings' Props distance (the user, 2026-11-12: "give the prop rendering distance its setting in the settings and
+-- make the default double of what it is right now"): the crowds' (and markers.lua's signs') spawn / despawn distances
+M.DISTANCES = { near = { 900, 1150 }, far = { 1800, 2100 }, farthest = { 2700, 3050 } }
+function M.setDistance(v)
+  local d = M.DISTANCES[v] and v or 'far'
+  M.SPAWN_M, M.DESPAWN_M = M.DISTANCES[d][1], M.DISTANCES[d][2]
+  M.distance = d
+  return d
+end
 -- Parked vehicles and canopies stand only on open, nearly level ground (the user, 2026-10-31: pickups on rooftops in
 -- town and floating off a hillside): rays down at their middle and FOOT_R[kind] m out in four directions (the model's
 -- long side either way); a hit over BeamNG.Earth's terrain by more than ON_TOP_M is a roof or a wall, heights spread

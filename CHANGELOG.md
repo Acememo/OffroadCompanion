@@ -3,6 +3,26 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.17 (2026-11-12)
+
+- **Ground version 15: road entrances and bridge dips done as earthworks.** In 1.7.14 a ramp off a paved road could
+  dig a deep trench into the bank beside it: every point near the track was moved by whatever its own height asked
+  for, so a hillside or a road's cut bank next to the ramp was dug out too. Now the ramp is a surface along the track
+  (no steeper than 10%), flat 2 m past the track's edges, with 1:3 side slopes cut back to wherever they meet the
+  ground (or filled, where the road stands on a fill). The ground is never dug below the ramp, and the road itself is
+  left alone.
+- **More room under bridges, at the edges too.** The dip under a bridge now keeps its full depth 6 m past the track's
+  edges and 8 m past the deck's edges along the course, before its 1:3 sides climb back to the ground. Before, the
+  room was only in the middle.
+- **The track's shade follows the land.** 1.7.16 made the whole course one shade of dirt. Now each half-kilometre of
+  track takes the shade that fits the land around it: light dirt in bare dry desert, darker in green or rocky
+  country. The shade only changes between stretches, never every few metres, and the ruts run on unbroken. Sand traps
+  still show as sand.
+- **Props distance setting** (Settings, with the spectators): Near (crowds from 900 m, signs from 1.2 km, 1.7.16's),
+  Far (the new default, twice that), or Farthest.
+- 1.7.17 lays ground version 15, so everyone on a BeamMP server should update together. Older ground versions are
+  unchanged.
+
 ## 1.7.16 (2026-11-12)
 
 - **The track is one dirt road, not a patchwork.** BeamNG.Earth 1.8 draws a dirt road as a rutted strip in one of

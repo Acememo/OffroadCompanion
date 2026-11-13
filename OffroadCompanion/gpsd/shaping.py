@@ -54,6 +54,21 @@ JOIN_SEARCH_M = 16.0        # the road's level is looked for this far out from t
 JOIN_SIDE_FLAT_M = 1.5
 JOIN_SIDE_FADE = (5.0, 1.5)  # m + m per m of change
 JOIN_NEAR_M = 4.0           # a sample this near a paved road (past its half width): on it
+# (terrain 15; the user, 2026-11-12, a screenshot of a deep trench beside the road where the course left it: "the fix
+# didn't fix the steepness correctly, it should not affect the road and needs to be smoother than a huge hole", and
+# "the bridges are having enough clearance on the middle not on the edges"). From terrain 15 the dips and ramps are an
+# earthwork's: a design surface along the track (the ramp's line, the dip's floor) flat across the track and FLAT15_M
+# past its edges, then sloping back at SIDE15 (1:3) to wherever it meets the ground, the ground cut down to it or
+# filled up to it there and nowhere else. Terrain 13 and 14 moved every point near the track by the change its own
+# height asked for: beside a hillside that dug a pit, beside a road's cut bank a trench.
+ENVELOPE_TV = 15
+SIDE15 = 0.33               # rise per m of the slopes beside the design surface (1:3)
+FLAT15_JOIN_M = 2.0         # the ramp's flat past the track's edges
+FLAT15_DIP_M = 6.0          # the dip's floor past the track's edges (room beside the track under the whole deck)
+DIP15_FLOOR_PAD_M = 8.0     # the floor past the deck's edge (+ its parapet), along the course, each side
+JOIN15_GRADE = 0.10         # the ramp off a paved road, steepest
+PROBE15_M = 2.0
+
 ASPHALT_IN_M = 0.3          # never on a paved road's asphalt (relief.paved_clear with these: the shoulder is shaped)
 ASPHALT_FADE_M = 1.0
 
@@ -195,7 +210,7 @@ def dip_reach(x, depth):
     return (x["hw"] + 1.0 + DIP_FLOOR_PAD_M) / max(x["sin"], 0.34) + max(DIP_RAMP_MIN_M, 1.5 * depth / DIP_GRADE)
 
 
-def join_ramp(course, facts, jn, grade_fn, elev_fn):
+def join_ramp(course, facts, jn, grade_fn, elev_fn, grade=JOIN_GRADE):
     """A join's ramp: {t0, L, z0, z1, t, g}: from t0 m past the join sample (where the ground leaves the road's level)
     over L m, from the road's height z0 (a sample back, on the road) to the ground's z1 (t, g: the graded heights along
     the track's middle every JOIN_PROBE_M from a sample back); None when the ground there is no steeper than JOIN_STEEP. Pure given the
@@ -230,7 +245,7 @@ def join_ramp(course, facts, jn, grade_fn, elev_fn):
         if not len(m):
             break
         best = {"t0": t0, "L": float(L), "z0": z0, "z1": float(g[m[0]]), "t": t, "g": g}
-        if 1.5 * abs(best["z1"] - z0) / L <= JOIN_GRADE:
+        if 1.5 * abs(best["z1"] - z0) / L <= grade:
             break
     return best
 
@@ -284,6 +299,9 @@ def shape(course, profiles, lat, lon, graded, grade_fn, elev_fn, near=None, clea
     hw = f["hw"]
     cache = cache if cache is not None else {}
     cid = getattr(course, "cid", "")
+    if getattr(course, "tv", 1) >= ENVELOPE_TV:
+        out[idx] = _earthworks(course, facts, xs, js, s, ad, hw, g_all[idx], grade_fn, elev_fn, cache, cid)
+        return out.reshape(shp)
     dz = np.zeros(len(idx))
     # under the bridges
     for key in sorted(xs):
@@ -328,3 +346,62 @@ def shape(course, profiles, lat, lon, graded, grade_fn, elev_fn, near=None, clea
         dz[m] += corr * w
     out[idx] = dz
     return out.reshape(shp)
+
+
+def _ease(t):
+    return _smooth(np.asarray(t, np.float64))
+
+
+def _earthworks(course, facts, xs, js, s, ad, hw, g, grade_fn, elev_fn, cache, cid):
+    """Terrain 15's dips and ramps at the points (s along the course, ad from the track's middle, hw its half width
+    there, g their graded heights): a design surface along the track, flat FLAT15 past its edges, sloping SIDE15 out,
+    the ground cut down to it (a dip: never filled) or cut and filled to it (a ramp), easing in and out along the
+    course. Pure given the functions (and the cache they fill)."""
+    dz = np.zeros(len(s))
+    # under the bridges: the floor UNDER_CLEAR_M under the girders all the way under the deck and past it
+    for key in sorted(xs):
+        x = xs[key]
+        ck = (cid, "x15", key)
+        if ck not in cache:
+            depth = dip_depth(course, facts, x, grade_fn, elev_fn)
+            floor = (x["hw"] + 1.0 + DIP15_FLOOR_PAD_M) / max(x["sin"], 0.34)
+            ramp = max(DIP_RAMP_MIN_M, 1.5 * depth / DIP_GRADE)
+            sp = np.arange(-(floor + ramp), floor + ramp + 1e-9, PROBE15_M) + x["s"]
+            end = (len(course.lat) - 1) * courseroads.STEP_M
+            sp = sp[(sp >= 0) & (sp <= end)]
+            gc = _graded(course, facts, sp, grade_fn, elev_fn) if depth > 0 and len(sp) else np.zeros(len(sp))
+            cache[ck] = (depth, floor, ramp, sp, gc)
+        depth, floor, ramp, sp, gc = cache[ck]
+        if depth <= 0.0 or len(sp) < 2:
+            continue
+        m = np.abs(s - x["s"]) <= floor + ramp
+        if not m.any():
+            continue
+        u = depth * (1.0 - _ease((np.abs(s[m] - x["s"]) - floor) / ramp))
+        H = np.interp(s[m], sp, gc) - u
+        xl = np.maximum(0.0, ad[m] - hw[m] - FLAT15_DIP_M)
+        cut = np.minimum(g[m], H + SIDE15 * xl) - g[m]          # (<= 0: only ever down)
+        e = np.clip(u / 0.5, 0.0, 1.0)                           # (none where the dip has eased out)
+        dz[m] = np.minimum(dz[m], e * cut)
+    # off the paved roads: the ramp's line from the road's level to the ground's
+    for key in sorted(js):
+        jn = js[key]
+        ck = (cid, "j15", key)
+        if ck not in cache:
+            cache[ck] = join_ramp(course, facts, jn, grade_fn, elev_fn, JOIN15_GRADE)
+        r = cache[ck]
+        if r is None:
+            continue
+        t0, L, z0, z1 = r["t0"], r["L"], r["z0"], r["z1"]
+        t = (s - jn[0] * courseroads.STEP_M) * int(jn[1])
+        m = (t >= t0 - 4.0) & (t <= t0 + L)
+        if not m.any():
+            continue
+        tm = t[m]
+        H = z0 + (z1 - z0) * _ease((tm - t0) / L)
+        xl = np.maximum(0.0, ad[m] - hw[m] - FLAT15_JOIN_M)
+        target = np.clip(g[m], H - SIDE15 * xl, H + SIDE15 * xl)
+        # (easing in from the road's edge, out where the ramp has met the ground)
+        e = _ease((tm - (t0 - 4.0)) / 4.0) * (1.0 - _ease((tm - (t0 + 0.75 * L)) / (0.25 * L)))
+        dz[m] += e * (target - g[m])
+    return dz
