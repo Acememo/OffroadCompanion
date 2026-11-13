@@ -235,11 +235,22 @@ def join_ramp(course, facts, jn, grade_fn, elev_fn):
     return best
 
 
-def shape(course, profiles, lat, lon, graded, grade_fn, elev_fn, near=None, cleared=True, cache=None):
+def neighbours(course, ks):
+    """The windows next to windows ks not among them: shape() reads the course's facts (its track's middle, width,
+    surface) up to a window's context past it, so it is given those too (needed_windows)."""
+    ks = set(ks)
+    return sorted({j for k in ks for j in (k - 1, k + 1) if 0 <= j < getattr(course, "nwin", 0)} - ks)
+
+
+def shape(course, profiles, lat, lon, graded, grade_fn, elev_fn, near=None, cleared=True, cache=None, around=None):
     """Metres to add to graded (BeamNG.Earth's heights at the points, any shape) for the dips under bridges and the
-    ramps off paved roads (terrain FROM_TV on; zeros before). cleared: the course is cleared (its bridges made crossings
-    at grade have no deck: no dip). cache: a dict kept between calls (the heights read from the grading). Pure given
-    the functions (and a cache filled by them)."""
+    ramps off paved roads (terrain FROM_TV on; zeros before). profiles: the relief windows near the points (near:
+    relief.nearest's answer with them); around: the windows next to them (neighbours()), whose facts the dips and
+    ramps listed in profiles read too: without them those facts would be the nearest window end's, and a point's
+    height would depend on which windows were at hand (1.7.14: ground tiles that disagreed with the physics block, the
+    user 2026-11-12: "it appears as if the new fixes are non collidable"). cleared: the course is cleared (its bridges
+    made crossings at grade have no deck: no dip). cache: a dict kept between calls (the heights read from the
+    grading). Pure given the functions (and a cache filled by them)."""
     shp = np.shape(graded)
     out = np.zeros(int(np.prod(shp)) if shp else 1)
     if getattr(course, "tv", 1) < FROM_TV:
@@ -263,7 +274,11 @@ def shape(course, profiles, lat, lon, graded, grade_fn, elev_fn, near=None, clea
     idx, d, s = near if near is not None else relief.nearest(course, profiles, lat, lon)
     if not len(idx):
         return out.reshape(shp)
-    facts = relief._Facts(profiles)
+    every = dict(profiles)
+    for k, p in (around or {}).items():
+        if p:
+            every.setdefault(k, p)
+    facts = relief._Facts(every)
     f = facts.at(s)
     ad = np.abs(d - f["ctr"])
     hw = f["hw"]

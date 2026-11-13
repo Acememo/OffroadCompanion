@@ -212,5 +212,42 @@ class TestRoadEntrance(unittest.TestCase):
             self.assertEqual(float(one[0]), float(whole[i]))
 
 
+
+@unittest.skipUnless(HAVE_NP, "numpy")
+class TestWhicheverWindows(unittest.TestCase):
+    """A point's shape never depends on which relief windows were at hand: the windows next to them (around) give the
+    facts its join or bridge reads past them (1.7.14: the ground tiles and the physics block disagreed, the user
+    2026-11-12: "it appears as if the new fixes are non collidable")."""
+
+    def test_the_same_with_the_neighbours(self):
+        ll, xy = frame()
+        c = straight(length=2000)
+        # the paved road to sample 95 (window 0), then the track; window 0's track 8 m wide, window 1's 14 m, its
+        # middle 3 m left of the line
+        near = [i <= 95 for i in range(c.context(0)[0], c.context(0)[1] + 1)]
+        jn0 = sh.joins(c, 0, near)
+        a0, b0 = c.inner(0)
+        a1, b1 = c.inner(1)
+        p0 = profile(c, hw=4.0, jn=jn0)[0]
+        p1 = {"algo": rf.ALGO, "a": a1, "b": b1, "hw": [7.0] * (b1 - a1 + 1), "ctr": [3.0] * (b1 - a1 + 1),
+              "rough": [1.0] * (b1 - a1 + 1), "rock": [0.0] * (b1 - a1 + 1), "turn": [0.0] * (b1 - a1 + 1),
+              "lake": [0.0] * (b1 - a1 + 1), "road": [0.0] * (b1 - a1 + 1), "jn": jn0}
+
+        def grade(lat, lon, nat):
+            x, y = xy(np.asarray(lat).ravel(), np.asarray(lon).ravel())
+            return np.clip((x - 954.0) * 2.0, 0.0, 4.0) + 0.05 * y
+
+        def elev(lat, lon):
+            return np.zeros(np.size(lat))
+        xs = np.arange(1000.0, 1060.0, 2.0)
+        la, lo = ll(xs, np.full(len(xs), 1.0))
+        g = grade(la, lo, None)
+        both = sh.shape(c, {0: p0, 1: p1}, la, lo, g, grade, elev, cache={})
+        self.assertTrue(np.any(both), "the ramp reaches into window 1")
+        alone = sh.shape(c, {1: p1}, la, lo, g, grade, elev, cache={}, around={0: p0})
+        self.assertTrue(np.array_equal(both, alone))
+        self.assertEqual(sh.neighbours(c, [1]), [0])
+        self.assertEqual(sh.neighbours(c, [0, 1]), [])
+
 if __name__ == "__main__":
     unittest.main()

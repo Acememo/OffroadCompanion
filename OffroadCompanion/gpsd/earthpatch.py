@@ -768,16 +768,24 @@ class _State:
 
         def elev_fn(la, lo):
             return np.asarray(elev(np.asarray(la, np.float64), np.asarray(lo, np.float64)), np.float64)
+        if not any(p and (p.get("ux") or p.get("jn")) for p in profs.values()):
+            return None
         plan = self.current()
+        md = getattr(grader, "md", None) or self.md
+        around = {}
+        for k in shaping.neighbours(c, [k for k, p in profs.items() if p]):
+            p = self.relief_window(md, c, k, "demand")
+            if p is None:                   # (none now: this build without them is not kept, tried again)
+                raise RuntimeError(f"relief window {k} not ready")
+            around[k] = p
         cache = self.shape_cache.setdefault(round(float(lift), 3), {})
         if len(cache) > 4096:
             cache.clear()
         dz = shaping.shape(c, profs, lat, lon, graded, grade_fn, elev_fn, near=near,
-                           cleared=bool(plan is not None and plan.clearing), cache=cache)
+                           cleared=bool(plan is not None and plan.clearing), cache=cache, around=around)
         if not np.any(dz):
             return None
-        dz = self.paved_clear(getattr(grader, "md", None) or self.md, lat, lon, dz,
-                              shaping.ASPHALT_IN_M, shaping.ASPHALT_FADE_M)
+        dz = self.paved_clear(md, lat, lon, dz, shaping.ASPHALT_IN_M, shaping.ASPHALT_FADE_M)
         with self.lock:
             self.stats["shaped_points"] = self.stats.get("shaped_points", 0) + int(np.count_nonzero(dz))
         return dz

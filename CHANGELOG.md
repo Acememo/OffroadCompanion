@@ -3,6 +3,16 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.15 (2026-11-12)
+
+- **The dips under bridges and the ramps off paved roads are solid now.** In 1.7.14 their shape near the edge of a
+  1 km stretch of the course depended on which stretches each part of the game had at hand when it built the ground.
+  The ground you see (built in several pieces) and the ground the car drives on (built separately) could then get
+  different dips and ramps: shapes you drove through, and jagged slivers where pieces of ground met. Every part now
+  reads the neighbouring stretches too, so they all build the same shape.
+- Still ground version 13, the shape 1.7.14 meant to lay. 1.7.14 could lay it differently from place to place, so
+  everyone on a BeamMP server should update to 1.7.15.
+
 ## 1.7.14 (2026-11-12)
 
 - **Ground version 13: room under bridges.** Where the course's track passes under a road bridge, the ground goes down
