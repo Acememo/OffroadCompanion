@@ -995,15 +995,17 @@ def paved_clear(lat, lon, ends, hws, in_m=None, fade_m=None):
     return out
 
 
-def paved_past(lat, lon, ends, hws, cap=100.0):
+def paved_past(lat, lon, ends, hws, cap=100.0, feet=False):
     """Per point: how far (m) it is past the nearest paved road's asphalt edge (0 on it; cap at most), ends and hws as
-    paved_clear's. Pure."""
+    paved_clear's. feet: (that, the nearest point of that road's middle: lat, lon; the point itself where none is
+    within cap). Pure."""
     lat = np.asarray(lat, np.float64).ravel()
     lon = np.asarray(lon, np.float64).ravel()
     out = np.full(len(lat), float(cap))
+    flat_, flon_ = lat.copy(), lon.copy()
     ends = np.asarray(ends, np.float64).reshape(-1, 4)
     if not len(lat) or not len(ends):
-        return out
+        return (out, flat_, flon_) if feet else out
     lat0 = float(np.mean(lat))
     lon0 = float(np.mean(lon))
     kx = math.radians(1.0) * courseroads.R_EARTH * math.cos(math.radians(lat0))
@@ -1014,6 +1016,7 @@ def paved_past(lat, lon, ends, hws, cap=100.0):
     ax, ay = (ends[:, 0] - lon0) * kx, (ends[:, 1] - lat0) * ky
     bx, by = (ends[:, 2] - lon0) * kx, (ends[:, 3] - lat0) * ky
     hws = np.asarray(hws, np.float64).ravel()
+    best = np.full(len(lat), np.inf)
     for j in range(len(ends)):
         r = hws[j] + cap
         x0, x1 = min(ax[j], bx[j]) - r, max(ax[j], bx[j]) + r
@@ -1029,8 +1032,16 @@ def paved_past(lat, lon, ends, hws, cap=100.0):
         L2 = max(dx * dx + dy * dy, 1e-12)
         t = np.clip(((px[idx] - ax[j]) * dx + (py[idx] - ay[j]) * dy) / L2, 0.0, 1.0)
         d = np.hypot(ax[j] + t * dx - px[idx], ay[j] + t * dy - py[idx])
-        out[idx] = np.minimum(out[idx], np.maximum(0.0, d - hws[j]))
-    return out
+        dd = np.maximum(0.0, d - hws[j])
+        if feet:
+            # (the nearer middle where two roads' asphalt both hold the point)
+            better = (dd < out[idx]) | ((dd <= out[idx]) & (dd == 0.0) & (d < best[idx]))
+            w = idx[better]
+            flat_[w] = lat0 + (ay[j] + t[better] * dy) / ky
+            flon_[w] = lon0 + (ax[j] + t[better] * dx) / kx
+            best[w] = d[better]
+        out[idx] = np.minimum(out[idx], dd)
+    return (out, flat_, flon_) if feet else out
 
 
 def rocks(course, profiles, bounds, auto=False):

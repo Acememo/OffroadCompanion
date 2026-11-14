@@ -144,6 +144,26 @@ XING_TAPER_M = 6.0
 XING_JOIN_M = 25.0          # a join this near a crossing is the crossing's
 XING_DECK_END_M = 12.0      # (corridor.AT_GRADE_REACH_M: nearer an abutment BeamNG.Earth crosses at grade itself)
 
+# (terrain 20; the user, 2026-11-14, screenshots of 1.7.22: "It still isn't smooth enough, it ruins some portions by
+# creating dirt walls", "the original weird spiky thing is half fixed": a wall along the asphalt where the track
+# leaves a road at a shallow angle, a street's crossing in town raised as a table with dirt walls round it, spikes
+# left at the asphalt's edge one side of the crossing in the cutting). From terrain 20:
+#   - a crossing is worked only where the track's ground stands more than XING20_STEP_M off the road's level: nearer,
+#     BeamNG.Earth pads the two roads at grade itself (grading.PAD_CROSS_MAX_M), and terrain 19's ramps and its
+#     levelling of the asphalt fought that (the table in the street);
+#   - a crossing is one line of work: the ramp down, the road's level across the asphalt along the track, the ramp
+#     up (cross20), cut and filled with the same sloping sides all along. Terrain 19 worked the ramps, cleared off the
+#     asphalt, and the asphalt apart: where the two faded into each other at the asphalt's edge neither was whole
+#     (the spikes), and the asphalt was levelled XING_REF_M along the road, not just under the track;
+#   - beside a paved road a ramp's change is held (hold20) to HOLD20_SLOPE per m from the asphalt's edge, more only
+#     as far as it brings the ground to the road's own level there (the road's bank cut where the track meets it,
+#     never a wall dug or filled against the asphalt). Terrain 18 - 19 cut right up to the asphalt: a track leaving a
+#     road at a shallow angle, ramping down beside it, stood a wall along it.
+SMOOTH_TV = 20
+XING20_STEP_M = 1.0
+XING20_REF_M = 20.0
+HOLD20_SLOPE = 1.0
+
 ASPHALT_IN_M = 0.3          # never on a paved road's asphalt (relief.paved_clear with these: the shoulder is shaped)
 ASPHALT_FADE_M = 1.0
 
@@ -328,7 +348,7 @@ def paved_crossings(course, k, segs, pl):
         refs = []
         cosd = np.abs(d @ ud) / L
         for sgn in (-1.0, 1.0):
-            q = P + sgn * XING_REF_M * ud
+            q = P + sgn * (XING20_REF_M if getattr(course, "tv", 1) >= SMOOTH_TV else XING_REF_M) * ud
             ok = cosd >= 0.7
             if not ok.any():
                 continue
@@ -488,8 +508,11 @@ def shape(course, profiles, lat, lon, graded, grade_fn, elev_fn, near=None, clea
     if not profiles or not len(out):
         return out.reshape(shp)
     if getattr(course, "tv", 1) >= KEEP_DECK_TV:
-        dc, jc, ja, xa = _shape17(course, profiles, around or {}, lat, lon, grade_fn, elev_fn, cleared,
-                                  cache if cache is not None else {})
+        dc, jc, ja, xa, xroads = _shape17(course, profiles, around or {}, lat, lon, grade_fn, elev_fn, cleared,
+                                          cache if cache is not None else {})
+        if parts and getattr(course, "tv", 1) >= SMOOTH_TV:
+            # (terrain 20: + the roads the course crosses, for hold20)
+            return dc.reshape(shp), jc.reshape(shp), ja.reshape(shp), xa.reshape(shp), xroads
         if parts and getattr(course, "tv", 1) >= XING_TV:
             return dc.reshape(shp), jc.reshape(shp), ja.reshape(shp), xa.reshape(shp)
         if parts and getattr(course, "tv", 1) >= AT_GRADE_TV:
@@ -888,6 +911,124 @@ def cross19(course, facts, x, grade_fn, elev_fn):
     return {"ramps": ramps, "roads": roads}
 
 
+def cross20(course, facts, x, grade_fn, elev_fn):
+    """Terrain 20's works at paved crossing x: {ramps: [one piece (as join17's): the ramp to the road, its level
+    across the asphalt along the track, the ramp from it], roads: cross19's}, or None (the track's ground within
+    XING20_STEP_M of the road's level both sides: BeamNG.Earth's own crossing). Pure given the functions."""
+    end = (len(course.lat) - 1) * courseroads.STEP_M
+    roads = []
+    ref = XING20_REF_M
+    for r in x["roads"]:
+        pts = [r["p"]] + list(r.get("r") or ())
+        ll = np.asarray(pts, np.float64)
+        nat = np.asarray(elev_fn(ll[:, 1], ll[:, 0]), np.float64)
+        z = np.asarray(grade_fn(ll[:, 1], ll[:, 0], nat), np.float64).ravel()
+        if len(pts) == 3 and abs(z[2] - z[1]) <= 2.0 * ref * XING_ROAD_GRADE:
+            line, zs = ll[[1, 0, 2]], np.array([z[1], 0.5 * (z[1] + z[2]), z[2]])
+        elif len(pts) == 2 and abs(z[1] - z[0]) <= ref * XING_ROAD_GRADE:
+            line, zs = ll[[1, 0]], np.array([z[1], z[1]])
+        else:
+            line, zs = ll[[0]], z[:1]
+        roads.append((line, zs, float(r["hw"])))
+    sides, needed = [], False
+    for sgn, edge, zr in ((-1, x["s0"], float(roads[0][1][len(roads[0][1]) // 2])),
+                          (1, x["s1"], float(roads[-1][1][len(roads[-1][1]) // 2]))):
+        t = np.arange(0.0, XING_MAX_M + 1e-9, PROBE15_M)
+        sp = edge + sgn * t
+        ok = (sp >= 0) & (sp <= end)
+        t, sp = t[ok], sp[ok]
+        if len(t) < 4:
+            sides.append((sgn, edge, zr, 0.0, zr))
+            continue
+        g = _graded(course, facts, sp, grade_fn, elev_fn)
+        if float(np.abs(g[t <= XING_LOOK_M] - zr).max()) > XING20_STEP_M:
+            needed = True
+        L, z1 = float(t[min(len(t) - 1, 1)]), float(g[min(len(t) - 1, 1)])
+        for cand in np.arange(XING_MIN_M, XING_MAX_M + 1e-9, 10.0):
+            m = np.flatnonzero(np.abs(t - cand) < 1e-6)
+            if not len(m):
+                break
+            L, z1 = float(cand), float(g[m[0]])
+            if 1.5 * abs(z1 - zr) / L <= JOIN15_GRADE:
+                break
+        sides.append((sgn, edge, zr, L, z1))
+    if not needed:
+        return None
+    (_, e0, zr0, L0, z10), (_, e1, zr1, L1, z11) = sides
+    ss = np.arange(e0 - L0, e1 + L1 + 1e-9, PROBE15_M)
+    ss = ss[(ss >= 0) & (ss <= end)]
+    if len(ss) < 2:
+        return None
+    H = np.interp(ss, [e0, max(e1, e0 + 1e-6)], [zr0, zr1])
+    w = np.ones(len(ss))
+    if L0 > 0:
+        t = (e0 - ss) / L0
+        m = ss < e0
+        H[m] = zr0 + (z10 - zr0) * _ease(t[m])
+        w[m] = 1.0 - _ease((t[m] - 0.75) / 0.25)
+    if L1 > 0:
+        t = (ss - e1) / L1
+        m = ss > e1
+        H[m] = zr1 + (z11 - zr1) * _ease(t[m])
+        w[m] = 1.0 - _ease((t[m] - 0.75) / 0.25)
+    la, lo, hw, _ = _line17(course, facts, ss)
+    return {"ramps": [(la, lo, hw, H, w, FLAT15_JOIN_M)], "roads": roads}
+
+
+def hold20(lat, lon, r, past, foot_lat, foot_lon, grade_fn, elev_fn, xroads=()):
+    """The ramps' change r at the points held beside the paved roads (terrain 20): none on the asphalt, HOLD20_SLOPE
+    per m past it (past: m past the nearest paved road's asphalt, foot: the nearest point of that road's middle), and
+    more only as far as it brings the ground to the road's own level there. On and beside the roads the course
+    crosses (xroads: cross20's roads, whose level under the track's block is known only from beside it) the level is
+    theirs, and on their asphalt too the ground may be brought to it. Pure given the functions."""
+    r = np.array(r, np.float64).ravel()
+    lat = np.asarray(lat, np.float64).ravel()
+    lon = np.asarray(lon, np.float64).ravel()
+    past = np.asarray(past, np.float64).ravel()
+    cap = float(np.max(np.abs(r))) / HOLD20_SLOPE + ASPHALT_IN_M + 1.0 if len(r) else 0.0
+    idx = np.flatnonzero((r != 0) & (past < cap))
+    if not len(idx):
+        return r
+    la, lo = lat[idx], lon[idx]
+    both_la = np.concatenate([la, np.asarray(foot_lat, np.float64).ravel()[idx]])
+    both_lo = np.concatenate([lo, np.asarray(foot_lon, np.float64).ravel()[idx]])
+    z = np.asarray(grade_fn(both_la, both_lo, np.asarray(elev_fn(both_la, both_lo), np.float64).ravel()),
+                   np.float64).ravel()
+    gp, zr = z[:len(idx)], z[len(idx):].copy()
+    d = np.maximum(0.0, past[idx] - ASPHALT_IN_M)
+    on = past[idx] <= ASPHALT_IN_M          # (on the asphalt: none, but a crossed road's under the track)
+    from .corridor import Plane
+    for line, zs, hw in xroads:
+        if len(line) < 2:
+            continue
+        pl = Plane(float(line[len(line) // 2, 1]), float(line[len(line) // 2, 0]))
+        q = pl.xy(line)
+        P = pl.xy(np.stack([lo, la], 1))
+        a, b = q[:-1], q[1:]
+        v = b - a
+        seg = np.maximum(np.hypot(*v.T), 1e-9)
+        cum = np.r_[0.0, np.cumsum(seg)]
+        tr = ((P[:, None, :] - a[None]) * v[None]).sum(2) / (seg ** 2)[None]
+        t = np.clip(tr, 0.0, 1.0)
+        near = a[None] + t[:, :, None] * v[None]
+        dist = np.hypot(near[..., 0] - P[:, None, 0], near[..., 1] - P[:, None, 1])
+        j = dist.argmin(axis=1)
+        rows = np.arange(len(P))
+        inside = (np.abs(tr[rows, j] - t[rows, j]) < 1e-9) & (dist[rows, j] <= hw + cap)
+        if not inside.any():
+            continue
+        along = cum[j] + t[rows, j] * seg[j]
+        dx = np.maximum(0.0, dist[rows, j] - hw - ASPHALT_IN_M)
+        take = inside & (dx <= d + 1e-9)        # (this road the nearest asphalt, or as near)
+        zr[take] = np.interp(along[take], cum, zs)
+        d[take] = dx[take]
+        on[take] = False
+    cut = HOLD20_SLOPE * d + np.maximum(0.0, gp - zr)
+    add = HOLD20_SLOPE * d + np.maximum(0.0, zr - gp)
+    r[idx] = np.where(on, 0.0, np.clip(r[idx], -cut, add))
+    return r
+
+
 def _asphalt19(roads, lat, lon, own):
     """The change on a crossed road's asphalt (cross19's roads) at the points: the ground held within XING_TOL_M of
     the road's level along its line there, fading out over XING_TAPER_M at the line's ends and a metre past its half
@@ -1017,18 +1158,31 @@ def _shape17(course, profiles, around, lat, lon, grade_fn, elev_fn, cleared, cac
             js[(int(jn[0]), int(jn[1]))] = jn
     v19 = getattr(course, "tv", 1) >= XING_TV
     xps = crossings19([(k, p.get("xp"), p["a"], p["b"]) for k, p in every.items()]) if v19 else []
+    v20 = getattr(course, "tv", 1) >= SMOOTH_TV
+    xroads = []
     if v19:
         # (a crossing under a deck is the deck's; a join by a crossing is the crossing's)
         xps = [x for x in xps if not any(d["s0"] - DECK16_PAD_M <= x["s1"] and x["s0"] <= d["s1"] + DECK16_PAD_M
                                          for d in decks)]
-        js = {key: jn for key, jn in js.items()
-              if not any(x["s0"] - XING_JOIN_M <= key[0] * courseroads.STEP_M <= x["s1"] + XING_JOIN_M for x in xps)}
     if not decks and not js and not xps:
-        return out, out.copy(), out.copy(), out.copy()
+        return out, out.copy(), out.copy(), out.copy(), xroads
     facts = relief._Facts(every)
     # (the track's look is in the key: BeamNG.Earth's grading of the track, which the shapes are worked out on, wears
     # it or not by it, and a shape kept from before the look changed was another ground's)
     cid = (getattr(course, "cid", ""), getattr(course, "rough", None))
+    if v20:
+        # (terrain 20: only the crossings worked take the joins by them; one BeamNG.Earth pads itself leaves them)
+        live = []
+        for x in xps:
+            ck = (cid, "x20", x["s0"], x["s1"], tuple(tuple(r["p"]) for r in x["roads"]))
+            if ck not in cache:
+                cache[ck] = cross20(course, facts, x, grade_fn, elev_fn)
+            if cache[ck] is not None:
+                live.append((x, cache[ck]))
+        xps = [x for x, _ in live]
+    if v19:
+        js = {key: jn for key, jn in js.items()
+              if not any(x["s0"] - XING_JOIN_M <= key[0] * courseroads.STEP_M <= x["s1"] + XING_JOIN_M for x in xps)}
     own = _OwnGround(lat, lon, grade_fn, elev_fn)
     dcut, cut, add, asph = np.zeros(len(lat)), np.zeros(len(lat)), np.zeros(len(lat)), np.zeros(len(lat))
     v18 = getattr(course, "tv", 1) >= AT_GRADE_TV
@@ -1052,6 +1206,14 @@ def _shape17(course, profiles, around, lat, lon, grade_fn, elev_fn, cleared, cac
             c, a = _works17(cache[ck], lat, lon, own, True)
             cut = np.minimum(cut, c)
             add = np.maximum(add, a)
+    if v20:
+        for x, got in live:
+            for piece in got["ramps"]:
+                c, a = _works17(piece, lat, lon, own, True)
+                cut = np.minimum(cut, c)
+                add = np.maximum(add, a)
+            xroads.extend(got["roads"])
+        return dcut, cut, add, asph, xroads
     for x in xps:
         ck = (cid, "x19", x["s0"], x["s1"], tuple(tuple(r["p"]) for r in x["roads"]))
         if ck not in cache:
@@ -1064,4 +1226,4 @@ def _shape17(course, profiles, around, lat, lon, grade_fn, elev_fn, cleared, cac
             add = np.maximum(add, a)
         a = _asphalt19(cache[ck]["roads"], lat, lon, own)
         asph = np.where(np.abs(a) > np.abs(asph), a, asph)
-    return dcut, cut, add, asph
+    return dcut, cut, add, asph, xroads

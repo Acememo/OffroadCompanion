@@ -230,6 +230,13 @@ Now nothing is narrower than about 6 m or changes over less than about 3 m: whoo
 in long swells, the windrows and the turns' sand as wide soft mounds, the banked corner a smooth bowl with its lip just
 past the edge, and the tallest places easing into their limit instead of flattening off.
 
+**Ground version 20** keeps version 19's ground with three changes. A paved crossing is worked only where the
+track's ground stands more than 1 m off the road's level (nearer, BeamNG.Earth joins the two itself). A crossing is
+one piece of work: the ramp down, the road's level across the asphalt under the track, the ramp up, with the same
+sloping sides all along. And beside a paved road a ramp's change slopes away from the asphalt's edge at 1:1 at most,
+further only to bring the ground to the road's own level: the road's bank is cut where the track meets it, and no
+wall is dug or filled against the asphalt.
+
 **Ground version 19** keeps version 18's ground with two changes. Where the course crosses a paved road (at 30° or
 more), the track ramps down (or up) to the road's own level at the asphalt's edge on both sides, no steeper than 10%
 where it can (over 120 m at most), and the track's ground left standing on the asphalt there is taken down to the

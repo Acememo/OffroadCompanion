@@ -804,6 +804,19 @@ class _State:
         if isinstance(got, tuple):
             # (terrain 18: the dips held to 1:1 off the asphalt past its kerb, the ramps cut right up to it)
             dc, jc, ja = got[:3]
+            if len(got) > 4:
+                # (terrain 20: the ramps held to a slope from the asphalt, but for bringing the ground to the road's
+                # own level; no wall against it)
+                if not (np.any(dc) or np.any(jc) or np.any(ja)):
+                    return None
+                dc = self.paved_hold(md, lat, lon, dc, shaping.DIP18_HOLD_IN_M)
+                r = self.ramp_hold(md, lat, lon, jc + ja, grade_fn, elev_fn, got[4])
+                dz = np.minimum(dc, np.minimum(r, 0.0)) + np.maximum(r, 0.0)
+                if not np.any(dz):
+                    return None
+                with self.lock:
+                    self.stats["shaped_points"] = self.stats.get("shaped_points", 0) + int(np.count_nonzero(dz))
+                return dz
             xa = got[3] if len(got) > 3 else None       # (terrain 19: on the asphalt of a road the course crosses)
             if not (np.any(dc) or np.any(jc) or np.any(ja) or (xa is not None and np.any(xa))):
                 return None
@@ -843,6 +856,23 @@ class _State:
         if not ends:
             return np.zeros((0, 4)), np.zeros(0)
         return np.concatenate(ends), np.concatenate(hws)
+
+    def ramp_hold(self, md, lat, lon, r, grade_fn, elev_fn, xroads):
+        """shaping.hold20 of the ramps' change r with BeamNG.Earth's paved roads near the points."""
+        r = np.array(r, np.float64)
+        flat = r.reshape(-1)
+        idx = np.flatnonzero(flat)
+        if not len(idx):
+            return r
+        la = np.asarray(lat, np.float64).reshape(-1)[idx]
+        lo = np.asarray(lon, np.float64).reshape(-1)[idx]
+        cap = float(np.max(np.abs(flat[idx]))) / shaping.HOLD20_SLOPE + shaping.ASPHALT_IN_M + 1.0
+        ends, hws = self.paved_roads_near(md, la, lo, cap + 10.0)
+        if not len(ends):
+            return r
+        past, fla, flo = relief.paved_past(la, lo, ends, hws, cap, feet=True)
+        flat[idx] = shaping.hold20(la, lo, flat[idx], past, fla, flo, grade_fn, elev_fn, xroads)
+        return r
 
     def paved_hold(self, md, lat, lon, dz, in_m=None):
         """dz held to shaping.PAVED17_SLOPE per m past the paved roads' asphalt (none on it, past ASPHALT_IN_M):

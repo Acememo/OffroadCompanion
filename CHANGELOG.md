@@ -3,6 +3,23 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.23 (2026-11-14)
+
+- **Ground version 20: no dirt walls beside the road.** Where the track leaves a paved road at a shallow angle it
+  ramped down right beside the asphalt, and the ground was cut up to the asphalt's edge: a wall along the road. Now a
+  ramp's change beside a paved road slopes away from the asphalt's edge at 1:1 at most. It goes further only to bring
+  the ground to the road's own level (so the road's bank is still cut where the track meets the road).
+- **Ground version 20: street crossings in town left alone.** 1.7.22 worked every paved crossing where the track
+  stood half a metre off the road. BeamNG.Earth already joins the two itself when they are within about 1.5 m, and
+  the two fought: the street raised as a table at the crossing, with dirt walls round it. Now a crossing is worked
+  only where the track stands more than 1 m off the road's level, and the asphalt is only touched under the track
+  itself, not 14 m along the road.
+- **Ground version 20: the crossing in the cutting, both sides.** The ramp down, the road's level across the asphalt
+  and the ramp up are now one piece of work with the same sloping sides. Before, the ramps and the asphalt were
+  worked apart and faded into each other at the asphalt's edge, where neither was whole: the spikes left on one side.
+- 1.7.23 lays ground version 20, so everyone on a BeamMP server should update together. Older ground versions are
+  unchanged.
+
 ## 1.7.22 (2026-11-14)
 
 - **Hide map.** A **Hide map** button on top of the map folds it to a slim bar with its buttons, so the data under
