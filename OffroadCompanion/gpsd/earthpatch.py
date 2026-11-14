@@ -804,6 +804,26 @@ class _State:
         if isinstance(got, tuple):
             # (terrain 18: the dips held to 1:1 off the asphalt past its kerb, the ramps cut right up to it)
             dc, jc, ja = got[:3]
+            if getattr(c, "tv", 1) >= shaping.ONLY_CUTTINGS_TV:
+                # (terrain 21: 18's, + the cut where the course crosses a paved road in a cutting, kept on that
+                # road's asphalt under the track)
+                xc, xroads = got[3], got[4]
+                if not (np.any(dc) or np.any(jc) or np.any(ja) or np.any(xc)):
+                    return None
+                dc = self.paved_hold(md, lat, lon, dc, shaping.DIP18_HOLD_IN_M)
+                jc = self.paved_clear(md, lat, lon, jc, shaping.ASPHALT_IN_M, shaping.ASPHALT_FADE_M)
+                ja = self.paved_clear(md, lat, lon, ja, shaping.ASPHALT_IN_M, shaping.ASPHALT_FADE_M)
+                if np.any(xc):
+                    off = self.paved_clear(md, lat, lon, np.where(xc != 0, 1.0, 0.0), shaping.ASPHALT_IN_M,
+                                           shaping.ASPHALT_FADE_M)
+                    on = shaping.near21(lat, lon, xroads).reshape(np.shape(xc))
+                    xc = xc * np.maximum(off, on)
+                dz = np.minimum(np.minimum(dc, jc), xc) + ja
+                if not np.any(dz):
+                    return None
+                with self.lock:
+                    self.stats["shaped_points"] = self.stats.get("shaped_points", 0) + int(np.count_nonzero(dz))
+                return dz
             if len(got) > 4:
                 # (terrain 20: the ramps held to a slope from the asphalt, but for bringing the ground to the road's
                 # own level; no wall against it)

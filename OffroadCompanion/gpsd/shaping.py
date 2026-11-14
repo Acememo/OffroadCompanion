@@ -164,6 +164,24 @@ XING20_STEP_M = 1.0
 XING20_REF_M = 20.0
 HOLD20_SLOPE = 1.0
 
+# (terrain 21; the user, 2026-11-14, screenshots of 1.7.23: "It's worse than before on other sections and the
+# 'phantom' non collidable terrain texture is happening a lot": blocks of ground filled across streets in town, rows of
+# pyramids filled along a highway's edge, the ground drawn where the car sinks through it). Terrain 19 and 20 worked
+# every crossing and reworked how every ramp meets the asphalt, each on an unseen guess at what the screenshots
+# showed; 18 was the last ground the user called right ("all the bridges and the things around are working correctly")
+# but for one bridge and one crossing in a cutting. Terrain 21 is 18's ground again with only those two:
+#   - 19's bridge dug under wherever the course crosses it away from its part's ends (deck19);
+#   - a paved crossing worked only where the track's ground stands CUT21_STEP_M or more ABOVE the road beside the
+#     asphalt (a cutting: far past what BeamNG.Earth pads at grade, grading.PAD_CROSS_MAX_M), the road's level there
+#     known from both sides of it and near level along it (CUT21_ROAD_GRADE), and then only cut, never filled
+#     (cross21: 20's one line of work, the ramp, the road's level across the asphalt under the track, the ramp);
+#   - the ramps off the roads exactly 18's (cut to the asphalt, cleared on it); no hold20 (its leave to fill up to the
+#     road's level stood the pyramids, and its second reading of the ground at every point by a road made the builds
+#     slow: the ground drawn before the physics had it).
+ONLY_CUTTINGS_TV = 21
+CUT21_STEP_M = 2.5
+CUT21_ROAD_GRADE = 0.1
+
 ASPHALT_IN_M = 0.3          # never on a paved road's asphalt (relief.paved_clear with these: the shoulder is shaped)
 ASPHALT_FADE_M = 1.0
 
@@ -517,7 +535,10 @@ def shape(course, profiles, lat, lon, graded, grade_fn, elev_fn, near=None, clea
             return dc.reshape(shp), jc.reshape(shp), ja.reshape(shp), xa.reshape(shp)
         if parts and getattr(course, "tv", 1) >= AT_GRADE_TV:
             return dc.reshape(shp), jc.reshape(shp), ja.reshape(shp)
-        out[:] = np.minimum(dc, jc) + ja + xa
+        if getattr(course, "tv", 1) >= ONLY_CUTTINGS_TV:
+            out[:] = np.minimum(np.minimum(dc, jc), xa) + ja
+        else:
+            out[:] = np.minimum(dc, jc) + ja + xa
         return out.reshape(shp)
     xs, js, ds = {}, {}, {}
     for p in profiles.values():
@@ -975,6 +996,67 @@ def cross20(course, facts, x, grade_fn, elev_fn):
     return {"ramps": [(la, lo, hw, H, w, FLAT15_JOIN_M)], "roads": roads}
 
 
+def cross21(course, facts, x, grade_fn, elev_fn):
+    """Terrain 21's works at paved crossing x: cross20's (one cut piece), or None unless the track's ground stands
+    CUT21_STEP_M or more above the road's level within XING_LOOK_M of the asphalt on a side, that level read both
+    sides of the crossing on every road of it and no steeper between them than CUT21_ROAD_GRADE. Pure given the
+    functions."""
+    end = (len(course.lat) - 1) * courseroads.STEP_M
+    levels = []
+    for r in x["roads"]:
+        pts = [r["p"]] + list(r.get("r") or ())
+        if len(pts) != 3:
+            return None
+        ll = np.asarray(pts, np.float64)
+        z = np.asarray(grade_fn(ll[:, 1], ll[:, 0], np.asarray(elev_fn(ll[:, 1], ll[:, 0]), np.float64)),
+                       np.float64).ravel()
+        if abs(z[2] - z[1]) > 2.0 * XING20_REF_M * CUT21_ROAD_GRADE:
+            return None
+        levels.append(0.5 * (z[1] + z[2]))
+    over = False
+    for sgn, edge, zr in ((-1, x["s0"], levels[0]), (1, x["s1"], levels[-1])):
+        sp = edge + sgn * np.arange(0.0, XING_LOOK_M + 1e-9, PROBE15_M)
+        sp = sp[(sp >= 0) & (sp <= end)]
+        if len(sp) and float((_graded(course, facts, sp, grade_fn, elev_fn) - zr).max()) >= CUT21_STEP_M:
+            over = True
+    if not over:
+        return None
+    return cross20(course, facts, x, grade_fn, elev_fn)
+
+
+def near21(lat, lon, xroads):
+    """1 at the points on the asphalt of the roads the course crosses in a cutting (cross21's roads: within their half
+    width + 1 m of their line there), fading to 0 a metre further and past the line's ends: there the crossing's cut
+    stays (the track's block on the asphalt), where every other change is cleared off the asphalt. Pure."""
+    lat = np.asarray(lat, np.float64).ravel()
+    lon = np.asarray(lon, np.float64).ravel()
+    out = np.zeros(len(lat))
+    from .corridor import Plane
+    for line, zs, hw in xroads:
+        if len(line) < 2 or not len(lat):
+            continue
+        pl = Plane(float(line[len(line) // 2, 1]), float(line[len(line) // 2, 0]))
+        q = pl.xy(line)
+        P = pl.xy(np.stack([lon, lat], 1))
+        reach = hw + 2.0
+        cand = np.flatnonzero(((P >= q.min(axis=0) - reach) & (P <= q.max(axis=0) + reach)).all(axis=1))
+        if not len(cand):
+            continue
+        P = P[cand]
+        a, b = q[:-1], q[1:]
+        v = b - a
+        seg2 = np.maximum((v * v).sum(1), 1e-12)
+        tr = ((P[:, None, :] - a[None]) * v[None]).sum(2) / seg2[None]
+        t = np.clip(tr, 0.0, 1.0)
+        near = a[None] + t[:, :, None] * v[None]
+        # (past a line's end as far as beside it: the weight falls off round the end too)
+        dist = np.hypot(near[..., 0] - P[:, None, 0], near[..., 1] - P[:, None, 1]).min(axis=1)
+        ends = np.minimum(np.hypot(*(P - q[0]).T), np.hypot(*(P - q[-1]).T))
+        w = (1.0 - _ease(dist - hw - 1.0)) * _ease(ends / XING_TAPER_M)
+        out[cand] = np.maximum(out[cand], w)
+    return out
+
+
 def hold20(lat, lon, r, past, foot_lat, foot_lon, grade_fn, elev_fn, xroads=()):
     """The ramps' change r at the points held beside the paved roads (terrain 20): none on the asphalt, HOLD20_SLOPE
     per m past it (past: m past the nearest paved road's asphalt, foot: the nearest point of that road's middle), and
@@ -1170,13 +1252,14 @@ def _shape17(course, profiles, around, lat, lon, grade_fn, elev_fn, cleared, cac
     # (the track's look is in the key: BeamNG.Earth's grading of the track, which the shapes are worked out on, wears
     # it or not by it, and a shape kept from before the look changed was another ground's)
     cid = (getattr(course, "cid", ""), getattr(course, "rough", None))
+    v21 = getattr(course, "tv", 1) >= ONLY_CUTTINGS_TV
     if v20:
         # (terrain 20: only the crossings worked take the joins by them; one BeamNG.Earth pads itself leaves them)
         live = []
         for x in xps:
-            ck = (cid, "x20", x["s0"], x["s1"], tuple(tuple(r["p"]) for r in x["roads"]))
+            ck = (cid, "x21" if v21 else "x20", x["s0"], x["s1"], tuple(tuple(r["p"]) for r in x["roads"]))
             if ck not in cache:
-                cache[ck] = cross20(course, facts, x, grade_fn, elev_fn)
+                cache[ck] = (cross21 if v21 else cross20)(course, facts, x, grade_fn, elev_fn)
             if cache[ck] is not None:
                 live.append((x, cache[ck]))
         xps = [x for x, _ in live]
@@ -1206,6 +1289,14 @@ def _shape17(course, profiles, around, lat, lon, grade_fn, elev_fn, cleared, cac
             c, a = _works17(cache[ck], lat, lon, own, True)
             cut = np.minimum(cut, c)
             add = np.maximum(add, a)
+    if v21:
+        # (the cuttings' cut apart, in the fourth place: kept on their roads' asphalt by the caller, near21)
+        for x, got in live:
+            for piece in got["ramps"]:
+                c, _ = _works17(piece, lat, lon, own, False)
+                asph = np.minimum(asph, c)
+            xroads.extend(got["roads"])
+        return dcut, cut, add, asph, xroads
     if v20:
         for x, got in live:
             for piece in got["ramps"]:

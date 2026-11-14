@@ -869,6 +869,104 @@ class TestSmoothCrossing(TestPavedCrossing):
 
 
 @unittest.skipUnless(HAVE_NP, "numpy")
+class TestOnlyCuttings(TestPavedCrossing):
+    """Terrain 21 (the user, 2026-11-14, 1.7.23: "It's worse than before on other sections"): 18's ground again, and of
+    the crossings only those in a cutting, cut down to the road, never filled."""
+
+    def setUp(self):
+        super().setUp()
+        self.c = straight(tv=21)
+
+    def test_the_crossing_listed(self):
+        pass
+
+    def held(self, la, lo, g, grade, profs=None):
+        """As earthpatch.shape_at puts the parts together, the road here x 500 +- 4."""
+        dc, jc, ja, xc, xroads = sh.shape(self.c, profs or self.profs(), la, lo, g, grade, self.elev, cache={},
+                                          parts=True)
+        x, y = self.xy(la, lo)
+        off = np.clip((np.abs(x - 500.0) - 4.0 - sh.ASPHALT_IN_M) / sh.ASPHALT_FADE_M, 0.0, 1.0)
+        on = sh.near21(la, lo, xroads)
+        return np.minimum(np.minimum(dc, jc * off), xc * np.maximum(off, on)) + ja * off
+
+    def test_down_to_the_road_and_up_again(self):
+        xs = np.arange(380.0, 621.0, 1.0)
+        la, lo = self.ll(xs, np.zeros(len(xs)))
+        g = self.grade(la, lo, None)
+        z = g + self.held(la, lo, g, self.grade)
+        self.assertLess(float(np.abs(np.diff(z)).max()), sh.JOIN15_GRADE * 1.06, "gentle all the way, the road too")
+        self.assertTrue(np.all(np.abs(z[np.abs(xs - 500.0) <= 6.0]) < 0.05), "at the road's level on and by it")
+        self.assertTrue(np.all(z[np.abs(xs - 500.0) > 100.0] == self.DEEP), "its own ground 100 m away")
+
+    def test_no_spikes_at_the_asphalts_edge(self):
+        gx, gy = np.meshgrid(np.arange(488.0, 512.5, 0.5), np.arange(-4.0, 4.5, 0.5))   # (the track's width)
+        la, lo = self.ll(gx.ravel(), gy.ravel())
+        g = self.grade(la, lo, None)
+        z = (g + self.held(la, lo, g, self.grade)).reshape(gx.shape)
+        self.assertLess(float(np.abs(z[np.abs(gx - 500.0) <= 4.0]).max()), 0.05, "the asphalt clean")
+        self.assertLess(float(np.abs(np.diff(z, axis=0)).max()), 0.7, "no spike across")
+        self.assertLess(float(np.abs(np.diff(z, axis=1)).max()), 0.7, "no spike along")
+
+    def test_the_asphalt_along_the_road_untouched(self):
+        gx, gy = np.meshgrid(np.arange(496.5, 504.0, 0.5), np.arange(-60.0, 60.5, 0.5))
+        la, lo = self.ll(gx.ravel(), gy.ravel())
+        g = self.grade(la, lo, None)
+        dz = self.held(la, lo, g, self.grade).reshape(gx.shape)
+        self.assertFalse(np.any(dz[np.abs(gy) > 9.0]), "only under the track and its flat")
+        self.assertTrue(np.all(dz <= 0.0), "never filled")
+
+    def with_step(self, h):
+        def grade(lat, lon, nat):
+            x, y = self.xy(np.asarray(lat).ravel(), np.asarray(lon).ravel())
+            return np.where(np.abs(x - 500.0) <= 5.0, 0.0, h)
+        return self.line(grade)
+
+    def test_only_cuttings(self):
+        """Up to a couple of metres over the road (a street in town; BeamNG.Earth pads the nearer ones itself) and
+        under it: no crossing worked, the ramps off the road 18's."""
+        for h in (0.8, 2.0, -4.0):
+            xs, g, parts = self.with_step(h)
+            self.assertEqual(parts[4], [], h)
+            self.assertFalse(np.any(parts[3]) or np.any(parts[0]), h)
+            c18 = straight(tv=18)
+            n = c18.inner(0)[1] + 1
+            p18 = all_profiles(c18, jn={0: sh.joins(c18, 0, [49 <= i <= 51 for i in range(n)])})
+            la, lo = self.ll(xs, np.zeros(len(xs)))
+
+            def grade(lat, lon, nat, h=h):
+                x, y = self.xy(np.asarray(lat).ravel(), np.asarray(lon).ravel())
+                return np.where(np.abs(x - 500.0) <= 5.0, 0.0, h)
+            dc, jc, ja = sh.shape(c18, p18, la, lo, g, grade, self.elev, cache={}, parts=True)
+            self.assertTrue(np.array_equal(jc, parts[1]) and np.array_equal(ja, parts[2]), "terrain 18's ramps")
+
+    def test_a_road_read_one_side_only_left(self):
+        profs = self.profs()
+        for x in profs[0]["xp"]:
+            for r in x["roads"]:
+                r["r"] = r["r"][:1]
+        xs = np.arange(380.0, 621.0, 1.0)
+        la, lo = self.ll(xs, np.zeros(len(xs)))
+        g = self.grade(la, lo, None)
+        parts = sh.shape(self.c, profs, la, lo, g, self.grade, self.elev, cache={}, parts=True)
+        self.assertEqual(parts[4], [])
+
+    def test_a_level_crossing_left(self):
+        xs, g, parts = self.line(self.flat)
+        self.assertFalse(any(np.any(p) for p in parts[:4]))
+
+    def test_the_sides_slope_back(self):
+        gx, gy = np.meshgrid(np.arange(400.0, 495.0, 1.0), np.arange(-40.0, 41.0, 1.0))
+        la, lo = self.ll(gx.ravel(), gy.ravel())
+        g = self.grade(la, lo, None)
+        z = (g + self.held(la, lo, g, self.grade)).reshape(gx.shape)
+        self.assertLess(float(np.abs(np.diff(z, axis=0)).max()), 1.3, "no wall beside the ramp")
+        self.assertTrue(np.all(z[np.abs(gy) > 35.0] == self.DEEP), "the ground 35 m beside it as it was")
+
+    def test_terrain_18_as_it_was(self):
+        pass
+
+
+@unittest.skipUnless(HAVE_NP, "numpy")
 class TestHeldBesideTheRoad(unittest.TestCase):
     """Terrain 20: a ramp's change beside a paved road (the user, 2026-11-14: a wall along the asphalt where the track
     leaves the road at a shallow angle)."""

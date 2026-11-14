@@ -3,6 +3,22 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.24 (2026-11-14)
+
+- **Ground version 21: back to 1.7.21's ground, plus two fixes.** 1.7.22 and 1.7.23 reworked every paved crossing
+  and how every ramp meets the asphalt, and made other places worse: blocks of ground filled across streets in town,
+  rows of pyramids along a highway's edge, ground you could see but sink through. Ground version 21 is 1.7.21's
+  ground (version 18) again, with only these two changes:
+  - the bridge fix from 1.7.22: a bridge the course passes under more than 12 m from its ends is always dug under;
+  - where the course crosses a paved road in a cutting (the track's ground 2.5 m or more above the road right beside
+    the asphalt), the track is cut down to the road's level in one piece: ramp down, across the asphalt under the
+    track, ramp up. Nothing is ever filled, no other crossing is touched, and a crossing is left alone unless the
+    road's level can be read on both sides of it.
+- The ramps off paved roads are 1.7.21's again. The extra reading of the ground beside every road that 1.7.23 added
+  is gone; it made the ground slow to build, which is the likeliest cause of the ground you could sink through.
+- 1.7.24 lays ground version 21, so everyone on a BeamMP server should update together. Older ground versions are
+  unchanged.
+
 ## 1.7.23 (2026-11-14)
 
 - **Ground version 20: no dirt walls beside the road.** Where the track leaves a paved road at a shallow angle it
