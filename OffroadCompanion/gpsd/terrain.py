@@ -21,7 +21,7 @@ data). Pure Python.
 """
 import hashlib
 
-VERSION = 18                # (2: natural cut banks beside the track where BeamNG.Earth stood a bare step: banks.py;
+VERSION = 19                # (2: natural cut banks beside the track where BeamNG.Earth stood a bare step: banks.py;
                             # 3: the ground's surfaces along the course, sand, mud, loose and packed dirt: surfaces.py;
                             # 4: the track round the trees, courseroads.weave_shifts; grass and scrub on the track
                             # where the land around has them, the wheel paths bare: surfaces.py; washes rarer and
@@ -51,8 +51,11 @@ VERSION = 18                # (2: natural cut banks beside the track where BeamN
                             # 1:1 from a paved road's edge: shaping.KEEP_DECK_TV;
                             # 18: dug only where a deck stands over the track (none by a bridge's end, a low
                             # bridge the course crosses made a ground road again), the ramps cut right up to the
-                            # asphalt again: shaping.AT_GRADE_TV)
-VERSIONS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18)  # the versions this code can still make
+                            # asphalt again: shaping.AT_GRADE_TV;
+                            # 19: the track ramped down (or up) to a paved road it crosses, both sides, the ground
+                            # on its asphalt held at the road's level; a bridge crossed away from its part's ends
+                            # dug under whatever those say: shaping.XING_TV)
+VERSIONS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)  # the versions this code can still make
 
 
 def seal(cid, paint=True, clear=True, rough="on", ruts="auto", dangers=(), tv=VERSION, earth=None):

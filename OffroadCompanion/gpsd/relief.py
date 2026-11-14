@@ -392,6 +392,8 @@ def window_profile(course, k, pieces, road_fn, elev_fn, water_fn=None, land_fn=N
         prof["jn"] = shaping.joins(course, k, paved)
         if getattr(course, "tv", 1) >= shaping.DECK_TV:
             prof["pv"] = out(paved_on.astype(np.float64), 1)
+        if getattr(course, "tv", 1) >= shaping.XING_TV:    # (terrain 19: where the course crosses a paved road)
+            prof["xp"] = shaping.paved_crossings(course, k, segs, pl)
     if getattr(course, "tv", 1) >= VARIETY_TV:     # (terrain 7: the grade along the course, for the alluvial fans)
         prof["grade"] = out(_mean(np.abs(np.gradient(zc)) / STEP if n > 1 else np.zeros(n), 5 if wide else 3), 4)
     from . import surfaces

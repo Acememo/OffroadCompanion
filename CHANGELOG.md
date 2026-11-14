@@ -3,6 +3,21 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.22 (2026-11-14)
+
+- **Hide map.** A **Hide map** button on top of the map folds it to a slim bar with its buttons, so the data under
+  it gets the room (for when you use another map app). **Show map** brings it back; the app remembers it.
+- **Ground version 19: down to the road and up again.** Where the course crosses a paved road in a cutting,
+  the track stood as a block of ground right up to the asphalt, with spiked edges: BeamNG.Earth grades two roads that
+  cross at different heights each to its own. Now the track ramps down to the road's own level at the asphalt's edge
+  on both sides, no steeper than 10% where it can (over at most 120 m), and the track's ground left on the asphalt is
+  taken down to the road's level.
+- **Ground version 19: the last low bridge.** A bridge cut by the edge of a map cell has a part that ends in mid air,
+  and 1.7.21 read the ground under that end as the bridge's height: the deck looked like it was at the track's height,
+  so nothing was dug. Now a bridge the course passes under more than 12 m from its ends is always dug under.
+- 1.7.22 lays ground version 19, so everyone on a BeamMP server should update together. Older ground versions are
+  unchanged.
+
 ## 1.7.21 (2026-11-13)
 
 - **Ground version 18: no pits by bridges you don't go under.** 1.7.20 dug under every bridge deck the course came

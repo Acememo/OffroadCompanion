@@ -694,5 +694,170 @@ class TestAtGrade(unittest.TestCase):
         self.assertTrue(np.array_equal(whole, np.minimum(dc, jc) + ja))
 
 
+def road_segs(c, k, lines, ll, hw=4.0):
+    """relief.window_profile's road segments (plane metres of window k's context) for paved roads along lines
+    (lists of plane xy points), and that plane."""
+    c0, c1 = c.context(k)
+    lat = np.asarray(c.lat[c0:c1 + 1], np.float64)
+    lon = np.asarray(c.lon[c0:c1 + 1], np.float64)
+    pl = cr.Plane(float(lat.mean()), float(lon.mean()))
+    segs = []
+    for line in lines:
+        la, lo = ll(np.array([p[0] for p in line], float), np.array([p[1] for p in line], float))
+        x, y = pl.xy(la, lo)
+        for i in range(len(line) - 1):
+            segs.append([x[i], y[i], x[i + 1], y[i + 1], hw, 1.0])
+    return segs, pl
+
+
+@unittest.skipUnless(HAVE_NP, "numpy")
+class TestPavedCrossing(unittest.TestCase):
+    """Terrain 19 (the user, 2026-11-14, the course crossing a paved road in a cutting, blocks of ground either side
+    of the asphalt: "the dirt road should dip not too sharply but all the way to paved road level and then go up on
+    the other side")."""
+    DEEP = 6.0
+
+    def setUp(self):
+        self.ll, self.xy = frame()
+        self.c = straight(tv=19)
+        self.road = [[(500.0, float(y)) for y in range(-200, 201, 20)]]
+
+    def elev(self, lat, lon):
+        return np.zeros(np.size(lat))
+
+    def grade(self, lat, lon, nat):
+        # the road's cutting, 5 m either side of its line, in ground DEEP higher; the track's block of ground stands
+        # across it right up to the asphalt, and a little onto it (as BeamNG.Earth leaves them)
+        x, y = self.xy(np.asarray(lat).ravel(), np.asarray(lon).ravel())
+        z = np.where(np.abs(x - 500.0) <= 5.0, 0.0, self.DEEP)
+        block = (np.abs(y) <= 4.0) & (np.abs(x - 500.0) <= 5.0)
+        return np.where(block, np.where(np.abs(x - 500.0) <= 4.0, 0.6, 2.7), z)
+
+    def flat(self, lat, lon, nat):
+        return np.zeros(np.size(lat))
+
+    def profs(self, lines=None):
+        segs, pl = road_segs(self.c, 0, lines or self.road, self.ll)
+        xp = sh.paved_crossings(self.c, 0, segs, pl)
+        n = self.c.inner(0)[1] + 1
+        return all_profiles(self.c, xp={0: xp}, jn={0: sh.joins(self.c, 0, [49 <= i <= 51 for i in range(n)])})
+
+    def test_the_crossing_listed(self):
+        xp = self.profs()[0]["xp"]
+        self.assertEqual(len(xp), 1)
+        self.assertAlmostEqual(xp[0]["s0"], 496.0, places=1)
+        self.assertAlmostEqual(xp[0]["s1"], 504.0, places=1)
+        r = xp[0]["roads"][0]
+        x, y = self.xy(np.array([q[1] for q in r["r"]]), np.array([q[0] for q in r["r"]]))
+        self.assertTrue(np.allclose(x, 500.0, atol=0.05) and np.allclose(sorted(y), [-sh.XING_REF_M, sh.XING_REF_M], atol=0.05))
+        along = [[(float(x), 3.0) for x in range(300, 701, 50)]]         # (a road along the course: no crossing)
+        self.assertEqual(self.profs(along)[0]["xp"], [])
+        dual = self.road + [[(516.0, float(y)) for y in range(-200, 201, 20)]]
+        got = self.profs(dual)[0]["xp"]
+        self.assertEqual((len(got), len(got[0]["roads"])), (1, 2), "a dual carriageway: one crossing")
+        self.assertAlmostEqual(got[0]["s1"], 520.0, places=1)
+
+    def line(self, grade):
+        xs = np.arange(380.0, 621.0, 1.0)
+        la, lo = self.ll(xs, np.zeros(len(xs)))
+        g = grade(la, lo, None)
+        got = sh.shape(self.c, self.profs(), la, lo, g, grade, self.elev, cache={}, parts=True)
+        return xs, g, got
+
+    def test_down_to_the_road_and_up_again(self):
+        xs, g, (dc, jc, ja, xa) = self.line(self.grade)
+        off = np.abs(xs - 500.0) > 4.0
+        jc, ja = np.where(off, jc, 0.0), np.where(off, ja, 0.0)     # (as the caller clears them on the asphalt)
+        z = g + np.minimum(dc, jc) + ja + xa
+        self.assertLess(float(np.abs(np.diff(z[xs < 496.0])).max()), sh.JOIN15_GRADE * 1.06, "the ramp down, gentle")
+        self.assertLess(float(np.abs(np.diff(z[xs > 504.0])).max()), sh.JOIN15_GRADE * 1.06, "the ramp up")
+        self.assertTrue(np.all(np.abs(z[(np.abs(xs - 500.0) > 4.0) & (np.abs(xs - 500.0) < 6.0)]) < 0.2),
+                        "at the road's level at the asphalt's edges")
+        self.assertTrue(np.all(np.abs(z[~off]) <= sh.XING_TOL_M + 1e-3), "the asphalt at the road's level")
+        self.assertTrue(np.all(z[np.abs(xs - 500.0) > 100.0] == self.DEEP), "its own ground 100 m away")
+
+    def test_a_level_crossing_left(self):
+        xs, g, parts = self.line(self.flat)
+        self.assertFalse(any(np.any(p) for p in parts), "BeamNG.Earth's own crossing: nothing")
+
+    def test_the_sides_slope_back(self):
+        gx, gy = np.meshgrid(np.arange(400.0, 495.0, 1.0), np.arange(-40.0, 41.0, 1.0))
+        la, lo = self.ll(gx.ravel(), gy.ravel())
+        g = self.grade(la, lo, None)
+        z = (g + sh.shape(self.c, self.profs(), la, lo, g, self.grade, self.elev, cache={})).reshape(gx.shape)
+        self.assertLess(float(np.abs(np.diff(z, axis=0)).max()), 1.3, "no wall beside the ramp")
+        self.assertTrue(np.all(z[np.abs(gy) > 35.0] == self.DEEP), "the ground 35 m beside it as it was")
+
+    def test_terrain_18_as_it_was(self):
+        c = straight(tv=18)
+        segs, pl = road_segs(c, 0, self.road, self.ll)
+        profs = all_profiles(c, xp={0: sh.paved_crossings(c, 0, segs, pl)})
+        xs = np.arange(380.0, 621.0, 1.0)
+        la, lo = self.ll(xs, np.zeros(len(xs)))
+        g = self.grade(la, lo, None)
+        self.assertFalse(np.any(sh.shape(c, profs, la, lo, g, self.grade, self.elev, cache={})))
+
+
+@unittest.skipUnless(HAVE_NP, "numpy")
+class TestCrossedDeck(unittest.TestCase):
+    """Terrain 19 (the user, 2026-11-14: one bridge "not giving clearance still"): a bridge the course's line crosses
+    away from its part's ends is dug under whatever those ends' ground says (a part cut by a map cell's edge ends in
+    mid air, over the low ground)."""
+
+    def setUp(self):
+        self.ll, self.xy = frame()
+
+    def elev(self, lat, lon):
+        return np.zeros(np.size(lat))
+
+    def grade(self, lat, lon, nat):
+        return np.zeros(np.size(lat))           # (the part's ends read at the track's height: terrain 18 left it)
+
+    def run_deck(self, tv, y0, y1):
+        c = straight(tv=tv)
+        ll = self.ll
+        a, b = ll(500.0, y0), ll(500.0, y1)
+
+        class F:
+            ids = ["deck"]
+            attrs = {"class": np.array(["primary"])}
+
+            def __len__(self):
+                return 1
+
+        class R:
+            @staticmethod
+            def level_ranges(f, i):
+                return [(0.0, 1.0, "bridge")]
+
+            @staticmethod
+            def bridge_parts(f, i):
+                return [np.array([[float(a[1]), float(a[0])], [float(b[1]), float(b[0])]])]
+
+        class Spec:
+            width = 10.0
+        ux = sh.bridge_crossings(R, F(), [Spec()], c, 0)
+        ud = sh.bridge_near(R, F(), [Spec()], c, 0)
+        for x in ux + ud:
+            x["f"] = 0
+            x.pop("i")
+        self.assertEqual((len(ux), len(ud)), (1, 1))
+        xs = np.arange(350.0, 651.0, 2.0)
+        la, lo = self.ll(xs, np.zeros(len(xs)))
+        return xs, sh.shape(c, all_profiles(c, ux={0: ux}, ud={0: ud}), la, lo, np.zeros(len(xs)), self.grade,
+                            self.elev, cache={})
+
+    def test_crossed_in_its_middle_dug(self):
+        xs, dz = self.run_deck(19, -30.0, 30.0)
+        self.assertTrue(np.allclose(dz[np.abs(xs - 500.0) <= 10.0], -(sh.DECK_UNDER_M + sh.UNDER_CLEAR_M)),
+                        "the floor under the deck")
+        _, dz18 = self.run_deck(18, -30.0, 30.0)
+        self.assertFalse(np.any(dz18), "(terrain 18 left it, and still does)")
+
+    def test_crossed_by_its_end_left(self):
+        xs, dz = self.run_deck(19, -8.0, 120.0)
+        self.assertFalse(np.any(dz), "BeamNG.Earth crosses at grade there itself")
+
+
 if __name__ == "__main__":
     unittest.main()

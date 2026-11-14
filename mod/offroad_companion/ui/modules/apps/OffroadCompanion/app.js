@@ -1,7 +1,7 @@
 // Offroad Companion (the in-game app; lua/ge/extensions/offroadCompanion/main.lua): turn-by-turn road navigation and race-course guidance.
 // The game's UI browser cannot make web requests, so everything goes through the game's Lua (bngApi.engineLua);
 // the Lua side pushes 'OffroadCompanionUpdate' five times a second while this app is on screen.
-var EGPS_APP_BUILD = '2026-11-13 13:00'   // (main.lua M.BUILD: the same, or the game kept an older copy of one of them)
+var EGPS_APP_BUILD = '2026-11-14 06:00'   // (main.lua M.BUILD: the same, or the game kept an older copy of one of them)
 angular.module('beamng.apps')
 .directive('offroadCompanion', ['$sce', function ($sce) {
   'use strict'
@@ -64,7 +64,7 @@ angular.module('beamng.apps')
     restrict: 'E',
     scope: {},
     template:
-'<div class="bngApp egps" ng-class="[{\'egps-off\': !d.earth, ovbig: d.map.ov && ovv.big, mapbig: mapBigOn(), nocourse: !d.course, hid: ui.hidden}, \'notes-\' + (ui.notes || \'top\')]">' +
+'<div class="bngApp egps" ng-class="[{\'egps-off\': !d.earth, ovbig: d.map.ov && ovv.big, mapbig: mapBigOn(), nomap: mapHiddenOn(), nocourse: !d.course, hid: ui.hidden}, \'notes-\' + (ui.notes || \'top\')]">' +
 '<style>' +
 '.egps{--bg:rgba(20,27,43,.86);--line:#2A3550;--cyan:#27D9FF;--sand:#E8B44A;--red:#FF4D3D;--green:#5BE38A;--ink:#EEF2F8;--mute:#93A0B8;' +
 '  --s:1;position:relative;width:100%;height:100%;display:flex;flex-direction:column;background:var(--bg);color:var(--ink);border-radius:calc(10px*var(--s));' +
@@ -170,6 +170,12 @@ angular.module('beamng.apps')
 '.egps .north{position:absolute;left:calc(10px*var(--s));top:calc(38px*var(--s));width:calc(22px*var(--s));height:calc(22px*var(--s));border-radius:50%;background:rgba(10,14,24,.8);display:flex;align-items:center;justify-content:center;font-size:calc(11px*var(--s));font-weight:700;color:#FF6A5C;cursor:pointer}' +
 '.egps .north span{display:inline-block}' +
 '.egps.ovbig .lower{display:none}' +
+/* (Hide map, the user 2026-11-14: "to see the data below instead of the map for if you are using another map ui app": the
+   map shut to a slim bar with its buttons, the strips under it take its room) */
+'.egps.nomap .mapWrap{flex:0 0 calc(30px*var(--s));min-height:0}' +
+'.egps.nomap .mapWrap canvas,.egps.nomap .mapWrap .zoom,.egps.nomap .mapWrap .spd,.egps.nomap .mapWrap .limit,.egps.nomap .mapWrap .osm,.egps.nomap .mapWrap .north{display:none}' +
+'.egps.nomap .mapbtns{top:calc(4px*var(--s))}.egps.nomap .mapWrap .toasts,.egps.nomap .mapWrap .banner{top:calc(34px*var(--s));z-index:3}' +
+'.egps.nomap .lower{flex:1 1 auto}' +
 /* (Big on the map around the car: the turn notes and the course's top line and progress bar stay, the rest goes) */
 '.egps.mapbig .lower .strip>.sub,.egps.mapbig .lower .strip>.ahead,.egps.mapbig .lower .strip>.row:not(:first-child),.egps.mapbig .lower .where{display:none}' +
 /* (Big with no course: the street and the route's line stay, the rest under the map goes) */
@@ -224,7 +230,8 @@ angular.module('beamng.apps')
 '  </div>' +
 '  <div class="north" ng-if="d.map.ov && ovv.eff" ng-click="ovNorth()" title="North (click: north up)"><span ng-style="{transform: \'rotate(\' + (-ovv.eff) + \'deg)\'}">N</span></div>' +
 '  <div class="mapbtns" ng-if="d.editor.mode !== \'plan\' && !tab">' +
-'    <button ng-if="!d.map.ov" ng-click="mapBig()" ng-class="{on: mapv.big}" title="A bigger map: the turn notes stay, and the course\'s race mile, time and progress (or, with no course, the street and the route), the rest below is hidden">Big</button>' +
+'    <button ng-if="!d.map.ov" ng-click="mapHide()" ng-class="{on: mapv.hide}" title="{{ mapv.hide ? \'Show the map again\' : \'Hide the map (for use with another map app): the turn notes and everything under the map stay\' }}">{{ mapv.hide ? \'Show map\' : \'Hide map\' }}</button>' +
+'    <button ng-if="!d.map.ov && !mapv.hide" ng-click="mapBig()" ng-class="{on: mapv.big}" title="A bigger map: the turn notes stay, and the course\'s race mile, time and progress (or, with no course, the street and the route), the rest below is hidden">Big</button>' +
 '    <button ng-if="d.course" ng-class="{on: d.map.ov}" ng-click="overview()" title="{{ d.map.ov ? \'Back to the map around the car\' : \'The whole course\' }}">{{ d.map.ov ? \'Back\' : \'Course\' }}</button></div>' +
 '  <div class="osm" ng-if="hasStreets">&copy; OpenStreetMap</div>' +
 '  <div class="mapMode" ng-if="d.editor.mode === \'plan\' && !tab">Tap to add a point &middot; drag to move the map</div>' +
@@ -659,9 +666,21 @@ angular.module('beamng.apps')
       // Big on the map around the car (the user, 2026-10-25): kept for next time in this game's browser
       var mapv = scope.mapv = { big: false }
       try { mapv.big = window.localStorage.getItem('offroadCompanion.mapBig') === '1' } catch (e) {}
+      // Hide map (the user, 2026-11-14): the map around the car shut, kept for next time; never while the whole course
+      // is open, a tab, or the track editor (they need it)
+      try { mapv.hide = window.localStorage.getItem('offroadCompanion.mapHide') === '1' } catch (e) {}
+      scope.mapHiddenOn = function () {
+        var d = scope.d || {}
+        return !!(mapv.hide && !(d.map && d.map.ov) && !scope.tab && !(d.editor && d.editor.mode && d.editor.mode !== 'off'))
+      }
+      scope.mapHide = function () {
+        mapv.hide = !mapv.hide
+        try { window.localStorage.setItem('offroadCompanion.mapHide', mapv.hide ? '1' : '0') } catch (e) {}
+        ;(window.requestAnimationFrame || setTimeout)(function () { fit(); safeDraw() })
+      }
       scope.mapBigOn = function () {
         var d = scope.d || {}
-        return !!(mapv.big && !(d.map && d.map.ov) && !scope.tab && !(d.editor && d.editor.mode && d.editor.mode !== 'off'))
+        return !!(mapv.big && !mapv.hide && !(d.map && d.map.ov) && !scope.tab && !(d.editor && d.editor.mode && d.editor.mode !== 'off'))
       }
       // Hidden (the user, 2026-11-01): the Hide button or the bindable key (OffroadCompanionToggle) leaves only a pill
       // to bring it back; while hidden the game sends it nothing (uiMounted false), kept for next time
@@ -1117,13 +1136,15 @@ angular.module('beamng.apps')
         // shrinking it (their first few lines count when the text is scaled to fit)
         // the map: at least half the app's height not counting the notes box (the user, 2026-10-22)
         var side = /notes-(left|right)/.test(root.className)
+        var nomap = scope.mapHiddenOn()         // (the map shut to its bar of buttons: no room kept for it)
         var callH = call ? call.offsetHeight : 0
-        var mapMin = Math.max(MAP_MIN * sw, MAP_SHARE * (h - (side ? 0 : callH)))
+        var mapMin = nomap ? 30 * sw : Math.max(MAP_MIN * sw, MAP_SHARE * (h - (side ? 0 : callH)))
         var lowerH = lower ? Math.min(lower.scrollHeight, LOWER_FIT * h) : 0
         var need = (side ? 0 : callH) + lowerH + mapMin + TABS * sw + 2
         var s = need > h ? Math.max(MIN_S, sw * h / need) : sw
         if (s !== sw) root.style.setProperty('--s', s.toFixed(3))
-        if (map) map.style.minHeight = Math.round(Math.max(MAP_MIN * s, MAP_SHARE * (h - (side ? 0 : (call ? call.offsetHeight : 0))))) + 'px'
+        if (map && nomap) map.style.minHeight = '0px'
+        else if (map) map.style.minHeight = Math.round(Math.max(MAP_MIN * s, MAP_SHARE * (h - (side ? 0 : (call ? call.offsetHeight : 0))))) + 'px'
         var rest = root.querySelector('.rest')     // (the tabs' short names when the app, or its part beside the notes, is narrow)
         if (rest) root.classList.toggle('narrow', rest.clientWidth < 290 * s)
         S = s
@@ -1215,6 +1236,7 @@ angular.module('beamng.apps')
       function draw () {
         var d = scope.d, m = d.map
         var w = canvas.clientWidth, h = canvas.clientHeight
+        if (!w || !h) return            // (the map hidden)
         var dpr = window.devicePixelRatio || 1
         if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
           canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr)

@@ -785,7 +785,7 @@ class _State:
         def elev_fn(la, lo):
             return np.asarray(elev(np.asarray(la, np.float64), np.asarray(lo, np.float64)), np.float64)
         v17 = getattr(c, "tv", 1) >= shaping.KEEP_DECK_TV
-        if not any(p and (p.get("ux") or p.get("jn") or (v17 and p.get("ud"))) for p in profs.values()):
+        if not any(p and (p.get("ux") or p.get("jn") or p.get("xp") or (v17 and p.get("ud"))) for p in profs.values()):
             return None
         plan = self.current()
         md = getattr(grader, "md", None) or self.md
@@ -803,13 +803,16 @@ class _State:
                             parts=getattr(c, "tv", 1) >= shaping.AT_GRADE_TV)
         if isinstance(got, tuple):
             # (terrain 18: the dips held to 1:1 off the asphalt past its kerb, the ramps cut right up to it)
-            dc, jc, ja = got
-            if not (np.any(dc) or np.any(jc) or np.any(ja)):
+            dc, jc, ja = got[:3]
+            xa = got[3] if len(got) > 3 else None       # (terrain 19: on the asphalt of a road the course crosses)
+            if not (np.any(dc) or np.any(jc) or np.any(ja) or (xa is not None and np.any(xa))):
                 return None
             dc = self.paved_hold(md, lat, lon, dc, shaping.DIP18_HOLD_IN_M)
             jc = self.paved_clear(md, lat, lon, jc, shaping.ASPHALT_IN_M, shaping.ASPHALT_FADE_M)
             ja = self.paved_clear(md, lat, lon, ja, shaping.ASPHALT_IN_M, shaping.ASPHALT_FADE_M)
             dz = np.minimum(dc, jc) + ja
+            if xa is not None:
+                dz = dz + xa
             if not np.any(dz):
                 return None
             with self.lock:

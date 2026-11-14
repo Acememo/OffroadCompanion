@@ -50,6 +50,9 @@ which is also why BeamNG.Earth has a server). Offroad Companion was called "Beam
 - **Big** (top right of the map, with or without a course): a bigger map. The turn notes stay, and on a course its
   name, race mile, time and progress bar; the rest under the map (done / to go, the next VCPs, the buttons; with no
   course, the route's buttons) is hidden until you press it again. The app remembers it.
+- **Hide map** (beside **Big**): the map folds to a slim bar with its buttons, and everything under it (the course's
+  data, the turn notes) gets the room. For when you use another map app. **Show map** brings it back; the app
+  remembers it.
 - **Hide** (the **▾** at the end of the tabs): the app folds away to a small **Offroad Companion** button in its top
   right corner; click it to bring the app back. You can also bind a key to it: Options, Controls, **Offroad
   Companion: hide or show the app** (no key by default). While hidden the app costs nothing: the game sends it no
@@ -226,6 +229,14 @@ ground's small bumps, the banked corner's edge) stood on it as saw teeth and lon
 Now nothing is narrower than about 6 m or changes over less than about 3 m: whoops a little longer, the broken ground
 in long swells, the windrows and the turns' sand as wide soft mounds, the banked corner a smooth bowl with its lip just
 past the edge, and the tallest places easing into their limit instead of flattening off.
+
+**Ground version 19** keeps version 18's ground with two changes. Where the course crosses a paved road (at 30° or
+more), the track ramps down (or up) to the road's own level at the asphalt's edge on both sides, no steeper than 10%
+where it can (over 120 m at most), and the track's ground left standing on the asphalt there is taken down to the
+road's level. BeamNG.Earth grades two roads that cross at different heights each to its own, so before, the track
+stood as a block of ground right up to the road in a cutting. And a bridge the course passes under is dug under
+wherever the course crosses it more than 12 m from its ends, whatever the height of its ends (one cut by a map
+cell's edge read as standing at the track's height).
 
 **Ground version 18** keeps version 17's ground with two changes. The ground is dug down only where a bridge's deck
 stands at least 2.5 m over the track (its height reckoned from its ends, climbing at most 6%), so the course really
