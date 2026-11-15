@@ -3,6 +3,24 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.25 (2026-11-15)
+
+- **BeamNG.Earth 1.10.0-beta** is the version inside the .exe. A source install downloads 1.10.0-beta, and 1.9.1, 1.9.0,
+  1.8.x, 1.7.x, 1.6.x and 1.5.x still work. 1.10 brings much faster first visits and revisits, category search on the
+  map, a station finder, smoother road bends, better tunnels and buildings, and more (its own changelog has the list).
+- **The course's ground is never mixed with BeamNG.Earth's own.** 1.10 keeps the graded ground blocks on disk and can
+  download road plans made on the BeamNG.Earth project's computer. Both were keyed without the course: a place graded
+  with one course's track could have come back under another course or none, and plans without the track could have
+  been used under a course. Now the kept blocks (and the trees, road tiles and photos 1.10 keeps on that ground) are
+  kept per ground code, and no downloaded plans are used while a course is loaded.
+- **Dirt road wear is off by default in BeamNG.Earth 1.10**, so the **Default** track terrain has no potholes now, and
+  neither do the other dirt roads on Baja, Mild, Rough and Extra. The course's own relief is unchanged.
+- 1.10's Low and Medium quality presets use a 2 m physics ground (**Ground grid**). The track works on it, but its
+  banks and dips are coarser: choose Ground grid 1 m for the sharpest track, and the same setting on every computer on
+  a BeamMP server.
+- The course's ground (version 21) is unchanged. BeamNG.Earth 1.10 grades the roads differently, so everyone on a
+  BeamMP server should update together.
+
 ## 1.7.24 (2026-11-14)
 
 - **Ground version 21: back to 1.7.21's ground, plus two fixes.** 1.7.22 and 1.7.23 reworked every paved crossing

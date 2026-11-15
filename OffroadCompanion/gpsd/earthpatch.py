@@ -1905,6 +1905,17 @@ def install():
         install_revisit(st)
     except Exception as e:                  # (no revisit cache: BeamNG.Earth before 1.6.3)
         log.debug("course painter: no revisit cache hook (%s: %s)", type(e).__name__, e)
+    # BeamNG.Earth 1.10's graded block cache (blockcache.py: the graded terrain blocks kept on disk, keyed by its
+    # settings) and shared decision archives (decisions.py: road plans built on the project's machine): the course's
+    # ground never kept or found under BeamNG.Earth's own keys, nor theirs under a course's
+    try:
+        install_blockcache(st)
+    except Exception as e:                  # (no blockcache: BeamNG.Earth before 1.10)
+        log.debug("course painter: no block cache hook (%s: %s)", type(e).__name__, e)
+    try:
+        install_decisions(st)
+    except Exception as e:                  # (no decisions: BeamNG.Earth before 1.10)
+        log.debug("course painter: no decision archive hook (%s: %s)", type(e).__name__, e)
     demmod.Dem.__init__ = dem_init
     mapdata.MapData.cell = cell
     _state = st
@@ -2038,6 +2049,52 @@ def install_plancache(st):
             return out
         _bake_expect._earthgps = True
         pc.PlanCache._bake_expect = _bake_expect
+    return True
+
+
+def install_blockcache(st):
+    """Hooks blockcache.settings (BeamNG.Earth 1.10): the graded terrain blocks kept on disk are keyed by the settings
+    that change a block (grading, map data, widths, surface, ...), not the course painter's. A block graded with one
+    course's track (its dips, ramps and cleared ground) came back under another course or none, and BeamNG.Earth's own
+    under a course. The GPS ground's tag goes into the first setting (grading), so it is in the block's and its chunks'
+    keys, the place's "latest" note (settings[:9]) and the ground rules fingerprint (ground_rules: settings()[:9], the
+    road tiles, trees and photos kept on that ground). No GPS ground ("-"): BeamNG.Earth's own settings."""
+    import blockcache as bc
+    orig = bc.settings
+    if getattr(orig, "_earthgps", False):
+        return True
+
+    def settings(*a, **kw):
+        out = orig(*a, **kw)
+        tag = share_tag(st)
+        if tag == "-" or not isinstance(out, tuple) or not out:
+            return out
+        return ((out[0], ("egps", tag)),) + tuple(out[1:])
+    settings._earthgps = True
+    settings._orig = orig
+    bc.settings = settings
+    return True
+
+
+def install_decisions(st):
+    """Hooks decisions.plans / has_plans (BeamNG.Earth 1.10): the shared decision archives hold road plans the project's
+    machine made with BeamNG.Earth's own roads, found by the grading's signature and the map data's versions, which
+    a course does not change (PlanCache._decided reads them past the baked packs' expect, install_plancache's tag).
+    While a course is painted, no cell's plans come from them: they would be planned without the track. The cells'
+    facts still may: a roads layer with the track has a cell id of its own, which no archive holds."""
+    import decisions as dm
+    for name, none in (("plans", None), ("has_plans", False)):
+        orig = getattr(dm, name, None)
+        if orig is None or getattr(orig, "_earthgps", False):
+            continue
+
+        def hooked(*a, _orig=orig, _none=none, **kw):
+            if share_tag(st) != "-":
+                return _none
+            return _orig(*a, **kw)
+        hooked._earthgps = True
+        hooked._orig = orig
+        setattr(dm, name, hooked)
     return True
 
 
@@ -2189,8 +2246,10 @@ def install_strip_look(st):
             log.debug("course painter: strip look: %s: %s", type(e).__name__, e)
         return look
 
-    def _surface_pieces(look, width, line, box, ends=(True, True)):
-        out = orig_pieces(look, width, line, box, ends)
+    def _surface_pieces(look, width, line, box, *a, **kw):
+        # (whatever else BeamNG.Earth passes goes along: ends; 1.10 added s_off, s_len, a strip cut where it crosses a
+        # paved carriageway, each run with its start's distance along the piece)
+        out = orig_pieces(look, width, line, box, *a, **kw)
         s0 = look.get("_egps_s0") if isinstance(look, dict) else None
         if s0:
             for ch in out:

@@ -237,6 +237,11 @@ def pyinstaller(work, earth, staged, ico, ver, earth_ver, boot=None):
             "--runtime-hook", os.path.join(ROOT, "tools", "rthook_wine.py"),
             "--exclude-module", "gpsd", "--exclude-module", "earth_gpsd", "--exclude-module", "setup_earth_source",
             "--exclude-module", "appupdate"]
+    # (1.10: the mod's DDS textures are made on the player's computer at install, modtextures.py with the native
+    # module, from their lossless sources: without them BeamNG.Earth's install fails or the game gets no textures)
+    tex = os.path.join(earth, "mod", "texture_sources")
+    if os.path.isdir(tex):
+        cmd += ["--add-data", f"{tex}{SEP}mod/texture_sources"]
     # the server's data files beside its modules, as BeamNG.Earth's build_app.py adds them (1.6: the bridge types;
     # 1.7: the climate map, oil wells, refineries, the pinned Overture release's index): every one there, so a new
     # one is never left out

@@ -64,6 +64,32 @@ def earth_beammp(z, earth):
     spec.loader.exec_module(ep)
     if not hasattr(ep, "tree_files") or not os.path.isdir(os.path.join(earth, "beammp", "Server")):
         return None
+    if hasattr(ep, "beammp_zip") and hasattr(ep, "version"):
+        # BeamNG.Earth's own BeamMP zip, made by its packager and taken over entry by entry: whatever it puts in is in
+        # ours. 1.10 makes the mod's DDS textures from mod/texture_sources (its modtextures.py, the native module:
+        # the game must never be handed their PNG sources) and they are only in the zip it makes; and its client zip
+        # carries release.lua (the release the copy is), which the tree does not have.
+        import shutil
+        import tempfile
+        tmp = tempfile.mkdtemp(prefix="oc-earth-beammp-")
+        try:
+            ver = ep.version()
+            ep.beammp_zip(tmp, ver)
+            made = [n for n in os.listdir(tmp) if n.endswith(".zip")]
+            if len(made) != 1:
+                sys.exit(f"BeamNG.Earth's packager made {made} in place of its one BeamMP zip")
+            with zipfile.ZipFile(os.path.join(tmp, made[0])) as src:
+                names = src.namelist()
+                if "Resources/Client/beamng_earth.zip" not in names:
+                    sys.exit("BeamNG.Earth's BeamMP zip has no Resources/Client/beamng_earth.zip")
+                for zi in src.infolist():
+                    info = zipfile.ZipInfo(zi.filename, zi.date_time)
+                    info.compress_type = zi.compress_type
+                    info.external_attr = zi.external_attr or (0o644 << 16)
+                    z.writestr(info, src.read(zi.filename))
+            return ver
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
     mod = io.BytesIO()
     with zipfile.ZipFile(mod, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as m:
         for rel in ep.tree_files("mod/beamng_earth"):

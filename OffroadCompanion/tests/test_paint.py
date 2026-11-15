@@ -1384,6 +1384,62 @@ class TestInsideEarth(unittest.TestCase):
         self.assertGreater(revisit.faults(), before, "marked: not kept")
         st.plan_failed.pop(("w", k, False), None)
 
+    def test_block_cache_kept_per_ground(self):
+        """BeamNG.Earth 1.10's graded block cache (blockcache.py: graded terrain blocks kept on disk by their settings):
+        the GPS ground is in the settings, so a block graded with one course never comes back under another or none;
+        with nothing painted, BeamNG.Earth's own settings."""
+        try:
+            import blockcache
+        except ImportError:
+            self.skipTest("BeamNG.Earth before 1.10: no block cache")
+        from unittest import mock
+        ep, pf = self.earthpatch, self.paintfile
+        st = ep.state()
+        self.assertTrue(getattr(blockcache.settings, "_earthgps", False), "the hook is in")
+        args = (True, None, None, None, None, None, None)
+        a = blockcache.settings(*args)
+        plain = blockcache.settings._orig(*args)
+        self.assertNotEqual(a, plain, "a course: not BeamNG.Earth's own block key")
+        self.assertEqual(len(a), len(plain))
+        self.assertIn(ep.share_tag(st), repr(a[0]), "the ground in the grading setting")
+        self.assertNotEqual(blockcache.ground_rules(*args), plain[:9], "the ground rules (road tiles, trees) too")
+        self.assertEqual(blockcache.ground_rules(*args), a[:9], "and the place's latest note (settings[:9])")
+        obj = pf.read_json(pf.course_path())
+        try:
+            pf.write_json(pf.course_path(), dict(obj, rough="extra" if obj.get("rough") != "extra" else "mild"))
+            t = __import__("time").time_ns()
+            os.utime(pf.course_path(), ns=(t, t))
+            st.checked = -1e9
+            self.assertNotEqual(blockcache.settings(*args), a, "another ground: another key")
+        finally:
+            pf.write_json(pf.course_path(), obj)
+            os.utime(pf.course_path(), ns=(__import__("time").time_ns() + 10 ** 9,) * 2)
+            st.checked = -1e9
+            st.current()
+        self.assertEqual(blockcache.settings(*args), a, "the same ground again: the same key")
+        with mock.patch.object(ep, "share_tag", lambda s: "-"):
+            self.assertEqual(blockcache.settings(*args), plain, "nothing painted: BeamNG.Earth's own")
+
+    def test_no_shared_decision_plans_under_a_course(self):
+        """BeamNG.Earth 1.10's shared decision archives (road plans built on the project's machine, without the
+        track): none read while a course is painted; with nothing painted, as BeamNG.Earth reads them."""
+        try:
+            import decisions
+        except ImportError:
+            self.skipTest("BeamNG.Earth before 1.10: no decision archives")
+        from unittest import mock
+        ep = self.earthpatch
+        for name, none in (("plans", None), ("has_plans", False)):
+            f = getattr(decisions, name)
+            self.assertTrue(getattr(f, "_earthgps", False), name)
+            calls = []
+            spy = lambda *a, **kw: calls.append(a) or "got"      # (in place of the archive: the hook's _orig)
+            self.assertEqual(f("cache", "sig", (14, 1, 2), {}, _orig=spy), none, name + ": none under a course")
+            self.assertEqual(calls, [], name + ": the archive not asked")
+            with mock.patch.object(ep, "share_tag", lambda s: "-"):
+                self.assertEqual(f("cache", "sig", (14, 1, 2), {}, _orig=spy), "got", name + ": BeamNG.Earth's own")
+            self.assertTrue(callable(f._orig))
+
     def test_compute_sharing_only_between_the_same_ground(self):
         """BeamNG.Earth 1.6's compute sharing: a far tile is asked of / served to another server only when both build
         the same GPS ground (course, settings, painter code); replies of another ground or of a server without the
@@ -1673,6 +1729,12 @@ class TestInsideEarth(unittest.TestCase):
         import roads as roadsmod
         if not hasattr(grading, "dirt_bumps"):
             self.skipTest("BeamNG.Earth before 1.8.2: no dirt road wear")
+        if grading.DIRT_ROUGH <= 0:
+            # (BeamNG.Earth 1.10 ships its wear off, BNE_DIRT_BUMP 0 and BNE_DIRT_BANK 0: here as a player who turns
+            # it on has it, 1.8.2 - 1.9.1's strengths)
+            for name, v in (("DIRT_ROUGH", 1.0), ("DIRT_BANK_M", 0.015)):
+                self.addCleanup(setattr, grading, name, getattr(grading, name))
+                setattr(grading, name, v)
         # (the wear alone: from terrain 17 the bridges over the dirt road the course follows, x 2200 - 2700, are kept
         # and dug under, metres deep; shaping.py's own tests have those)
         st = self.earthpatch.state()
@@ -1730,8 +1792,10 @@ class TestInsideEarth(unittest.TestCase):
                     self.assertIsNone(grading.dirt_bumps(line, own[0], 300), mode)        # potholes, rarely a lean
                     self.assertIsNone(grading.bank(line, own[0]), mode)
                     self.assertEqual(grading.profile_sigma(own[0]), grading.DIRT_SIGMA_M)
-                    self.assertIsNotNone(grading.dirt_bumps(line, plain, 300), "a mapped track: worn")
-                    self.assertIsNotNone(grading.bank(kept, plain), "the odd one leans")
+                    if grading.DIRT_ROUGH > 0:          # (BeamNG.Earth 1.10 turned its dirt road wear off: BNE_DIRT_BUMP 0)
+                        self.assertIsNotNone(grading.dirt_bumps(line, plain, 300), "a mapped track: worn")
+                    if getattr(grading, "DIRT_BANK_M", 1.0) > 0:        # (and the lean: BNE_DIRT_BANK 0)
+                        self.assertIsNotNone(grading.bank(kept, plain), "the odd one leans")
                     self.assertIsNone(grading.bank(dropped, plain), "most do not")
                     self.assertEqual(grading.profile_sigma(plain), grading.DIRT_SIGMA_MINOR_M)
                 elif mode == "off":                 # Flat: no wear anywhere, as before 1.8.2
@@ -1741,8 +1805,10 @@ class TestInsideEarth(unittest.TestCase):
                         self.assertEqual(grading.profile_sigma(sp), grading.DIRT_SIGMA_M)
                 else:                               # Default: BeamNG.Earth's own, the track a worn track too
                     for sp in (own[0], plain):
-                        self.assertIsNotNone(grading.dirt_bumps(line, sp, 300))
-                        self.assertIsNotNone(grading.bank(dropped, sp))
+                        if grading.DIRT_ROUGH > 0:      # (1.10: off, as its bank)
+                            self.assertIsNotNone(grading.dirt_bumps(line, sp, 300))
+                        if getattr(grading, "DIRT_BANK_M", 1.0) > 0:
+                            self.assertIsNotNone(grading.bank(dropped, sp))
                         self.assertEqual(grading.profile_sigma(sp), grading.DIRT_SIGMA_MINOR_M)
         finally:
             self.set_rough("on")
@@ -1751,9 +1817,10 @@ class TestInsideEarth(unittest.TestCase):
         self.assertLess(float(np.ptp(seen["off"][1])), 0.05, "Flat: the dirt road the course follows")
         self.assertLess(float(np.ptp(seen["off"][2])), 0.05, "Flat: BeamNG.Earth's other dirt roads too")
         # (BeamNG.Earth 1.9 bounds its wear: about 0.1 m here, 1.8.2's up to 1 m)
-        self.assertGreater(float(np.ptp(seen["default"][0])), 0.05, "Default: the track worn as a track")
-        self.assertGreater(float(np.ptp(seen["default"][1])), 0.05, "Default: the dirt road it follows worn")
-        self.assertGreater(float(np.ptp(seen["on"][2])), 0.05, "Rough: a dirt road off the course keeps its potholes")
+        if grading.DIRT_ROUGH > 0:          # (BeamNG.Earth 1.10: no wear on its dirt roads unless BNE_DIRT_BUMP asks)
+            self.assertGreater(float(np.ptp(seen["default"][0])), 0.05, "Default: the track worn as a track")
+            self.assertGreater(float(np.ptp(seen["default"][1])), 0.05, "Default: the dirt road it follows worn")
+            self.assertGreater(float(np.ptp(seen["on"][2])), 0.05, "Rough: a dirt road off the course keeps its potholes")
         self.set_rough("on")
         relief = self.earthpatch.state().relief_at(self.md, la, lo)
         self.assertLess(float(np.abs(seen["on"][0] - relief).max()), 0.05, "Rough: the track its relief alone")

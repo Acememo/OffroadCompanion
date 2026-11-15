@@ -352,8 +352,10 @@ tracks the worst. The track terrain setting decides what that does with a course
 A mapped dirt road counts as the course's where the course runs along it (within 25 m of it, in its direction) for at
 least 40 m; then the whole of that mapped road is left unworn, so it is the same from every tile and every process.
 
-Without a course loaded, BeamNG.Earth's dirt roads are as BeamNG.Earth makes them. On BeamNG.Earth 1.8.1 and older there
-is no wear, so **Default** is the same as **Flat** there. A change of setting plans the roads again, and the ground
+Without a course loaded, BeamNG.Earth's dirt roads are as BeamNG.Earth makes them. BeamNG.Earth 1.10 (the version in
+the .exe from Offroad Companion 1.7.25) turns its wear off by default, as do 1.8.1 and older, so there **Default** has
+no potholes either (the track and the dirt roads keep BeamNG.Earth's own smoothing) and the other dirt roads have none
+on Baja, Mild, Rough and Extra. A change of setting plans the roads again, and the ground
 already loaded changes at the next world shift.
 
 Where the course runs along a steep hillside, BeamNG.Earth cuts the road into it with a retaining wall's step: a flat
@@ -646,7 +648,7 @@ and BeamNG.drive started once.
    (you get `BeamNG.Earth\OffroadCompanion\...`). It is not a game mod: do not put it in `mods`.
 2. Run `OffroadCompanion\setup_offroad_companion.bat` once (Linux: `OffroadCompanion/setup_offroad_companion.sh`). It:
    - uses the BeamNG.Earth folder it is in (nothing is downloaded), when that is a version Offroad Companion works with
-     (1.9.1, 1.9.0, 1.8.2, 1.8.1, 1.8.0, 1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1, 1.6.0 or 1.5.x); otherwise it downloads the source of **BeamNG.Earth 1.9.1-beta**, the version this
+     (1.10.0, 1.9.1, 1.9.0, 1.8.2, 1.8.1, 1.8.0, 1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1, 1.6.0 or 1.5.x); otherwise it downloads the source of **BeamNG.Earth 1.10.0-beta**, the version this
      release is made for, next to it, never simply the newest (a newer BeamNG.Earth may change what the course painter
      hooks into). If the download fails it prints the address of that release's zip to fetch by hand (then
      `setup_offroad_companion.bat --zip PATH`);
@@ -672,10 +674,22 @@ game, and the course is not cleared of buildings and walls.
 your settings, replays, saved tracks, planned ground and remembered folders carry over, and the old `companion`
 folder is renamed `companion (old - now OffroadCompanion)`: delete it when you like. Ground codes stay the same.
 
-### BeamNG.Earth 1.8, 1.7, 1.6 and BeamMP
+### BeamNG.Earth 1.10, 1.8, 1.7, 1.6 and BeamMP
 
-Works with BeamNG.Earth 1.9.1 (the version the .exe has inside), 1.9.0, 1.8.2, 1.8.1, 1.8.0, 1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1
-and 1.6.0 (and 1.5.x). With 1.8:
+Works with BeamNG.Earth 1.10.0 (the version the .exe has inside), 1.9.1, 1.9.0, 1.8.2, 1.8.1, 1.8.0, 1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1
+and 1.6.0 (and 1.5.x). With 1.10:
+
+- 1.10 keeps the graded ground blocks on disk, so a place comes back in a fraction of a second. Blocks graded with a
+  course's track are kept under its ground code only: another course, or no course, never gets them, nor a course
+  BeamNG.Earth's own ground. The same goes for the trees, road tiles and photos 1.10 keeps on that ground.
+- 1.10 can download road plans made on the BeamNG.Earth project's own computer (when the project turns it on). They
+  have no track, so none are used while a course is loaded: those cells are planned on your computer, as before.
+- 1.10 turns its dirt road wear off by default (see Track terrain).
+- 1.10's Low and Medium quality presets use a 2 m physics ground (the **Ground grid** setting). The course painter
+  works on either, but the track's banks, dips and relief are coarser on 2 m: choose **Ground grid 1 m** for the
+  sharpest track. On a BeamMP server, use the same Ground grid on every computer, so everyone drives the same ground.
+
+With 1.8:
 
 - The ground near the car is a 1 m lattice (2 m before); the track's relief, sand, rock and gravel are made for it as
   they were, the same ground on every version.
