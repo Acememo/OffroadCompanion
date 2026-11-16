@@ -3,6 +3,14 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.26 (2026-11-16)
+
+- **The course's dirt track is drawn again on BeamNG.Earth 1.10.** 1.10 reads the road tiles' map cells several at a
+  time, a new way the course painter did not hook: the road tiles had no track, so the track had no dirt strip (its
+  ruts and tire-track texture) and only the bare ground showed. The road tiles, the distant buildings, the gas and
+  bus stations and the AI road graph now get the course's track and its cleared buildings as before.
+- Everything built with 1.7.25 for a course (road tiles, ground blocks) is built again once.
+
 ## 1.7.25 (2026-11-15)
 
 - **BeamNG.Earth 1.10.0-beta** is the version inside the .exe. A source install downloads 1.10.0-beta, and 1.9.1, 1.9.0,

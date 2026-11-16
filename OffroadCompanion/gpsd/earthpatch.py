@@ -1680,7 +1680,11 @@ def install():
             st.cache_dir = self.cache_dir
         st.md = self                        # (the map data the block's surfaces read the course's windows with)
         cd = orig_cell(self, key, layers, kind, *args, **kwargs)
-        if _for_gradesep():
+        return after_cell(self, key, layers, kind, cd)
+
+    def after_cell(self, key, layers, kind, cd):
+        """A cell's layers as the course has them: the buildings on its way cleared, its track in the roads."""
+        if cd is None or _for_gradesep():
             return cd                       # (BeamNG.Earth's own neighbours' roads: _for_gradesep)
         for layer in ("buildings", "building_parts"):
             if layer in layers and cd.layers.get(layer) is not None:
@@ -1697,6 +1701,23 @@ def install():
                 st.stats["errors"] += 1
                 log.warning("course painter: cell %s: %s: %s", key, type(e).__name__, e)
         return cd
+
+    # BeamNG.Earth 1.10's MapData.cells (several cells' layers loaded side by side: mapcells.load_cells), which the road
+    # tiles, the AI road graph and the buildings read their cells with: it never calls cell(), so without this the road
+    # tiles had no track (no dirt strip on it: the user, 2026-11-16, "no texture on our course") and the buildings on
+    # the course's way stood
+    orig_cells = getattr(mapdata.MapData, "cells", None)
+    if orig_cells is not None and not getattr(orig_cells, "_earthgps", False):
+        def cells(self, keys, layers=mapdata.LAYERS, kind="demand", *args, **kwargs):
+            if st.cache_dir is None and getattr(self, "cache_dir", None):
+                st.cache_dir = self.cache_dir
+            st.md = self
+            keys = list(keys)
+            got = orig_cells(self, keys, layers, kind, *args, **kwargs)
+            return [after_cell(self, k, layers, kind, cd) for k, cd in zip(keys, got)]
+        cells._earthgps = True
+    else:
+        cells = None
 
     orig_walls = roadsmod.retaining_walls
 
@@ -1918,6 +1939,8 @@ def install():
         log.debug("course painter: no decision archive hook (%s: %s)", type(e).__name__, e)
     demmod.Dem.__init__ = dem_init
     mapdata.MapData.cell = cell
+    if cells is not None:
+        mapdata.MapData.cells = cells
     _state = st
     mark = os.environ.get("EARTHGPS_MARK_DIR")           # (tests: which processes have the hook)
     if mark:

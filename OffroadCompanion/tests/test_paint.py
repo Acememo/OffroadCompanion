@@ -682,6 +682,23 @@ class TestInsideEarth(unittest.TestCase):
         self.assertTrue(all(ids[k] <= ids[k + 1] for k in range(len(ids) - 1)), "ids stay sorted")
         self.assertEqual(len(f.en), len(f.lonlat))
 
+    def test_cells_read_together_get_the_track_too(self):
+        """BeamNG.Earth 1.10 reads the road tiles' cells (and the AI road graph's, the buildings') side by side
+        (MapData.cells, mapcells.load_cells), never through MapData.cell: the track and the cleared buildings there as
+        cell() has them (the user, 2026-11-16: "no texture on our course", the road tiles without the track)."""
+        if not hasattr(self.mapdata.MapData, "cells"):
+            self.skipTest("BeamNG.Earth before 1.10: no MapData.cells")
+        from gpsd import courseroads as cr_
+        keys = self.mapcells.cells_for_bbox(*ll(500, -50), *ll(900, 50))
+        self.assertTrue(keys)
+        one = [self.md.cell(k, layers=("roads",)).layers.get("roads") for k in keys]
+        many = [cd.layers.get("roads") for cd in self.mapcells.load_cells(self.md, keys, ("roads",))]
+        track = lambda f: sorted(str(i) for i in (f.ids if f is not None else ()) if str(i).startswith(cr_.ID_PREFIX))
+        self.assertTrue(any(track(f) for f in one), "the track in these cells")
+        self.assertEqual([track(f) for f in many], [track(f) for f in one], "the same track read side by side")
+        self.assertEqual([f.__dict__.get("_bnge_cell") for f in many if f is not None],
+                         [f.__dict__.get("_bnge_cell") for f in one if f is not None], "the same cell ids")
+
     def test_sand_rock_and_crawls_drawn_as_the_ground(self):
         """Terrain 7: a stretch of track in a sand trap, a rock section or a crawl is a "rock" surface road (BeamNG.Earth
         draws no dirt decal over it: the ground itself shows), the rest "dirt"; the same stretches variety.bare
