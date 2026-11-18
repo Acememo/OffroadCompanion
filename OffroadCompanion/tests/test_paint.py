@@ -686,6 +686,44 @@ class TestInsideEarth(unittest.TestCase):
         self.assertTrue(all(ids[k] <= ids[k + 1] for k in range(len(ids) - 1)), "ids stay sorted")
         self.assertEqual(len(f.en), len(f.lonlat))
 
+    def test_relief_waited_for_by_a_cells_roads(self):
+        """(1.7.32) A build's roads (kind demand) wait for a relief window another process is planning (its lock held),
+        so the cell's rock stretches come with its first roads; a background read peeks only."""
+        import threading
+        import time
+        from gpsd import relief
+        st = self.earthpatch.state()
+        c = st.current().paint
+        k = c.nwin - 1                                   # (a window no test plans)
+        path = os.path.join(self.paintfile.windows_dir(c.cid), f"r{k:06d}.json")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        lock = path + ".lock"
+        kept = st.rwins.pop(k, None)                     # (another test's window there: set aside, put back after)
+        if os.path.exists(path):
+            os.replace(path, path + ".kept")
+        open(lock, "w").close()
+
+        def restore():
+            for f in (path, lock):
+                if os.path.exists(f):
+                    os.remove(f)
+            if os.path.exists(path + ".kept"):
+                os.replace(path + ".kept", path)
+            st.rwins.pop(k, None)
+            if kept is not None:
+                st.rwins[k] = kept
+        self.addCleanup(restore)
+        self.assertIsNone(st.relief_for_roads(self.md, c, k, "background"), "a background read: not waited for")
+
+        def plan():
+            time.sleep(0.6)
+            self.paintfile.write_json(path, {"algo": relief.ALGO, "a": 0, "b": 0, "mark": 7})
+        threading.Thread(target=plan, daemon=True).start()
+        t0 = time.monotonic()
+        got = st.relief_for_roads(self.md, c, k, "demand")
+        self.assertEqual((got or {}).get("mark"), 7, "waited for the other process's window")
+        self.assertLess(time.monotonic() - t0, 5.0)
+
     def test_banks_off_the_paved_roads(self):
         """(terrain 24) The cut banks beside the track (banks.py) are none within banks.PAVED24_IN_M of a paved road's
         asphalt (the residential road across the course at x 4200): beside a paved road BeamNG.Earth's own ground."""

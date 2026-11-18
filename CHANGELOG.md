@@ -3,6 +3,22 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.32 (2026-11-18)
+
+- **BeamNG.Earth 1.10.1-beta** is the version inside the .exe: fewer server pauses and freezes in BeamMP, cars slowed
+  before bridges that have not loaded yet, a Restart world server button, an Experimental settings page and more (its
+  own changelog has the list). A source install downloads 1.10.1-beta, and 1.10.0 and older still work. The Restart
+  world server button works with the .exe: the course painter starts again with the server. On the Experimental page,
+  "bumpy and rough dirt roads" changes nothing with a course loaded (the painter keeps that wear on); the other switches
+  change BeamNG.Earth's ground, so on a BeamMP server keep them the same on every computer.
+- **The track no longer changes shape two or three times as you drive up to it.** A spot report's log (RM 5.2 out of
+  Ensenada) showed the cause: a place's roads reached BeamNG.Earth's first builds without the stretches of the track
+  drawn as rock, which come from the track's relief windows, and with them a few seconds later. BeamNG.Earth planned
+  the place again each time, and what was built first (the track's strip, road pieces) kept the old ground: the
+  deforming and the phantom textures. Now a build that needs a place's roads waits up to 20 s for its relief window
+  while another process plans it (or plans it itself when none does), so the roads come complete the first time. The
+  ground itself is unchanged (version 24).
+
 ## 1.7.31 (2026-11-18)
 
 - **Ground version 24: no more blocks, spikes or dug paved road edges where the course meets a paved road.** Four

@@ -44,6 +44,8 @@ DEMAND_KINDS = ("demand", "urgent")
 DEMAND_WAIT_S = 45.0
 DEMAND_GIVEUP_S = 30.0
 POLL_S = 0.2
+RELIEF_ROADS_WAIT_S = 20.0  # a build's wait for a relief window another process plans (relief_for_roads) ...
+RELIEF_ROADS_OWN_S = 1.0    # ... planned by the build itself when no process holds its lock after this long
 SLOW_PLAN_S = 3.0           # a demand read that took this long is logged (how long builds waited for the course)
 PLAN_LOCK_STALE_S = 30.0    # a lock file not touched this long is a planner gone (its process stopped mid-plan) ...
 PLAN_LOCK_TOUCH_S = 5.0     # ... its planner touches it this often while it plans
@@ -543,6 +545,47 @@ class _State:
         return fn
 
     # -- the track's relief (relief.py) ----------------------------------------------------------------------------
+    def relief_for_roads(self, md, course, k, kind):
+        """Relief window k for a cell's roads layer (its rock stretches, roads_for): peeked (never planned here: the
+        road tiles' workers must not plan one, relief_window's "peek"), and for a build of the ground (kind demand)
+        waited for up to RELIEF_ROADS_WAIT_S while another process (the planner ahead of the car, or a block's build)
+        plans it (no process planning it after RELIEF_ROADS_OWN_S: planned here). Before 1.7.32 the build took the roads without the window's rock stretches and the ones after it
+        with them: BeamNG.Earth planned the cell again, the ground under what was built first changed (the user,
+        2026-11-18: "That part deformed like 2 or 3 times ... a few phantom textures": cells whose roads changed when
+        their windows came, a spot report's log). After a wait that ran out, the next RETRY_S peek only."""
+        got = self.relief_window(md, course, k, "peek")
+        if got is not None or kind not in DEMAND_KINDS:
+            return got
+        fk = ("rr", k)
+        with self.lock:
+            failed = self.plan_failed.get(fk)
+        if failed is not None and time.monotonic() - failed < RETRY_S:
+            return None
+        t0 = time.monotonic()
+        lock = os.path.join(paintfile.windows_dir(course.cid), f"r{k:06d}.json") + ".lock"
+        while time.monotonic() - t0 < RELIEF_ROADS_WAIT_S:
+            time.sleep(POLL_S)
+            got = self.relief_window(md, course, k, "peek")
+            if got is None and time.monotonic() - t0 >= RELIEF_ROADS_OWN_S and not os.path.exists(lock):
+                # (no process plans it: planned here, as a block's build does; BeamNG.Earth 1.8+ samples its
+                # elevation in each process, so a road process planning it waits on no other one)
+                got = self.relief_window(md, course, k, kind)
+                if got is None:
+                    break
+            if got is not None:
+                dt = time.monotonic() - t0
+                with self.lock:
+                    self.stats["relief_road_waits"] = self.stats.get("relief_road_waits", 0) + 1
+                if dt > SLOW_PLAN_S:
+                    log.info("course painter: relief window %d ready for a cell's roads after %.1f s (waited)", k, dt)
+                return got
+        with self.lock:
+            self.plan_failed[fk] = time.monotonic()
+            self.stats["relief_road_misses"] = self.stats.get("relief_road_misses", 0) + 1
+        log.warning("course painter: relief window %d not ready for a cell's roads after %.0f s: its rock stretches "
+                    "come later (the ground built before them may change)", k, RELIEF_ROADS_WAIT_S)
+        return None
+
     def relief_window(self, md, course, k, kind, wait=None):
         """The relief window k's profile: kept, pinned, on disk, or planned now. kind "peek": never planned here (None
         when not planned yet): for the road tiles' workers, which must not wait on the ground (planning a window asks
@@ -1216,7 +1259,7 @@ class _State:
         if ps and getattr(course, "tv", 1) >= variety.VARIETY_TV:
             # (terrain 7: a sand trap, a rock section or a crawl drawn as the ground itself, no dirt decal: its stretch
             # of track a "rock" surface road. The relief windows only as already planned: never waits on the ground)
-            profs = {k: self.relief_window(md, course, k, "peek") for k in course.windows_in(bounds)}
+            profs = {k: self.relief_for_roads(md, course, k, kind) for k in course.windows_in(bounds)}
             if all(profs.values()):
                 ps, done = variety.split_bare(course, profs, ps)
                 complete = complete and done

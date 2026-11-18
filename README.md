@@ -665,7 +665,7 @@ and BeamNG.drive started once.
    (you get `BeamNG.Earth\OffroadCompanion\...`). It is not a game mod: do not put it in `mods`.
 2. Run `OffroadCompanion\setup_offroad_companion.bat` once (Linux: `OffroadCompanion/setup_offroad_companion.sh`). It:
    - uses the BeamNG.Earth folder it is in (nothing is downloaded), when that is a version Offroad Companion works with
-     (1.10.0, 1.9.1, 1.9.0, 1.8.2, 1.8.1, 1.8.0, 1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1, 1.6.0 or 1.5.x); otherwise it downloads the source of **BeamNG.Earth 1.10.0-beta**, the version this
+     (1.10.1, 1.10.0, 1.9.1, 1.9.0, 1.8.2, 1.8.1, 1.8.0, 1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1, 1.6.0 or 1.5.x); otherwise it downloads the source of **BeamNG.Earth 1.10.1-beta**, the version this
      release is made for, next to it, never simply the newest (a newer BeamNG.Earth may change what the course painter
      hooks into). If the download fails it prints the address of that release's zip to fetch by hand (then
      `setup_offroad_companion.bat --zip PATH`);
@@ -693,7 +693,7 @@ folder is renamed `companion (old - now OffroadCompanion)`: delete it when you l
 
 ### BeamNG.Earth 1.10, 1.8, 1.7, 1.6 and BeamMP
 
-Works with BeamNG.Earth 1.10.0 (the version the .exe has inside), 1.9.1, 1.9.0, 1.8.2, 1.8.1, 1.8.0, 1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1
+Works with BeamNG.Earth 1.10.1 (the version the .exe has inside), 1.10.0, 1.9.1, 1.9.0, 1.8.2, 1.8.1, 1.8.0, 1.7.3, 1.7.2, 1.7.1, 1.7.0, 1.6.3, 1.6.2, 1.6.1
 and 1.6.0 (and 1.5.x). With 1.10:
 
 - 1.10 keeps the graded ground blocks on disk, so a place comes back in a fraction of a second. Blocks graded with a
@@ -706,6 +706,10 @@ and 1.6.0 (and 1.5.x). With 1.10:
 - 1.10's Low and Medium quality presets use a 2 m physics ground (the **Ground grid** setting). The course painter
   works on either, but the track's banks, dips and relief are coarser on 2 m: choose **Ground grid 1 m** for the
   sharpest track. On a BeamMP server, use the same Ground grid on every computer, so everyone drives the same ground.
+- 1.10.1's Experimental page has a "bumpy and rough dirt roads" switch: with a course loaded the dirt road wear is on
+  whatever it says (the course painter's track terrain settings decide where). Its other switches change BeamNG.Earth's
+  ground for everyone who turns them on: on a BeamMP server, keep them the same on every computer. Its **Restart world
+  server** button works with the .exe (the course painter starts again with the server).
 
 With 1.8:
 
