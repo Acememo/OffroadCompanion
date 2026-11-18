@@ -3,6 +3,19 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.28 (2026-11-18)
+
+- **Ground version 23: no more dirt walls where the course runs under a row of street bridges.** A spot report from
+  the start of the Baja 1000 course in Ensenada showed why the track dropped off a street into walls of dirt. The course
+  runs down the arroyo under a row of street bridges, and the elevation data there has no channel. The course painter
+  made some of those bridges crossings at grade but kept others, where a long enough deck could have stood 2.5 m over
+  the course by climbing from its ends. BeamNG.Earth then dug the track 3.5 m down for 250 m under each kept bridge,
+  starting right at the street crossed at grade before it, and ramped the streets beside it 6 m up to the deck.
+  From ground version 23, a bridge the course passes under off the roads is kept only where the ground at its ends
+  itself stands 2 m or more over the course (a real gully or cutting). Otherwise it is a crossing at grade too, and
+  the track meets every street there at the street's height. Older ground versions are unchanged.
+- 1.7.28 lays ground version 23, so everyone on a BeamMP server should update together.
+
 ## 1.7.27 (2026-11-18)
 
 - **BeamNG.Earth's dirt road wear is back.** BeamNG.Earth 1.10 turned off its potholes, broken patches, deep pits and

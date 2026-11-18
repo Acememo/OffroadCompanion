@@ -559,7 +559,7 @@ def toll_like(f, i):
 
 # -- bridges ----------------------------------------------------------------------------------------------------------
 def bridges_to_flatten(roadsmod, f, lines, ground_fn=None, flatten_max_m=FLATTEN_MAX_M, elev_fn=None,
-                       keep_under=False, keep_from_m=None):
+                       keep_under=False, keep_from_m=None, ground_keep_m=None):
     """Indices of the road features of f whose bridge the course crosses off-road, or over the road the course is on
     too low to pass under (see the module doc). ground_fn(lon, lat) -> (M, 5) lon0, lat0, lon1, lat1, half width of
     the ground roads near the crossing (the underpass test; asked about the crossing point itself, so every cell
@@ -571,7 +571,11 @@ def bridges_to_flatten(roadsmod, f, lines, ground_fn=None, flatten_max_m=FLATTEN
     below"). keep_from_m (terrain 18, with keep_under): such a bridge is kept only where its deck can stand this high
     over the course's ground (headroom; over a dirt road the course is on, that road graded as BeamNG.Earth grades
     it): lower, the course meets the deck at about its height (a creek's culvert, the bridge's end), and digging under
-    it stood a pit metres deep beside the road (the user 2026-11-13, 1.7.20). Pure given those."""
+    it stood a pit metres deep beside the road (the user 2026-11-13, 1.7.20). ground_keep_m (terrain 23, with
+    keep_from_m): and only where the ground itself stands this high over the course's at the abutments (headroom
+    without the deck's climb): on flat ground a long enough deck passed keep_from_m on its length alone, and the track
+    was dug metres down under it between streets crossed at grade, the streets beside it ramped up to the deck (the
+    user's Arroyo de Ensenada, 2026-11-18, a spot report). Pure given those."""
     if f is None or len(f) == 0 or not lines:
         return []
     allpts = np.concatenate(lines)
@@ -644,7 +648,9 @@ def bridges_to_flatten(roadsmod, f, lines, ground_fn=None, flatten_max_m=FLATTEN
         if not under and keep_under:
             if keep_from_m is None or elev_fn is None:
                 continue
-            if headroom(pl, q, arc, total, P, elev_fn, dirt_below) >= keep_from_m:
+            if headroom(pl, q, arc, total, P, elev_fn, dirt_below) >= keep_from_m and (
+                    ground_keep_m is None
+                    or headroom(pl, q, arc, total, P, elev_fn, dirt_below, climb=0.0) >= ground_keep_m):
                 continue
             out.append(i)
             continue
@@ -661,13 +667,15 @@ def bridges_to_flatten(roadsmod, f, lines, ground_fn=None, flatten_max_m=FLATTEN
     return out
 
 
-def headroom(pl, q, arc, total, P, elev_fn, below=None):
+def headroom(pl, q, arc, total, P, elev_fn, below=None, climb=None):
     """The most a deck along q (plane metres; the crossing at arc of total) can stand over the ground at P: from each
     abutment's ground height, climbing at DECK_MAX_GRADE, the lower of the two (BeamNG.Earth caps its decks so).
     An abutment's height as BeamNG.Earth's grading gives it: the ground along the road through it (the bridge line,
     and straight on past its end) graded by the road(s) below (below: (a, b, half widths) in the plane; flat at the
     road's height over its core, rising 1:SLOPE_RUN from there, never over the natural ground), then smoothed along
-    the road (a profile of PROFILE_SIGMA_M: the low ground over the road below pulls an abutment beside it down)."""
+    the road (a profile of PROFILE_SIGMA_M: the low ground over the road below pulls an abutment beside it down).
+    climb: the deck's climb per m from its abutments (DECK_MAX_GRADE; 0: the ground's own headroom)."""
+    climb = DECK_MAX_GRADE if climb is None else climb
     zP = float(np.atleast_1d(elev_fn([float(pl.ll(P[0], P[1])[1])], [float(pl.ll(P[0], P[1])[0])]))[0])
     reach = []
     for k, along in ((0, arc), (1, total - arc)):
@@ -685,7 +693,7 @@ def headroom(pl, q, arc, total, P, elev_fn, below=None):
             z = np.minimum(z, zP + np.maximum(0.0, d) / SLOPE_RUN)
         w = np.exp(-0.5 * (t / PROFILE_SIGMA_M) ** 2)
         zk = float((w * z).sum() / w.sum())
-        reach.append(zk + DECK_MAX_GRADE * along)
+        reach.append(zk + climb * along)
     return min(reach) - zP
 
 

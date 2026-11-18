@@ -144,6 +144,16 @@ XING_TAPER_M = 6.0
 XING_JOIN_M = 25.0          # a join this near a crossing is the crossing's
 XING_DECK_END_M = 12.0      # (corridor.AT_GRADE_REACH_M: nearer an abutment BeamNG.Earth crosses at grade itself)
 
+# (terrain 23; the user, 2026-11-18, a spot report from the Arroyo de Ensenada: dirt walls where the course leaves a
+# street it crosses at grade). The course runs down the arroyo under a row of street bridges; the 30 m elevation has
+# no channel there. Terrain 18 kept a bridge where its deck could stand DECK18_OVER_M over the course climbing from its
+# ends: on flat ground a long enough deck did so on its length alone, and BeamNG.Earth dug the track 3.5 m down for
+# 250 m under it, right from the street crossed at grade before it, and ramped the streets beside it 6 m up to the
+# deck. From terrain 23 such a bridge is kept only where the ground at its ends itself stands DECK23_GROUND_M over the
+# course's (corridor.bridges_to_flatten ground_keep_m: a real gully or a cutting); else it is a crossing at grade too.
+GROUND_DECK_TV = 23
+DECK23_GROUND_M = 2.0
+
 # (terrain 20; the user, 2026-11-14, screenshots of 1.7.22: "It still isn't smooth enough, it ruins some portions by
 # creating dirt walls", "the original weird spiky thing is half fixed": a wall along the asphalt where the track
 # leaves a road at a shallow angle, a street's crossing in town raised as a table with dirt walls round it, spikes

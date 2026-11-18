@@ -634,6 +634,51 @@ class TestBridgesKept(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_NP, "numpy")
+class TestTerrain23(unittest.TestCase):
+    """Terrain 23 (the user, 2026-11-18, a spot report from the Arroyo de Ensenada: dirt walls where the course leaves a
+    street crossed at grade): a bridge the course passes under off the roads is kept only where the ground at its ends
+    stands DECK23_GROUND_M over the course's; on flat ground a long deck no longer passes on its length alone."""
+
+    def setUp(self):
+        TestBridgesKept.setUp(self)
+        a, b = self.ll(500.0, -50.0), self.ll(500.0, 50.0)       # (100 m: climbing from its ends, 3 m over the middle)
+
+        class R:
+            @staticmethod
+            def level_ranges(f, i):
+                return [(0.0, 1.0, "bridge")]
+
+            @staticmethod
+            def bridge_parts(f, i):
+                return [np.array([[float(a[1]), float(a[0])], [float(b[1]), float(b[0])]])]
+        self.R = R
+
+    def run23(self, depth, ground_keep_m):
+        from gpsd import corridor
+        _, xy = frame()
+
+        def creek(la, lo):
+            x, y = xy(np.asarray(la, np.float64), np.asarray(lo, np.float64))
+            return np.where((np.abs(y) < 12.0) & (np.abs(x - 500.0) < 30.0), -depth, 0.0)
+        return corridor.bridges_to_flatten(self.R, self.F, self.lines, None, elev_fn=creek, keep_under=True,
+                                           keep_from_m=sh.DECK18_OVER_M, ground_keep_m=ground_keep_m)
+
+    def test_flat_ground_at_grade(self):
+        self.assertEqual(self.run23(0.0, None), [], "(terrain 18-22: kept on its length alone, the track dug under)")
+        self.assertEqual(self.run23(0.0, sh.DECK23_GROUND_M), [0], "a crossing at grade")
+        self.assertEqual(self.run23(1.0, sh.DECK23_GROUND_M), [0], "a shallow wash too")
+
+    def test_real_gully_kept(self):
+        self.assertEqual(self.run23(5.0, sh.DECK23_GROUND_M), [], "over the creek the course runs in: kept")
+
+    def test_versions(self):
+        from gpsd import terrain
+        self.assertEqual(sh.GROUND_DECK_TV, 23)
+        self.assertGreaterEqual(terrain.VERSION, sh.GROUND_DECK_TV)
+        self.assertIn(22, terrain.VERSIONS, "the older ground still made")
+
+
+@unittest.skipUnless(HAVE_NP, "numpy")
 class TestAtGrade(unittest.TestCase):
     """Terrain 18 (the user, 2026-11-13, 1.7.20's pits by bridges' ends: "it seriously affected negativity on other
     parts"): dug only where the deck stands over the track; beside or across a bridge's end, nothing."""

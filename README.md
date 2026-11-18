@@ -230,6 +230,12 @@ Now nothing is narrower than about 6 m or changes over less than about 3 m: whoo
 in long swells, the windrows and the turns' sand as wide soft mounds, the banked corner a smooth bowl with its lip just
 past the edge, and the tallest places easing into their limit instead of flattening off.
 
+**Ground version 23** keeps version 22's ground, except under bridges the course passes under off the roads: such a
+bridge is kept (and the track dug under it) only where the ground at its ends stands 2 m or more over the course's
+ground, as over a real gully or cutting. Before, a long enough deck on flat ground was kept on its length alone, and
+the track was dug metres down under it between streets crossed at grade (Ensenada's arroyo). Now it is a crossing at
+grade too.
+
 **Ground version 22** keeps version 21's ground and carries the track's terrain into the mapped dirt roads it
 crosses: along such a road (one meeting the course at 25 degrees or more, not one it follows) the height the track's
 terrain has at its edge carries on into the dirt road and eases out over 16 m of it, the road's ground beside its

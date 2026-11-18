@@ -767,8 +767,10 @@ class _State:
                 continue
             lines = corridor.course_lines(course, key.bounds(), 200.0)
             kf = shaping.DECK18_OVER_M if getattr(course, "tv", 1) >= shaping.AT_GRADE_TV else None
+            kg = shaping.DECK23_GROUND_M if getattr(course, "tv", 1) >= shaping.GROUND_DECK_TV else None
             flat = set(corridor.bridges_to_flatten(self.roads, feats, lines, self.ground_near(md, kind, keep),
-                                                   elev_fn=ef, keep_under=keep, keep_from_m=kf)) if lines else set()
+                                                   elev_fn=ef, keep_under=keep, keep_from_m=kf,
+                                                   ground_keep_m=kg)) if lines else set()
             flat_ids |= {str(feats.ids[i]) for i in flat}
             for x in xs + ns:
                 x["f"] = int(x.pop("i") in flat)
@@ -1155,8 +1157,10 @@ class _State:
                 if lines:
                     keep = getattr(c, "tv", 1) >= shaping.KEEP_DECK_TV
                     kf = shaping.DECK18_OVER_M if getattr(c, "tv", 1) >= shaping.AT_GRADE_TV else None
+                    kg = shaping.DECK23_GROUND_M if getattr(c, "tv", 1) >= shaping.GROUND_DECK_TV else None
                     idx |= set(corridor.bridges_to_flatten(self.roads, base, lines, self.ground_near(md, kind, keep),
-                                                           elev_fn=self.elev(md), keep_under=keep, keep_from_m=kf))
+                                                           elev_fn=self.elev(md), keep_under=keep, keep_from_m=kf,
+                                                           ground_keep_m=kg))
             if idx:
                 base = corridor.flatten(self.mapgeom, base, sorted(idx))
                 with self.lock:
