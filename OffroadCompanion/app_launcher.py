@@ -458,7 +458,8 @@ def _probe():
     import grading
     ep = ours("gpsd.earthpatch")
     return {"painter": bool(getattr(grading.Grader.apply, "_earthgps", False)), "code": ep.gps_code_id(),
-            "planner": ep._is_server_main()}
+            "planner": ep._is_server_main(),
+            "wear": [getattr(grading, "DIRT_ROUGH", None), getattr(grading, "DIRT_BANK_M", None)]}
 
 
 def selftest():
@@ -474,8 +475,9 @@ def selftest():
                       "worker": worker}), flush=True)
     # (the planner ahead of the car: in the server's own process only, never in a worker: 1.6.5 and before started
     # one in every worker of the .exe)
+    # (BeamNG.Earth's dirt road wear on in both, as on 1.9.1: earthpatch.keep_dirt_wear)
     return 0 if here["painter"] and worker["painter"] and here["code"] == worker["code"] and here["planner"] \
-        and not worker["planner"] else 1
+        and not worker["planner"] and here["wear"] == worker["wear"] == [1.0, 0.015] else 1
 
 
 def main():

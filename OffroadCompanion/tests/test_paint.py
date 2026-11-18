@@ -543,6 +543,10 @@ class TestInsideEarth(unittest.TestCase):
             roads.append(("0ff8", np.stack([lo, la], 1), "motorway", "paved", (0.45, 0.55)))
             la, lo = ll(np.full_like(ys, 5500.0), ys)
             roads.append(("0ff9", np.stack([lo, la], 1), "motorway", "paved", (0.45, 0.55)))
+            # a dirt track across the course at x 3800 (terrain 22: the track's relief carried into it)
+            ys = np.arange(-300.0, 301.0, 25.0)
+            la, lo = ll(np.full_like(ys, 3800.0), ys)
+            roads.append(("0gg8", np.stack([lo, la], 1), "track", "dirt"))
             keep = [r for r in roads if r[1][:, 0].max() >= lon0 and r[1][:, 0].min() <= lon1
                     and r[1][:, 1].max() >= lat0 and r[1][:, 1].min() <= lat1]
             f = mapgeom.build("roads", np.array([r[0] for r in keep]) if keep else np.array([], "<U4"),
@@ -681,6 +685,75 @@ class TestInsideEarth(unittest.TestCase):
         self.assertIn("0aa1", ids)
         self.assertTrue(all(ids[k] <= ids[k + 1] for k in range(len(ids) - 1)), "ids stay sorted")
         self.assertEqual(len(f.en), len(f.lonlat))
+
+    def test_spot_report(self):
+        """The app's "Report this spot" (earthpatch.report_spot): one zip with the place's map cells, the course's
+        windows there and the ground round the car at each stage of the grading, the last the ground itself."""
+        import grading
+        import io
+        import pickle
+        import zipfile
+        ep = self.earthpatch
+        lat, lon = ll(1150.0, 6.0)
+        frame = self.geodesy.EnuFrame(*ll(1000.0, 0.0), 0.0)
+        md = self.md
+
+        class Dem:
+            def sample(self, la, lo, z):
+                return ground(la, lo)
+
+        class Anchor:
+            pass
+        an = Anchor()
+        an.frame, an.hm_zoom = frame, 17
+        grader = grading.Grader(frame, md, lambda a, b: ground(a, b))
+
+        class Server:
+            anchors = {7: an}
+            dem = Dem()
+            mapdata = md
+
+            def ground(self, fr, la, lo, z):
+                return np.asarray(z, np.float64)
+
+            def grader_for(self, a):
+                return grader
+
+            def _plan_elev(self, la, lo):
+                return ground(la, lo)
+        old = ep.SPOT_HALF_M, ep.SPOT_ELEV_HALF_M, ep.SPOT_CELLS_M
+        ep.SPOT_HALF_M, ep.SPOT_ELEV_HALF_M, ep.SPOT_CELLS_M = 20.0, 60.0, 200.0
+        try:
+            path = ep.report_spot(Server(), 7, lat, lon, "walls here")
+        finally:
+            ep.SPOT_HALF_M, ep.SPOT_ELEV_HALF_M, ep.SPOT_CELLS_M = old
+        self.addCleanup(lambda: os.path.exists(path) and os.remove(path))
+        self.assertTrue(path.startswith(ep.spots_dir()) and path.endswith(".zip"))
+        with zipfile.ZipFile(path) as z:
+            names = set(z.namelist())
+            info = __import__("json").loads(z.read("info.json"))
+            g = np.load(io.BytesIO(z.read("grid.npz")))
+            cells = pickle.loads(z.read("cells.pkl"))
+        self.assertEqual(info["note"], "walls here")
+        self.assertEqual(info["errors"], [])
+        self.assertAlmostEqual(info["s"], 1150.0, delta=15.0)
+        self.assertIn("course.json", names)
+        self.assertTrue(any(n.startswith("windows/r") for n in names), "the relief profiles there")
+        for k in ("lat", "lon", "dem", "ground", "earth", "banks", "shaping", "relief", "final"):
+            self.assertIn(k, g.files, k)
+            self.assertEqual(g[k].shape, (41, 41))
+        np.testing.assert_array_equal(g["relief"], g["final"], "the last stage is the ground")
+        self.assertGreater(float(np.abs(g["final"] - g["earth"]).max()), 0.01, "the course's own ground in it")
+        self.assertTrue(cells)
+        some = next(iter(cells.values()))
+        self.assertIn("roads", some["earth"])
+        back = self.mapgeom.Features.from_arrays("roads", some["earth"]["roads"], "")
+        self.assertEqual(len(back.ids), len(some["earth"]["roads"]["ids"]), "read back as BeamNG.Earth's features")
+
+        def tr(a):
+            return [str(i) for i in (a["ids"] if a is not None else ()) if str(i).startswith(ep.courseroads.ID_PREFIX)]
+        self.assertTrue(any(tr(v["course"].get("roads")) for v in cells.values()), "the track in the course's cells")
+        self.assertFalse(any(tr(v["earth"].get("roads")) for v in cells.values()), "and not in BeamNG.Earth's own")
 
     def test_cells_read_together_get_the_track_too(self):
         """BeamNG.Earth 1.10 reads the road tiles' cells (and the AI road graph's, the buildings') side by side
@@ -1737,6 +1810,49 @@ class TestInsideEarth(unittest.TestCase):
         finally:
             self.set_rough("on")
 
+    def test_dirt_crossing_carries_the_track(self):
+        """(terrain 22) A dirt road across the course (x 3800): the track's height at its edge carried into it and
+        eased out along it (relief.dirt_carry), not a step 4 m past the edge; none further out; the same off it."""
+        st = self.earthpatch.state()
+        if st.current().paint.tv < 22:
+            self.skipTest("terrain before 22")
+        errs = st.stats["errors"]
+        ys = np.arange(-60.0, 61.0, 0.5)
+        la, lo = ll(np.full_like(ys, 3800.0), ys)
+        on = np.asarray(st.relief_at(self.md, la, lo), float)
+        la2, lo2 = ll(np.full_like(ys, 3830.0), ys)
+        off = np.asarray(st.relief_at(self.md, la2, lo2), float)
+        if os.environ.get("EGPS_PROBE"):
+            for y, a, b in zip(ys, on, off):
+                print(f"{y:6.1f} {a:8.4f} {b:8.4f}")
+        far = np.abs(ys) > 45
+        self.assertTrue(np.all(on[far] == 0) and np.all(off[far] == 0), "none far out")
+        reach_on = np.abs(ys[on != 0]).max()
+        reach_off = np.abs(ys[off != 0]).max()
+        self.assertGreater(reach_on, reach_off + 3, "carried along the dirt road, beyond the track's own edge")
+        for side in (ys >= 5.0, ys <= -5.0):
+            r = np.abs(on[side])
+            r = r if side[-1] else r[::-1]
+            self.assertTrue(np.all(np.diff(r) <= 1e-9), "eased out along it: no step, no lip")
+        self.assertEqual(st.stats["errors"], errs, "no error")
+
+    def test_earths_dirt_road_wear_kept_on(self):
+        """BeamNG.Earth 1.10 ships its dirt road wear off (BNE_DIRT_BUMP 0, BNE_DIRT_BANK 0); the painter keeps 1.9.1's
+        (the user, 2026-11-17: the other dirt roads worn as on Default), in the build switches its caches key on, and
+        a player's own setting wins."""
+        import grading
+        ep = self.earthpatch
+        self.assertEqual(os.environ.get("BNE_DIRT_BUMP"), "1.0")
+        self.assertEqual(os.environ.get("BNE_DIRT_BANK"), "0.015")
+        self.assertEqual((grading.DIRT_ROUGH, grading.DIRT_BANK_M), (1.0, 0.015))
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"BNE_DIRT_BUMP": "0.5"}):
+            self.addCleanup(setattr, grading, "DIRT_ROUGH", grading.DIRT_ROUGH)
+            ep.keep_dirt_wear()
+            self.assertEqual(grading.DIRT_ROUGH, 0.5, "the player's own")
+        ep.keep_dirt_wear()
+        self.assertEqual(grading.DIRT_ROUGH, 1.0)
+
     def test_track_not_worn_by_earths_dirt_roads(self):
         """BeamNG.Earth 1.8.2 wears its dirt roads (potholes, patches, pits, a lean; a track's the worst), as the course's
         terrain setting has it (earthpatch.dirt_wear): Baja, Mild, Rough, Extra: the course's track its own ground (the
@@ -1746,12 +1862,8 @@ class TestInsideEarth(unittest.TestCase):
         import roads as roadsmod
         if not hasattr(grading, "dirt_bumps"):
             self.skipTest("BeamNG.Earth before 1.8.2: no dirt road wear")
-        if grading.DIRT_ROUGH <= 0:
-            # (BeamNG.Earth 1.10 ships its wear off, BNE_DIRT_BUMP 0 and BNE_DIRT_BANK 0: here as a player who turns
-            # it on has it, 1.8.2 - 1.9.1's strengths)
-            for name, v in (("DIRT_ROUGH", 1.0), ("DIRT_BANK_M", 0.015)):
-                self.addCleanup(setattr, grading, name, getattr(grading, name))
-                setattr(grading, name, v)
+        # (BeamNG.Earth 1.10 ships its wear off; the painter turns it back on: earthpatch.keep_dirt_wear)
+        self.assertEqual((grading.DIRT_ROUGH, grading.DIRT_BANK_M), (1.0, 0.015))
         # (the wear alone: from terrain 17 the bridges over the dirt road the course follows, x 2200 - 2700, are kept
         # and dug under, metres deep; shaping.py's own tests have those)
         st = self.earthpatch.state()
@@ -1809,10 +1921,8 @@ class TestInsideEarth(unittest.TestCase):
                     self.assertIsNone(grading.dirt_bumps(line, own[0], 300), mode)        # potholes, rarely a lean
                     self.assertIsNone(grading.bank(line, own[0]), mode)
                     self.assertEqual(grading.profile_sigma(own[0]), grading.DIRT_SIGMA_M)
-                    if grading.DIRT_ROUGH > 0:          # (BeamNG.Earth 1.10 turned its dirt road wear off: BNE_DIRT_BUMP 0)
-                        self.assertIsNotNone(grading.dirt_bumps(line, plain, 300), "a mapped track: worn")
-                    if getattr(grading, "DIRT_BANK_M", 1.0) > 0:        # (and the lean: BNE_DIRT_BANK 0)
-                        self.assertIsNotNone(grading.bank(kept, plain), "the odd one leans")
+                    self.assertIsNotNone(grading.dirt_bumps(line, plain, 300), "a mapped track: worn")
+                    self.assertIsNotNone(grading.bank(kept, plain), "the odd one leans")
                     self.assertIsNone(grading.bank(dropped, plain), "most do not")
                     self.assertEqual(grading.profile_sigma(plain), grading.DIRT_SIGMA_MINOR_M)
                 elif mode == "off":                 # Flat: no wear anywhere, as before 1.8.2
@@ -1822,10 +1932,8 @@ class TestInsideEarth(unittest.TestCase):
                         self.assertEqual(grading.profile_sigma(sp), grading.DIRT_SIGMA_M)
                 else:                               # Default: BeamNG.Earth's own, the track a worn track too
                     for sp in (own[0], plain):
-                        if grading.DIRT_ROUGH > 0:      # (1.10: off, as its bank)
-                            self.assertIsNotNone(grading.dirt_bumps(line, sp, 300))
-                        if getattr(grading, "DIRT_BANK_M", 1.0) > 0:
-                            self.assertIsNotNone(grading.bank(dropped, sp))
+                        self.assertIsNotNone(grading.dirt_bumps(line, sp, 300))
+                        self.assertIsNotNone(grading.bank(dropped, sp))
                         self.assertEqual(grading.profile_sigma(sp), grading.DIRT_SIGMA_MINOR_M)
         finally:
             self.set_rough("on")
@@ -1834,10 +1942,9 @@ class TestInsideEarth(unittest.TestCase):
         self.assertLess(float(np.ptp(seen["off"][1])), 0.05, "Flat: the dirt road the course follows")
         self.assertLess(float(np.ptp(seen["off"][2])), 0.05, "Flat: BeamNG.Earth's other dirt roads too")
         # (BeamNG.Earth 1.9 bounds its wear: about 0.1 m here, 1.8.2's up to 1 m)
-        if grading.DIRT_ROUGH > 0:          # (BeamNG.Earth 1.10: no wear on its dirt roads unless BNE_DIRT_BUMP asks)
-            self.assertGreater(float(np.ptp(seen["default"][0])), 0.05, "Default: the track worn as a track")
-            self.assertGreater(float(np.ptp(seen["default"][1])), 0.05, "Default: the dirt road it follows worn")
-            self.assertGreater(float(np.ptp(seen["on"][2])), 0.05, "Rough: a dirt road off the course keeps its potholes")
+        self.assertGreater(float(np.ptp(seen["default"][0])), 0.05, "Default: the track worn as a track")
+        self.assertGreater(float(np.ptp(seen["default"][1])), 0.05, "Default: the dirt road it follows worn")
+        self.assertGreater(float(np.ptp(seen["on"][2])), 0.05, "Rough: a dirt road off the course keeps its potholes")
         self.set_rough("on")
         relief = self.earthpatch.state().relief_at(self.md, la, lo)
         self.assertLess(float(np.abs(seen["on"][0] - relief).max()), 0.05, "Rough: the track its relief alone")

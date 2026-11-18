@@ -352,13 +352,56 @@ function C:overview(maxPts)
   return { pts = pts, wps = wps, step = step, ox = ox, oy = oy, closed = self.track.closed and true or false }
 end
 
--- For the minimap: the line from s - back to s + ahead and the waypoints near, relative to (px, py).
+-- Pure: the painted track's middle at s on line e (poly's) and its half width, from sides = {step, hw = {[i] = m},
+-- ctr = {[i] = m left of the line}} (the companion's course_sides: the track or road as the server laid it, every step
+-- m; length: a closed circuit's lap, s past it on the next lap): x, y, hw, or the line's own point and nil where it is
+-- not known (yet). Between two known samples the middle is interpolated, so a bend is drawn as laid.
+function M.paintedAt(e, sides, s, length)
+  local x, y, dx, dy = poly.at(e, s)
+  if not (sides and sides.step and sides.ctr) then return x, y, nil end
+  local u = s
+  if length and length > 0 and u > length then u = u - length end
+  local f = u / sides.step
+  local i0 = math.floor(f)
+  local t = f - i0
+  local c0, c1 = sides.ctr[i0], sides.ctr[i0 + 1]
+  local h0, h1 = sides.hw[i0], sides.hw[i0 + 1]
+  local ctr, hw
+  if type(c0) == 'number' and type(c1) == 'number' then
+    ctr = c0 + (c1 - c0) * t
+    hw = (type(h0) == 'number' and type(h1) == 'number') and (h0 + (h1 - h0) * t) or nil
+  elseif type(c0) == 'number' and t < 0.5 then ctr, hw = c0, h0
+  elseif type(c1) == 'number' and t >= 0.5 then ctr, hw = c1, h1
+  end
+  if type(ctr) ~= 'number' then return x, y, nil end
+  -- (ctr is to the left: the left normal of direction (dx, dy) is (-dy, dx))
+  return x - dy * ctr, y + dx * ctr, type(hw) == 'number' and hw or nil
+end
+
+-- For the minimap: the line from s - back to s + ahead and the waypoints near, relative to (px, py). Where the
+-- companion has said where the track is (self.sides), the line is the painted track's own middle, every sides.step
+-- m, with its half width as a 4th value: the map shows the track as it is on the ground, its bends, not the course
+-- file's straight lines between its points (the user, 2026-11-18).
 function C:mapData(px, py, radius)
   local out = { line = {}, wps = {} }
   local e = self.e
   if not e then return out end
   local r1 = function(v) return math.floor(v * 10 + 0.5) / 10 end
   if self.hasLine and self.s then
+    local sd = self.sides
+    if sd and sd.step and e.n and e.n >= 2 then
+      local line = self.ahead or e
+      local s0, s1 = math.max(0, self.s - radius), math.min(line.length or 0, self.s + radius * 1.5)
+      local step = math.min(sd.step, math.max(5, radius / 60))
+      local s = s0
+      while true do
+        local x, y, hw = M.paintedAt(line, sd, s, self.closed and self.length or nil)
+        out.line[#out.line + 1] = { r1(x - px), r1(y - py), s < self.s and 1 or 0, hw and r1(hw) or nil }
+        if s >= s1 then break end
+        s = math.min(s + step, s1)
+      end
+      return self:mapWps(out, px, py, radius, r1)
+    end
     local pts = poly.slice(self.ahead or e, self.s - radius, self.s + radius * 1.5, math.max(8, radius / 60))
     for i, p in ipairs(pts) do out.line[i] = { r1(p[1] - px), r1(p[2] - py), p[3] < self.s and 1 or 0 } end
   elseif not self.hasLine then
@@ -366,6 +409,11 @@ function C:mapData(px, py, radius)
       if w._x then out.line[#out.line + 1] = { r1(w._x - px), r1(w._y - py), i < self.target and 1 or 0 } end
     end
   end
+  return self:mapWps(out, px, py, radius, r1)
+end
+
+-- (mapData's waypoints near)
+function C:mapWps(out, px, py, radius, r1)
   for i, w in ipairs(self.track.waypoints or {}) do
     if w._x and w.kind ~= 'racemile' and w.kind ~= 'place' then
       local dx, dy = w._x - px, w._y - py

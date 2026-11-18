@@ -3,6 +3,28 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.27 (2026-11-18)
+
+- **BeamNG.Earth's dirt road wear is back.** BeamNG.Earth 1.10 turned off its potholes, broken patches, deep pits and
+  leans on dirt roads. Offroad Companion turns them back on at BeamNG.Earth 1.9.1's strength, so the track terrain
+  settings work as before 1.7.25: on **Baja**, **Mild**, **Rough** and **Extra** the course's track is the painter's
+  own and the other dirt roads are worn; on **Default** every dirt road, the track included, is worn. **Flat** is
+  unchanged. A player's own `BNE_DIRT_BUMP` or `BNE_DIRT_BANK` setting still wins.
+- **The nav map shows the track as it is on the ground.** Where the course painter has laid the track, the map draws
+  the track's own middle (the line it was laid along, with its bends and the mapped roads it follows), not the course
+  file's straight lines between its points, as one smooth curve; zoomed in far enough, as wide as the track.
+- **The nav map moves smoothly.** It follows the car every frame between its updates (five a second), so it no
+  longer moves in jumps.
+- **Ground version 22: dirt roads the course crosses meet the track smoothly.** The track's terrain (whoops, ruts,
+  washes, its edge berms) used to stop within 4 m of its edge, also across a mapped dirt road it crosses: a lip across
+  that road. Now, along a dirt road the course crosses, the track's height at its edge carries on into the dirt road
+  and eases out over 16 m of it; the track itself keeps the course's terrain. Older ground versions are unchanged.
+- **Report this spot.** A button under the course's buttons saves the ground around the car in a zip (the map data,
+  the course's planned ground and the heights at each step the course painter made them) in the Offroad Companion
+  folder's `spots` folder. Send the newest one with a screenshot when a spot looks wrong.
+- 1.7.27 lays ground version 22 and brings BeamNG.Earth's dirt road wear back, so everyone on a BeamMP server should
+  update together.
+
 ## 1.7.26 (2026-11-16)
 
 - **The course's dirt track is drawn again on BeamNG.Earth 1.10.** 1.10 reads the road tiles' map cells several at a

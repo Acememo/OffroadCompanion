@@ -721,7 +721,16 @@ class _State:
         if ctx is None:
             return None
         c, profs = ctx
-        dz = relief.relief(c, profs, lat, lon, scale, auto=getattr(c, "rough", "on") == "auto", near=near)
+        auto = getattr(c, "rough", "on") == "auto"
+        dz = relief.relief(c, profs, lat, lon, scale, auto=auto, near=near)
+        if getattr(c, "tv", 1) >= relief.DIRT_CROSS_TV:
+            try:
+                dz = self.dirt_carry(md, lat, lon, dz, c, profs, scale, auto, near)
+            except Exception as e:              # (the roads not to be had: the relief as it is, this build not kept)
+                _fault()
+                with self.lock:
+                    self.stats["errors"] += 1
+                log.warning("course painter: relief into the dirt roads crossed: %s: %s", type(e).__name__, e)
         if getattr(c, "tv", 1) >= relief.PAVED_CLEAR_TV:
             try:
                 dz = self.paved_clear(md, lat, lon, dz)
@@ -913,6 +922,31 @@ class _State:
         lim = np.maximum(0.0, past - in_m) * shaping.PAVED17_SLOPE
         flat[idx] = np.clip(flat[idx], -lim, lim)
         return dz
+
+    def dirt_carry(self, md, lat, lon, dz, c, profs, scale, auto, near=None):
+        """dz with the track's relief carried into BeamNG.Earth's dirt roads the course crosses (relief.dirt_carry:
+        terrain 22)."""
+        dz = np.array(dz, np.float64)
+        la = np.asarray(lat, np.float64).reshape(-1)
+        lo = np.asarray(lon, np.float64).reshape(-1)
+        if not len(la):
+            return dz
+        pad = (relief.DIRT_CARRY_M + 20.0) / 111320.0
+        padlo = pad / max(0.05, math.cos(math.radians(float(la.mean()))))
+        ends, hws = [], []
+        for key in self.mapcells.cells_for_bbox(float(la.min()) - pad, float(lo.min()) - padlo,
+                                                float(la.max()) + pad, float(lo.max()) + padlo):
+            e, hw, pv = self.cell_roads(md, key, "demand")
+            if len(e) and (~pv).any():
+                ends.append(e[~pv])
+                hws.append(hw[~pv])
+        if not ends:
+            return dz
+
+        def at(qla, qlo):
+            return relief.relief(c, profs, qla, qlo, scale, auto=auto)
+        return relief.dirt_carry(c, profs, la, lo, dz.reshape(-1), np.concatenate(ends), np.concatenate(hws), at,
+                                 near=near).reshape(dz.shape)
 
     def paved_clear(self, md, lat, lon, dz, in_m=None, fade_m=None):
         """dz without the relief on BeamNG.Earth's paved roads (relief.paved_clear: terrain 12)."""
@@ -1653,11 +1687,35 @@ def _photo_roads(f):
     return d.get(PHOTO_KEY, f) if d else f
 
 
+# BeamNG.Earth 1.10 turned its dirt road wear off by default (grading.DIRT_ROUGH, DIRT_BANK_M: BNE_DIRT_BUMP=0,
+# BNE_DIRT_BANK=0; its potholes and leans read as whoops at speed, GitHub #830). The user, 2026-11-17: "bring back
+# that behavior where the course uses our terrain and the other dirt roads that aren't our course get the one we
+# labeled as default": BeamNG.Earth 1.9.1's values (its own "BNE_DIRT_BUMP=1 for the rally feel", "BNE_DIRT_BANK=0.015
+# as it was"), the same wear code. dirt_wear still decides where it goes (the course's track the painter's own). A
+# player's own setting of either wins. Build switches (BNE_*): BeamNG.Earth's caches key on them.
+DIRT_WEAR_ENV = (("BNE_DIRT_BUMP", "1.0", "DIRT_ROUGH"), ("BNE_DIRT_BANK", "0.015", "DIRT_BANK_M"))
+
+
+def keep_dirt_wear():
+    """BeamNG.Earth's dirt road wear on (DIRT_WEAR_ENV), before grading is imported (every server process runs install
+    first: earth_tracks_server.py, app_launcher.install_painter); one already imported gets the values too."""
+    for env, value, name in DIRT_WEAR_ENV:
+        if not os.environ.get(env):
+            os.environ[env] = value
+        grading = sys.modules.get("grading")
+        if grading is not None and hasattr(grading, name):
+            try:
+                setattr(grading, name, float(os.environ[env]))
+            except ValueError:
+                pass
+
+
 def install():
     """Hook BeamNG.Earth's map data (idempotent). Returns True when installed."""
     global _state
     if _state is not None:
         return True
+    keep_dirt_wear()
     import dem as demmod
     import geodesy
     import mapcells
@@ -1825,6 +1883,9 @@ def install():
             out = orig_apply(self, lat, lon, base, lift, roads_only, *args, **kwargs)
             if roads_only:                  # (a tunnel's ends)
                 return out
+            rec = getattr(_RECORD, "stages", None)      # (a spot report: each stage's heights, report_spot)
+            if rec is not None:
+                rec["earth"] = np.array(out, np.float64)
             try:
                 ctx = st.course_near(self.md, lat, lon)
                 if ctx is None:
@@ -1839,10 +1900,14 @@ def install():
                     except Exception as e:  # (BeamNG.Earth's step then)
                         st.stats["errors"] += 1
                         log.warning("course painter: banks: %s: %s", type(e).__name__, e)
+                    if rec is not None:
+                        rec["banks"] = np.array(out, np.float64)
                     try:                    # (terrain 13: under the bridges, off the paved roads: shaping.py)
                         sdz = st.shape_at(self, grade_fn, lat, lon, out, ctx, near, lift)
                         if sdz is not None:
                             out = np.asarray(out, np.float64) + sdz.reshape(np.shape(out))
+                        if rec is not None:
+                            rec["shaping"] = np.array(out, np.float64)
                     except Exception as e:  # (the ground as graded then; this build not kept)
                         _fault()
                         st.stats["errors"] += 1
@@ -1850,6 +1915,8 @@ def install():
                 dz = st.relief_at(self.md, lat, lon, near=near, ctx=ctx)
                 if dz is not None:
                     out = np.asarray(out, np.float64) + dz.reshape(np.shape(out))
+                if rec is not None:
+                    rec["relief"] = np.array(out, np.float64)
             except Exception as e:          # never break BeamNG.Earth: its own heights then
                 st.stats["errors"] += 1
                 log.warning("course painter: relief: %s: %s", type(e).__name__, e)
@@ -2743,6 +2810,140 @@ def refresh_geo(conn):
     return done
 
 
+# A spot report (the app's "Report this spot": main.lua reportSpot): everything about the ground round the car that the
+# course painter and BeamNG.Earth made it from, in one zip in the data folder's spots folder, for whoever fixes a spot
+# without the map data at hand (the user, 2026-11-18: dirt walls at a paved crossing in Ensenada no test world showed):
+#   info.json          where, when, the versions, the course and its settings, the painter's counts
+#   course.json        the course file the server paints
+#   windows/           the course's planned windows near (relief profiles r*, track pieces w*)
+#   grid.npz           SPOT_HALF_M round the car every SPOT_STEP_M (the anchor's frame: e, n): lat, lon, the DEM, the
+#                      ground before the roads, then each stage of the graded heights (BeamNG.Earth's grading, the cut
+#                      banks, the crossings' and bridges' shaping, the track's relief: the last is the ground)
+#   elev.npz           the road plans' own ground (grading's) SPOT_ELEV_HALF_M round, every SPOT_ELEV_STEP_M
+#   cells.pkl          the map cells there, BeamNG.Earth's own layers and the course's (track in, buildings cleared)
+SPOT = "offroad_spot"
+SPOT_HALF_M, SPOT_STEP_M = 80.0, 1.0
+SPOT_ELEV_HALF_M, SPOT_ELEV_STEP_M = 500.0, 4.0
+SPOT_CELLS_M = 600.0
+_RECORD = threading.local()
+
+
+def _offroad_version():
+    try:
+        with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "VERSION"),
+                  encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return None
+
+
+def spots_dir():
+    return os.path.join(paintfile.base_dir(), "spots")
+
+
+def report_spot(server, aid, lat, lon, note=""):
+    """The spot report round (lat, lon) (SPOT's note) from this server process's state (BeamNG.Earth's Server, anchor
+    aid): the path of the zip written."""
+    import io
+    import json
+    import pickle
+    import zipfile
+    st = _state
+    anchor = server.anchors.get(aid)
+    if anchor is None:
+        raise ValueError(f"no anchor {aid!r}")
+    frame = anchor.frame
+    e0, n0, _ = frame.geodetic_to_enu(lat, lon, 0.0)
+    ax = np.arange(-SPOT_HALF_M, SPOT_HALF_M + 1e-9, SPOT_STEP_M)
+    E, N = np.meshgrid(float(e0) + ax, float(n0) + ax)
+    la, lo, _ = frame.enu_to_geodetic(E.ravel(), N.ravel(), np.zeros(E.size))
+    la, lo = np.asarray(la, np.float64), np.asarray(lo, np.float64)
+    dem = np.asarray(server.dem.sample(la, lo, anchor.hm_zoom), np.float64)
+    base = np.asarray(server.ground(frame, la, lo, dem), np.float64)
+    grid = {"e": E, "n": N, "lat": la.reshape(E.shape), "lon": lo.reshape(E.shape), "dem": dem.reshape(E.shape),
+            "ground": base.reshape(E.shape)}
+    errors = []
+    grader = server.grader_for(anchor)
+    if grader is not None:
+        _RECORD.stages = {}
+        try:
+            final = np.asarray(grader.apply(la, lo, base), np.float64)
+            grid["final"] = final.reshape(E.shape)
+            for k, v in _RECORD.stages.items():
+                grid[k] = np.asarray(v, np.float64).reshape(E.shape)
+        except Exception as ex:
+            errors.append(f"grading: {type(ex).__name__}: {ex}")
+        finally:
+            _RECORD.stages = None
+    ex_ = np.arange(-SPOT_ELEV_HALF_M, SPOT_ELEV_HALF_M + 1e-9, SPOT_ELEV_STEP_M)
+    E2, N2 = np.meshgrid(float(e0) + ex_, float(n0) + ex_)
+    la2, lo2, _ = frame.enu_to_geodetic(E2.ravel(), N2.ravel(), np.zeros(E2.size))
+    elev = {"e": E2, "n": N2, "lat": np.asarray(la2).reshape(E2.shape), "lon": np.asarray(lo2).reshape(E2.shape)}
+    try:
+        pe = getattr(server, "_plan_elev", None)
+        z2 = pe(np.asarray(la2), np.asarray(lo2)) if pe else server.dem.sample(np.asarray(la2), np.asarray(lo2), 15)
+        elev["z"] = np.asarray(z2, np.float64).reshape(E2.shape)
+    except Exception as ex:
+        errors.append(f"elevation: {type(ex).__name__}: {ex}")
+    cells = {}
+    md = getattr(server, "mapdata", None) or getattr(st, "md", None)
+    if md is not None and st is not None:
+        pad = SPOT_CELLS_M / 111320.0
+        padlo = pad / max(0.05, math.cos(math.radians(lat)))
+        for key in st.mapcells.cells_for_bbox(lat - pad, lon - padlo, lat + pad, lon + padlo):
+            try:
+                own = st.orig_cell(md, key, ("roads", "buildings"), "demand").layers
+                ours = md.cell(key, ("roads", "buildings"), "demand").layers
+                # (as plain arrays, mapgeom's own form: Features.from_arrays(layer, arrays, "") reads them back)
+                cells[str(key)] = {
+                    who: {name: (f.to_arrays("") if hasattr(f, "to_arrays") else None)
+                          for name, f in layers.items() if f is not None}
+                    for who, layers in (("earth", own), ("course", ours))}
+            except Exception as ex:
+                errors.append(f"cell {key}: {type(ex).__name__}: {ex}")
+    plan = st.current() if st is not None else None
+    c = getattr(plan, "paint", None) if plan is not None else None
+    info = {"lat": lat, "lon": lon, "note": str(note or "")[:500], "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "anchor": aid, "hm_zoom": getattr(anchor, "hm_zoom", None), "e": float(e0), "n": float(n0),
+            "offroad": _offroad_version(),
+            "code": gps_code_id(), "earth": _earth_version(), "terrain": terrain.VERSION, "errors": errors,
+            "wear": [os.environ.get(k) for k, _v, _n in DIRT_WEAR_ENV],
+            "stats": dict(getattr(st, "stats", {}) or {})}
+    if c is not None:
+        info.update(course=c.name, cid=c.cid, tv=getattr(c, "tv", None), rough=getattr(c, "rough", None),
+                    scale=getattr(c, "scale", None), ruts=getattr(c, "ruts", None))
+        try:
+            near = relief.nearest(c, {0: {"a": 0, "b": len(c.lat) - 1}}, np.array([lat]), np.array([lon]), 1e6)
+            info["s"] = float(near[2][0]) if len(near[0]) else None
+        except Exception:
+            pass
+    os.makedirs(spots_dir(), exist_ok=True)
+    path = os.path.join(spots_dir(), time.strftime("spot-%Y%m%d-%H%M%S.zip"))
+    with zipfile.ZipFile(path + ".part", "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("info.json", json.dumps(info, indent=1, default=str))
+        try:
+            z.write(paintfile.course_path(), "course.json")
+        except OSError:
+            pass
+        if c is not None:
+            wdir = paintfile.windows_dir(c.cid)
+            for k in c.windows_near(lat, lon, SPOT_CELLS_M):
+                for what in ("r", "w"):
+                    f = os.path.join(wdir, f"{what}{k:06d}.json")
+                    if os.path.isfile(f):
+                        z.write(f, f"windows/{what}{k:06d}.json")
+        for name, arrs in (("grid.npz", grid), ("elev.npz", elev)):
+            buf = io.BytesIO()
+            np.savez_compressed(buf, **arrs)
+            z.writestr(name, buf.getvalue())
+        try:
+            z.writestr("cells.pkl", pickle.dumps(cells, protocol=4))
+        except Exception as ex:
+            z.writestr("cells_error.txt", f"{type(ex).__name__}: {ex}")
+    os.replace(path + ".part", path)
+    return path
+
+
 def _install_geo_reset():
     """BeamNG.Earth's connections (earthd.Connection, this server process) answer GEO_RESET (refresh_geo); every other
     message as before."""
@@ -2754,6 +2955,21 @@ def _install_geo_reset():
     orig = em.Connection.dispatch
 
     def dispatch(self, msg, *a, **kw):
+        if isinstance(msg, dict) and msg.get("type") == SPOT:
+            server, aid = getattr(self, "s", None), getattr(self, "active", None)
+            try:
+                la_, lo_ = float(msg.get("lat")), float(msg.get("lon"))
+            except (TypeError, ValueError):
+                return None
+
+            def run():
+                try:
+                    log.info("course painter: spot report saved: %s", report_spot(server, aid, la_, lo_,
+                                                                                  msg.get("note")))
+                except Exception as e:
+                    log.warning("course painter: spot report failed: %s: %s", type(e).__name__, e)
+            threading.Thread(target=run, name="spot-report", daemon=True).start()
+            return None
         if isinstance(msg, dict) and msg.get("type") == GEO_RESET:
             try:
                 done = refresh_geo(self)

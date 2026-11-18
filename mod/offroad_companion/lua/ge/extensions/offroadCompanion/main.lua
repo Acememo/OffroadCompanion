@@ -29,12 +29,15 @@ local wet = require('offroadCompanion/wet')
 local M = {}
 
 M.UI_S = 0.2
+-- the car's pose alone, this often, for the map to move with it between the UI_S updates (the user, 2026-11-18: "its
+-- animation is smoother", BeamNG's own minimap, drawn every frame): a few numbers, no digest of the app's state
+M.POSE_UI_S = 1 / 40
 M.CHECK_S = 0.2
 M.REROUTE_S = 8
 M.SETTINGS_FILE = '/settings/offroadCompanion.json'
 M.OLD_SETTINGS_FILE = '/settings/earthGps.json'   -- (the project was BeamNG.Earth GPS before 1.2.0)
-M.VERSION = '1.7.26'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
-M.BUILD = '2026-11-16 02:00'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
+M.VERSION = '1.7.27'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
+M.BUILD = '2026-11-18 03:00'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
 
 local settings = { lang = 'en', units = 'auto', ribbon = true, autoRoute = true, zoom = 600, paint = true, paintSize = 1.0,
                    clearCourse = true, clearRoute = true, streets = true, markers = 'checkpoints', ruts = 'off', rough = 'auto',
@@ -115,7 +118,7 @@ local trackError = nil
 local lists = {}              -- request id -> result (taken by the app)
 local mountedUntil = -math.huge
 local clock = 0
-local lastCheck, lastUi = -math.huge, -math.huge
+local lastCheck, lastUi, lastPose = -math.huge, -math.huge, -math.huge
 local lastTarget = nil        -- waypoint courses: the target last routed to
 local markersAt = -math.huge
 
@@ -328,6 +331,9 @@ end
 -- refresh_geo), so no tree or building kept from before stands on the new track. (1.6.8-1.6.11 had the server send
 -- them again into the trees the game kept: trees hung in the sky far off, the user 2026-10-31.)
 M.GEO_RESET = 'offroad_geo_reset'
+M.SPOT = 'offroad_spot'               -- (the app's Report this spot: earthpatch.py SPOT)
+M.SPOT_NOTE_S = 20
+local spotSent = nil
 local function refreshRoads()
   paint.refreshedAt = clock
   local okR, roads = pcall(require, 'beamngEarth/roads')
@@ -786,6 +792,7 @@ local function payload()
     course = courseText(crsState), trackLoading = trackReq ~= nil, trackError = trackError,
     trackSlow = trackReq ~= nil and clock - trackReq.at > 15 or nil,
     sources = companion.sources, tracksDir = companion.tracksDir, earthStale = earthModStale(),
+    spotSent = spotSent and clock - spotSent.at < M.SPOT_NOTE_S or nil,
     paint = { on = settings.paint, painting = paint.state ~= nil, painter = paint.painter ~= nil and paint.painter ~= false,
               error = paint.error, canPaint = crs ~= nil and crs.hasLine and not crs.track.approximate,
               course = type(paint.painter) == 'table' and paint.painter.course or nil, mode = paint.mode,
@@ -816,7 +823,9 @@ local function payload()
   -- minimap geometry, car-relative metres
   if car then
     local r = tonumber(settings.zoom) or 600
-    p.map = { radius = r, heading = car.heading }
+    -- (cx, cy, a: the car's place in the world frame the map's metres are from, and that frame's own: the app moves
+    -- the map by the car's motion since, OffroadCompanionPose)
+    p.map = { radius = r, heading = car.heading, cx = car.x, cy = car.y, a = tostring(anchor) }
     if navi then p.map.route = navi:mapLine(car.x, car.y, r * 0.3, r * 1.6, math.max(8, r / 50)) end
     if crs then
       local md = crs:mapData(car.x, car.y, r)
@@ -882,8 +891,17 @@ local function onUpdate(dtReal, dtSim)
     local ok3, err = pcall(check, dtReal)
     if not ok3 and log then log('E', 'offroadCompanion', 'check: ' .. tostring(err)) end
   end
+  if clock < mountedUntil and clock - lastPose >= M.POSE_UI_S and clock - lastUi < M.UI_S then
+    lastPose = clock
+    local okP, car, anchor = pcall(where)
+    local gh = rawget(_G, 'guihooks')
+    if okP and car and gh and gh.trigger then
+      gh.trigger('OffroadCompanionPose', { x = car.x, y = car.y, h = car.heading, a = tostring(anchor) })
+    end
+  end
   if clock < mountedUntil and clock - lastUi >= M.UI_S then
     lastUi = clock
+    lastPose = clock
     local ok4, p = pcall(payload)
     if ok4 then
       local gh = rawget(_G, 'guihooks')
@@ -992,6 +1010,18 @@ function M.uiTrackAction(action)
   if action == 'refresh_roads' then
     refreshRoads()
     return { ok = true }
+  end
+  if action == 'report_spot' then
+    -- (the ground round the car, as the server made it, saved for whoever fixes the spot: earthpatch.py report_spot)
+    local car = where()
+    local okN, net = pcall(require, 'beamngEarth/net')
+    if not car or not (okN and type(net) == 'table' and type(net.send) == 'function') then
+      return { ok = false, error = 'not in BeamNG.Earth' }
+    end
+    local okS = pcall(net.send, { type = M.SPOT, lat = car.lat, lon = car.lon,
+                                  note = (crs.track.name or 'Course') .. (crs.s and string.format(' at %.0f m', crs.s) or '') })
+    spotSent = okS and { at = clock } or nil
+    return { ok = okS }
   end
   if action == 'unload' then
     crs, crsState, lastTarget = nil, nil, nil

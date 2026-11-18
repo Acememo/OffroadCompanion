@@ -230,6 +230,11 @@ Now nothing is narrower than about 6 m or changes over less than about 3 m: whoo
 in long swells, the windrows and the turns' sand as wide soft mounds, the banked corner a smooth bowl with its lip just
 past the edge, and the tallest places easing into their limit instead of flattening off.
 
+**Ground version 22** keeps version 21's ground and carries the track's terrain into the mapped dirt roads it
+crosses: along such a road (one meeting the course at 25 degrees or more, not one it follows) the height the track's
+terrain has at its edge carries on into the dirt road and eases out over 16 m of it, the road's ground beside its
+carriageway blended over 2 m. Before, the terrain stopped within 4 m of the track's edge, a lip across the dirt road.
+
 **Ground version 21** is version 18's ground again (versions 19 and 20 reworked every paved crossing and how every
 ramp meets the asphalt, and made other places worse), with two changes: version 19's bridge fix (a bridge the course
 passes under more than 12 m from its ends is always dug under), and the track cut down to a paved road it crosses in
@@ -353,9 +358,10 @@ A mapped dirt road counts as the course's where the course runs along it (within
 least 40 m; then the whole of that mapped road is left unworn, so it is the same from every tile and every process.
 
 Without a course loaded, BeamNG.Earth's dirt roads are as BeamNG.Earth makes them. BeamNG.Earth 1.10 (the version in
-the .exe from Offroad Companion 1.7.25) turns its wear off by default, as do 1.8.1 and older, so there **Default** has
-no potholes either (the track and the dirt roads keep BeamNG.Earth's own smoothing) and the other dirt roads have none
-on Baja, Mild, Rough and Extra. A change of setting plans the roads again, and the ground
+the .exe from Offroad Companion 1.7.25) turns its wear off by default; from 1.7.27 the course painter turns it back on
+at 1.9.1's strength (`BNE_DIRT_BUMP=1.0`, `BNE_DIRT_BANK=0.015`; set either yourself to override), so the table above
+holds on 1.10 too. BeamNG.Earth 1.8.1 and older have no wear, so there **Default** is the same as **Flat**. A change of
+setting plans the roads again, and the ground
 already loaded changes at the next world shift.
 
 Where the course runs along a steep hillside, BeamNG.Earth cuts the road into it with a retaining wall's step: a flat
@@ -684,7 +690,8 @@ and 1.6.0 (and 1.5.x). With 1.10:
   BeamNG.Earth's own ground. The same goes for the trees, road tiles and photos 1.10 keeps on that ground.
 - 1.10 can download road plans made on the BeamNG.Earth project's own computer (when the project turns it on). They
   have no track, so none are used while a course is loaded: those cells are planned on your computer, as before.
-- 1.10 turns its dirt road wear off by default (see Track terrain).
+- 1.10 turns its dirt road wear off by default; the course painter turns it back on at 1.9.1's strength (see
+  Track terrain).
 - 1.10's Low and Medium quality presets use a 2 m physics ground (the **Ground grid** setting). The course painter
   works on either, but the track's banks, dips and relief are coarser on 2 m: choose **Ground grid 1 m** for the
   sharpest track. On a BeamMP server, use the same Ground grid on every computer, so everyone drives the same ground.
@@ -790,7 +797,13 @@ players' origin (when its shared generation is on); afterwards it does again.
 - **Settings**: language, units (or follow the game's), the course line on the ground, road directions between
   course waypoints.
 - **Make track**: record, tap or add points, then Save and load (see above).
-- `+` / `−` on the map zoom it; the map turns with the car. Streets and names can be hidden in Settings.
+- `+` / `−` on the map zoom it; the map turns with the car and follows it every frame. Where the course painter has
+  laid the track, the map's course line is the track as laid (its middle, with its bends and the roads it follows;
+  zoomed in, as wide as the track), else the course file's line. Streets and names can be hidden in Settings.
+- **Report this spot** (under the course's buttons, with the course painter): saves the ground around the car in a
+  zip in the Offroad Companion folder's `spots` folder (the map data there, the course's planned ground, and the
+  heights at each step: BeamNG.Earth's grading, the cut banks, the crossings' shaping, the track's terrain). Send the
+  newest one with a screenshot of what looks wrong.
 - **▾** (end of the tabs) hides the app to a small button; a key can be bound to it (Options, Controls).
 - **App size** (Settings, top): − and + scale the whole app, its text, buttons, turn notes and map labels, from 70 % to
   250 % in 10 % steps (before 1.7.6 this followed the app's width). Resizing the app in the game's UI editor changes

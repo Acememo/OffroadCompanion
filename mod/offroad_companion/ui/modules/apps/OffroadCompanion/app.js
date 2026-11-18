@@ -1,7 +1,7 @@
 // Offroad Companion (the in-game app; lua/ge/extensions/offroadCompanion/main.lua): turn-by-turn road navigation and race-course guidance.
 // The game's UI browser cannot make web requests, so everything goes through the game's Lua (bngApi.engineLua);
 // the Lua side pushes 'OffroadCompanionUpdate' five times a second while this app is on screen.
-var EGPS_APP_BUILD = '2026-11-16 02:00'   // (main.lua M.BUILD: the same, or the game kept an older copy of one of them)
+var EGPS_APP_BUILD = '2026-11-18 03:00'   // (main.lua M.BUILD: the same, or the game kept an older copy of one of them)
 angular.module('beamng.apps')
 .directive('offroadCompanion', ['$sce', function ($sce) {
   'use strict'
@@ -288,6 +288,10 @@ angular.module('beamng.apps')
 '    <span class="grow"></span>' +
 '    <button class="quiet" ng-click="track(\'restart\')">Restart</button>' +
 '    <button class="quiet" ng-click="track(\'unload\')">Close</button>' +
+'  </div>' +
+'  <div class="row" ng-if="d.paint.painter">' +
+'    <button class="quiet" ng-click="track(\'report_spot\')" title="Saves the ground around the car, as the course painter made it, in a zip to send with a screenshot">Report this spot</button>' +
+'    <span class="note" ng-if="d.spotSent">Saving it in {{ spotsDir() }} (the newest zip, in a few seconds)</span>' +
 '  </div>' +
 '</div>' +
 
@@ -832,6 +836,11 @@ angular.module('beamng.apps')
         scope.tab = null
       }
       scope.track = function (action) { lua('offroadCompanion_main.uiTrackAction(' + luaStr(action) + ')') }
+      // where the spot reports go: beside the tracks folder (earthpatch.py spots_dir: the data folder's spots)
+      scope.spotsDir = function () {
+        var t = (scope.d && scope.d.tracksDir) || ''
+        return t ? t.replace(/[\\/]tracks[\\/]?$/, '') + (t.indexOf('\\') >= 0 ? '\\' : '/') + 'spots' : 'the Offroad Companion folder, spots'
+      }
       scope.set = function (k, v) { lua('offroadCompanion_main.uiSet(' + luaStr(k) + ', ' + (typeof v === 'boolean' ? String(v) : luaStr(v)) + ')') }
       // the zoom's label over + / -: how far the map reaches ahead of the car, and the ring around the car (its radius)
       function shortDist (m) {
@@ -1250,9 +1259,16 @@ angular.module('beamng.apps')
         canvas.className = plan ? 'plan' : ''
         var cx = w / 2, cy = plan ? h / 2 : h * 0.68
         var scale = (h * (plan ? 0.45 : 0.62)) / m.radius
-        var mapHeading = plan ? 0 : (m.heading || 0)
+        // the car's motion since this update (OffroadCompanionPose, every frame or so): the map follows it smoothly
+        // between the updates, which come 5 times a second (none across a world shift: another frame's metres)
+        var mdx = 0, mdy = 0, hdg = m.heading || 0
+        if (pose && m.cx != null && pose.a === m.a && typeof pose.x === 'number' && typeof pose.y === 'number') {
+          mdx = pose.x - m.cx; mdy = pose.y - m.cy
+          if (mdx * mdx + mdy * mdy > 250 * 250) { mdx = 0; mdy = 0 } else if (typeof pose.h === 'number') hdg = pose.h
+        }
+        var mapHeading = plan ? 0 : hdg
         var hd = mapHeading * Math.PI / 180, cs = Math.cos(hd), sn = Math.sin(hd)
-        var ox = plan ? pan.x : 0, oy = plan ? pan.y : 0
+        var ox = plan ? pan.x : mdx, oy = plan ? pan.y : mdy
         function P (x, y) {
           x -= ox; y -= oy
           var rx = x * cs - y * sn, ry = x * sn + y * cs
@@ -1290,7 +1306,7 @@ angular.module('beamng.apps')
         }
         // range ring and north
         ctx.strokeStyle = 'rgba(147,160,184,.14)'; ctx.lineWidth = 1
-        var c0 = P(0, 0)
+        var c0 = P(mdx, mdy)
         ctx.beginPath(); ctx.arc(c0[0], c0[1], m.radius * scale * 0.5, 0, 2 * Math.PI); ctx.stroke()
         function line (pts, color, width, doneColor) {
           if (!pts || pts.length < 2) return
@@ -1308,7 +1324,40 @@ angular.module('beamng.apps')
             ctx.stroke()
           }
         }
-        line(m.course, '#27D9FF', 5 * S, 'rgba(39,217,255,.3)')
+        // the course: where the companion said where the track lies, its points are the painted track's middle
+        // (course.lua mapData), the 4th value its half width; drawn as a smooth curve through them (each point the
+        // control of the curve between its neighbours' midpoints) and as wide as the track when zoomed in that far
+        function courseLine (pts, color, width, doneColor) {
+          if (!pts || pts.length < 2) return
+          var q = []
+          for (var i = 0; i < pts.length; i++) q.push(P(pts[i][0], pts[i][1]))
+          function mid (a, b) { return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] }
+          function px (k) {
+            var hw = pts[k][3]
+            return Math.round(2 * (typeof hw === 'number' ? Math.max(width, 2 * hw * scale) : width)) / 2
+          }
+          ctx.lineJoin = 'round'; ctx.lineCap = 'round'
+          for (var pass = 0; pass < 2; pass++) {
+            var k = 0
+            while (k < q.length - 1) {
+              // a run of pieces as wide and as driven as this one: one path (no seams between the pieces)
+              var wpx = px(k), done = pts[k][2] === 1, k1 = k
+              while (k1 + 1 < q.length - 1 && px(k1 + 1) === wpx && (pts[k1 + 1][2] === 1) === done) k1++
+              ctx.beginPath()
+              var a0 = k === 0 ? q[0] : mid(q[k - 1], q[k])
+              ctx.moveTo(a0[0], a0[1])
+              for (var j = k; j <= k1; j++) {
+                var b = j === q.length - 2 ? q[j + 1] : mid(q[j], q[j + 1])
+                if (j === 0) ctx.lineTo(b[0], b[1]); else ctx.quadraticCurveTo(q[j][0], q[j][1], b[0], b[1])
+              }
+              ctx.lineWidth = pass === 0 ? wpx + 2 * S : wpx
+              ctx.strokeStyle = pass === 0 ? '#0F1524' : (done ? doneColor : color)
+              ctx.stroke()
+              k = k1 + 1
+            }
+          }
+        }
+        courseLine(m.course, '#27D9FF', 5 * S, '#18525E')     // (opaque: the pieces overlap at their round ends)
         line(m.route, '#E8B44A', 4 * S, 'rgba(232,180,74,.3)')
         // the track being made, its points and checkpoints
         ;(m.draft || []).forEach(function (dl) {
@@ -1326,8 +1375,8 @@ angular.module('beamng.apps')
           ctx.fillStyle = '#FFFFFF'; ctx.fill(); ctx.strokeStyle = '#FF6AD5'; ctx.lineWidth = 3 * S; ctx.stroke()
         })
         // street names
-        var carP = P(0, 0)
-        var north = P(0, m.radius * 0.95)
+        var carP = P(mdx, mdy)
+        var north = P(mdx, mdy + m.radius * 0.95)
         if (shown.length) {
           // not under the speed box, the zoom buttons, the credit, the hint or the N
           var keepOut = [[0, h - 75 * S, 80 * S, h], [w - 46 * S, h - 82 * S, w, h], [w - 140 * S, h - 22 * S, w, h],
@@ -1352,7 +1401,7 @@ angular.module('beamng.apps')
         // the car: pointing up when the map turns with it, else its heading
         ctx.save()
         ctx.translate(carP[0], carP[1])
-        ctx.rotate(((m.heading || 0) - mapHeading) * Math.PI / 180)
+        ctx.rotate((hdg - mapHeading) * Math.PI / 180)
         ctx.scale(S, S)
         ctx.beginPath()
         ctx.moveTo(0, -11); ctx.lineTo(8, 8); ctx.lineTo(0, 4); ctx.lineTo(-8, 8); ctx.closePath()
@@ -1398,6 +1447,18 @@ angular.module('beamng.apps')
       window.addEventListener('mouseup', onUp)
 
       // -- updates from Lua --------------------------------------------------------------------------------------
+      // the car's pose between the updates (main.lua POSE_UI_S): the map drawn again at the next frame, no digest
+      var pose = null, poseFrame = false
+      scope.$on('OffroadCompanionPose', function (event, d) {
+        pose = d
+        if (poseFrame) return
+        poseFrame = true
+        ;(window.requestAnimationFrame || setTimeout)(function () {
+          poseFrame = false
+          if (!scope.d || !scope.d.map) return
+          try { draw() } catch (e) { if (window.console) console.warn('OffroadCompanion map: ' + (e && e.message || e)) }
+        })
+      })
       scope.$on('OffroadCompanionUpdate', function (event, data) {
         scope.$evalAsync(function () {
           scope.d = lists(data) || {}

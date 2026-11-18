@@ -201,5 +201,38 @@ do
   check(fmt.t('es', 'lap', 2, '1:00.00') == 'Vuelta 2: 1:00.00', 'spanish format')
 end
 
+-- -- the minimap's course: the painted track's middle (course_sides) -----------------------------------------------
+do
+  -- a straight line east; the companion says the track bends 12 m north (left) from 100 to 300 m, 4 m half width
+  local pts = {}
+  for i = 0, 50 do pts[#pts + 1] = ll(i * 10, 0) end
+  local c = course.new({ name = 'Bend', kind = 'race', points = pts, waypoints = {}, zones = {}, rm = {} })
+  c:update(anchor, 200, 0, 90, 10, 1, 'en', false)
+  local e = c.e
+  local sides = { step = 10, hw = {}, ctr = {}, version = 1 }
+  for i = 10, 30 do sides.ctr[i], sides.hw[i] = 12, 4 end
+  local x, y, hw = course.paintedAt(e, sides, 200)
+  near(x, 200, 0.01, 'painted middle: along as the line')
+  near(y, 12, 0.01, 'painted middle: 12 m left (north) of the line')
+  check(hw == 4, 'painted half width')
+  local x2, y2, hw2 = course.paintedAt(e, sides, 450)
+  near(y2, 0, 0.01, 'not known there: the line itself')
+  check(hw2 == nil, 'no width where not known')
+  sides.ctr[31], sides.hw[31] = 6, 3
+  local _, y3, hw3 = course.paintedAt(e, sides, 305)
+  near(y3, 9, 0.01, 'between two known samples: interpolated')
+  near(hw3, 3.5, 0.01, 'its width too')
+  c.sides = sides
+  local md = c:mapData(200, 0, 600)
+  local found = false
+  for _, p in ipairs(md.line) do
+    if math.abs(p[1]) < 0.01 then found = true; near(p[2], 12, 0.01, 'the map line through the painted middle'); check(p[4] == 4, 'with its width') end
+  end
+  check(found, 'a map point at the car')
+  c.sides = nil
+  local md2 = c:mapData(200, 0, 600)
+  check(#md2.line > 2 and md2.line[1][4] == nil, 'no sides yet: the course line')
+end
+
 print(string.format('%d passed, %d failed', pass, fail))
 os.exit(fail == 0 and 0 or 1)

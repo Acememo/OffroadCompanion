@@ -655,3 +655,67 @@ class TestTerrain12(unittest.TestCase):
         la, lo = ll(np.array([1500.0, -600.0]), np.array([0.0, 0.0]))
         self.assertTrue(np.all(rf.paved_clear(la, lo, ends, np.array([3.5])) == 1.0), "past the road's ends: all")
         self.assertTrue(np.all(rf.paved_clear(la, lo, np.zeros((0, 4)), np.zeros(0)) == 1.0), "no paved road: all")
+
+
+@unittest.skipUnless(HAVE_NP, "numpy")
+class TestTerrain22(unittest.TestCase):
+    """Terrain 22 (the user, 2026-11-18: "when it connects with dirt roads it should be corrected on that dirt road
+    side"): the track's relief carried into a dirt road it crosses, easing out along it (relief.dirt_carry)."""
+
+    def setUp(self):
+        ll, xy = frame()
+        self.ll = ll
+        self.course = cr.Course([tuple(map(float, ll(x, 0.0))) for x in range(0, 1001, 50)])
+        n = len(self.course.lat)
+        self.profs = {0: {"a": 0, "b": n - 1, "hw": [4.0] * n, "ctr": [0.0] * n}}
+        self.edge = 4.0 + rf.EDGE_M
+
+        def field(lat, lon):                # (a stand-in relief: 0.6 m on the track, out over FADE_M past its edge)
+            x, y = xy(lat, lon)
+            return 0.6 * (1.0 - rf._smooth((np.abs(y) - self.edge) / rf.FADE_M))
+        self.field = field
+
+    def road(self, x0, y0, x1, y1):
+        (la0, lo0), (la1, lo1) = self.ll(x0, y0), self.ll(x1, y1)
+        return np.array([[float(lo0), float(la0), float(lo1), float(la1)]]), np.array([3.0])
+
+    def test_carried_along_a_crossing(self):
+        ends, hws = self.road(500.0, -200.0, 500.0, 200.0)          # a dirt road straight across at x = 500
+        ys = np.array([0.0, self.edge + 1.0, self.edge + 8.0, self.edge + rf.DIRT_CARRY_M - 0.5,
+                       self.edge + rf.DIRT_CARRY_M + 3.0])
+        la, lo = self.ll(np.full(len(ys), 500.0), ys)
+        dz0 = self.field(la, lo)
+        dz = rf.dirt_carry(self.course, self.profs, la, lo, dz0, ends, hws, self.field)
+        self.assertAlmostEqual(dz[0], dz0[0], msg="the track's own relief stays")
+        want = 0.6 * (1.0 - rf._smooth(np.array([1.0, 8.0, rf.DIRT_CARRY_M - 0.5]) / rf.DIRT_CARRY_M))
+        np.testing.assert_allclose(dz[1:4], want, atol=1e-6, err_msg="eased out along the dirt road")
+        self.assertGreater(dz[2], dz0[2] + 0.2, "past the old 4 m fade: still part of the way there")
+        self.assertEqual(dz[4], dz0[4], "past the carry: the dirt road's own")
+        # the other side of the course the same, mirrored
+        la2, lo2 = self.ll(np.full(len(ys), 500.0), -ys)
+        dz2 = rf.dirt_carry(self.course, self.profs, la2, lo2, self.field(la2, lo2), ends, hws, self.field)
+        np.testing.assert_allclose(dz2, dz, atol=1e-6)
+
+    def test_off_the_dirt_road_and_parallel_ones_left(self):
+        ends, hws = self.road(500.0, -200.0, 500.0, 200.0)
+        la, lo = self.ll(np.array([500.0 + 3.0 + rf.DIRT_CARRY_SIDE_M + 0.5, 520.0]),
+                         np.array([self.edge + 6.0, self.edge + 6.0]))
+        dz0 = self.field(la, lo)
+        np.testing.assert_array_equal(rf.dirt_carry(self.course, self.profs, la, lo, dz0, ends, hws, self.field), dz0,
+                                      "beside the dirt road's carriageway and its blend: as it was")
+        pe, ph = self.road(0.0, 12.0, 1000.0, 12.0)                 # a dirt road along the course, 12 m off
+        la, lo = self.ll(np.array([300.0, 600.0]), np.array([12.0, 11.0]))
+        dz0 = self.field(la, lo)
+        np.testing.assert_array_equal(rf.dirt_carry(self.course, self.profs, la, lo, dz0, pe, ph, self.field), dz0,
+                                      "a dirt road along the course: not a crossing")
+
+    def test_skewed_crossing(self):
+        # at 45 degrees: the edge is further along the dirt road (edge / sin 45), and the carry runs from there
+        ends, hws = self.road(300.0, -200.0, 700.0, 200.0)
+        t = np.array([2.0, 10.0])                                    # m along the dirt road past the edge
+        along = self.edge * math.sqrt(2.0) + t
+        x, y = 500.0 + along / math.sqrt(2.0), along / math.sqrt(2.0)
+        la, lo = self.ll(x, y)
+        dz0 = self.field(la, lo)
+        dz = rf.dirt_carry(self.course, self.profs, la, lo, dz0, ends, hws, self.field)
+        np.testing.assert_allclose(dz, 0.6 * (1.0 - rf._smooth(t / rf.DIRT_CARRY_M)), atol=1e-6)

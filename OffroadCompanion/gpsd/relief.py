@@ -995,6 +995,98 @@ def paved_clear(lat, lon, ends, hws, in_m=None, fade_m=None):
     return out
 
 
+# (terrain 22; the user, 2026-11-18, a screenshot of the track crossing a mapped dirt road: "when it connects with dirt
+# roads it should be corrected on that dirt road side") The track's relief faded out FADE_M past its edge, across a
+# dirt road it crosses too: the dirt road met the track's whoops, washes and ruts in a lip 4 m long. Now along a dirt
+# road the course crosses (not one it follows: at DIRT_CROSS_MIN_DEG or more to it) the relief at the track's edge
+# carries on into the dirt road and eases out over DIRT_CARRY_M of it, the dirt road's own ground beside its
+# carriageway blended over DIRT_CARRY_SIDE_M. The track's own relief stays the course's.
+DIRT_CROSS_TV = 22
+DIRT_CARRY_M = 16.0
+DIRT_CARRY_SIDE_M = 2.0
+DIRT_CROSS_MIN_DEG = 25.0
+
+
+def dirt_carry(course, profiles, lat, lon, dz, ends, hws, relief_fn, near=None):
+    """dz (the relief at the points, any shape) with the track's relief carried into the dirt roads the course crosses
+    (DIRT_CARRY_*): ends (M, 4) lon0, lat0, lon1, lat1 of those dirt roads' segments (BeamNG.Earth's, not the course's
+    own), hws (M,) their half widths; relief_fn(lat, lon) the relief at other points (the track's edge on each dirt
+    road). near: nearest()'s answer for the points. Pure given relief_fn."""
+    shape = np.shape(dz)
+    out = np.array(dz, np.float64).ravel()
+    lat = np.asarray(lat, np.float64).ravel()
+    lon = np.asarray(lon, np.float64).ravel()
+    ends = np.asarray(ends, np.float64).reshape(-1, 4)
+    hws = np.asarray(hws, np.float64).ravel()
+    profiles = {k: p for k, p in profiles.items() if p}
+    if not len(ends) or not len(lat) or not profiles:
+        return out.reshape(shape)
+    idx, d, s = near if near is not None else nearest(course, profiles, lat, lon)
+    if not len(idx):
+        return out.reshape(shape)
+    pl = courseroads.Plane(float(lat[idx].mean()), float(lon[idx].mean()))
+    px, py = pl.xy(lat[idx], lon[idx])
+    ax, ay = pl.xy(ends[:, 1], ends[:, 0])
+    bx, by = pl.xy(ends[:, 3], ends[:, 2])
+    # each point's nearest dirt road segment, and how far off its middle it is (only within its carriageway + the side
+    # blend: the rest of the ground is the relief's own)
+    vx, vy = bx - ax, by - ay
+    L = np.maximum(np.hypot(vx, vy), 1e-9)
+    best = np.full(len(idx), np.inf)
+    seg = np.zeros(len(idx), np.int64)
+    side = np.zeros(len(idx))
+    for j0 in range(0, len(ends), 64):
+        j1 = min(len(ends), j0 + 64)
+        t = np.clip(((px[:, None] - ax[None, j0:j1]) * vx[None, j0:j1] + (py[:, None] - ay[None, j0:j1]) * vy[None, j0:j1])
+                    / (L[None, j0:j1] ** 2), 0.0, 1.0)
+        ex = px[:, None] - (ax[None, j0:j1] + t * vx[None, j0:j1])
+        ey = py[:, None] - (ay[None, j0:j1] + t * vy[None, j0:j1])
+        dist = np.hypot(ex, ey) - hws[None, j0:j1]            # (past the carriageway's edge)
+        jj = dist.argmin(axis=1)
+        r = np.arange(len(idx))
+        better = dist[r, jj] < best
+        best = np.where(better, dist[r, jj], best)
+        seg = np.where(better, j0 + jj, seg)
+        side = np.where(better, np.hypot(ex[r, jj], ey[r, jj]), side)
+    cand = np.flatnonzero(best < DIRT_CARRY_SIDE_M)
+    if not len(cand):
+        return out.reshape(shape)
+    f = _Facts(profiles).at(s[cand])
+    hw, ctr = f["hw"], f["ctr"]
+    # the course's direction at each point (its line between the samples round it)
+    clat = np.asarray(course.lat, np.float64)
+    clon = np.asarray(course.lon, np.float64)
+    n = len(clat)
+    i0 = np.clip(np.floor(s[cand] / STEP).astype(np.int64), 0, max(0, n - 2))
+    cx0, cy0 = pl.xy(clat[i0], clon[i0])
+    cx1, cy1 = pl.xy(clat[np.minimum(i0 + 1, n - 1)], clon[np.minimum(i0 + 1, n - 1)])
+    tl = np.maximum(np.hypot(cx1 - cx0, cy1 - cy0), 1e-9)
+    tx, ty = (cx1 - cx0) / tl, (cy1 - cy0) / tl
+    nx, ny = -ty, tx                                            # (the course's left)
+    j = seg[cand]
+    ux, uy = vx[j] / L[j], vy[j] / L[j]
+    un = ux * nx + uy * ny                                     # (the dirt road's offset per m along it: its sine)
+    dm = d[cand] - ctr                                         # (the point's offset from the track's middle)
+    crossing = np.abs(un) >= math.sin(math.radians(DIRT_CROSS_MIN_DEG))
+    edge = hw + EDGE_M
+    past = (np.abs(dm) - edge) / np.maximum(np.abs(un), 1e-6)  # (m along the dirt road past the track's edge)
+    use = crossing & (past > 0.0) & (past < DIRT_CARRY_M)
+    if not use.any():
+        return out.reshape(shape)
+    k = np.flatnonzero(use)
+    # the track's edge on the dirt road: from the point along the dirt road, toward the track, past m
+    toward = -np.sign(dm[k]) * np.sign(un[k])
+    qx = px[cand][k] + toward * past[k] * ux[k]
+    qy = py[cand][k] + toward * past[k] * uy[k]
+    qla, qlo = pl.ll(qx, qy)
+    at_edge = np.asarray(relief_fn(qla, qlo), np.float64).ravel()
+    carried = at_edge * (1.0 - _smooth(past[k] / DIRT_CARRY_M))
+    w = 1.0 - _smooth(best[cand][k] / DIRT_CARRY_SIDE_M)         # (1 on the carriageway, 0 past the blend)
+    g = idx[cand][k]
+    out[g] = out[g] + w * (carried - out[g])
+    return out.reshape(shape)
+
+
 def paved_past(lat, lon, ends, hws, cap=100.0, feet=False):
     """Per point: how far (m) it is past the nearest paved road's asphalt edge (0 on it; cap at most), ends and hws as
     paved_clear's. feet: (that, the nearest point of that road's middle: lat, lon; the point itself where none is
