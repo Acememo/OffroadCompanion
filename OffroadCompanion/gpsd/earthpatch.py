@@ -249,6 +249,7 @@ class _State:
         self.plan_failed = {}       # (what, k, demand) -> time: a window not to be had then (_planned)
         self.plan_locks = {}        # (what, k) -> this process's lock while it plans the window
         self.merged = OrderedDict()  # (cell key str, cid) -> Features
+        self.handed = OrderedDict()  # (cell key str, plan key) -> what its roads were given as (note_roads)
         self.segs = OrderedDict()   # cell key str -> (lonlat segments (M, 4), half widths (M,))
         self.dems = []              # Dem instances made in this process (BeamNG.Earth's own first)
         self.own_dem = None
@@ -1134,6 +1135,34 @@ class _State:
             self.wins[k] = ps["pieces"]
         return ps["pieces"]
 
+    def note_roads(self, key, pkey, fp):
+        """(1.7.30) Logs a cell whose roads layer, as BeamNG.Earth's builds get it (kind demand), is not the one this
+        process gave them before under the same course: what was built from the first (road tiles, their walls and
+        the track's strip, the ground's blocks) stays as it was, the next builds differ (the user, 2026-11-18: "when I
+        started pushing speed ... I catched up to ground adjusting ... the painted texture is up"). fp: (complete,
+        the bridges made ground roads, the track's pieces, those drawn as rock)."""
+        k = (str(key), pkey)
+        with self.lock:
+            old = self.handed.get(k)
+            self.handed[k] = fp
+            self.handed.move_to_end(k)
+            while len(self.handed) > 20000:
+                self.handed.popitem(last=False)
+            if old is None or old == fp:
+                return
+            self.stats["roads_changed"] = self.stats.get("roads_changed", 0) + 1
+        what = []
+        if old[0] != fp[0]:
+            what.append("the course's windows there " + ("complete now" if fp[0] else "incomplete now"))
+        if old[1] != fp[1]:
+            what.append(f"bridges made ground roads {len(old[1])} -> {len(fp[1])}")
+        if old[2] != fp[2]:
+            what.append(f"track pieces {len(old[2])} -> {len(fp[2])}")
+        if old[3] != fp[3]:
+            what.append(f"rock stretches {old[3]} -> {fp[3]}")
+        log.info("course painter: cell %s's roads changed for BeamNG.Earth's builds (%s): what was built there "
+                 "before keeps the old ground", key, "; ".join(what) or "?")
+
     def roads_for(self, md, key, base, kind):
         plan = self.current()
         if plan is None:
@@ -1151,6 +1180,7 @@ class _State:
                 return got
         bounds = key.bounds()
         ps, complete = [], True
+        flat_ids = ()
         if plan.clearing and base is not None and len(base):
             idx = set()
             for c in plan.clearing:
@@ -1163,6 +1193,7 @@ class _State:
                                                            elev_fn=self.elev(md), keep_under=keep, keep_from_m=kf,
                                                            ground_keep_m=kg))
             if idx:
+                flat_ids = tuple(sorted(str(base.ids[i]) for i in idx))
                 base = corridor.flatten(self.mapgeom, base, sorted(idx))
                 with self.lock:
                     self.stats["bridges_flat"] += len(idx)
@@ -1220,6 +1251,9 @@ class _State:
                 out.__dict__[PHOTO_KEY] = photo
         if out is not base0:
             _carry(base0, out, md, key, share_tag(self))
+        if kind in DEMAND_KINDS:
+            self.note_roads(key, plan.key, (complete, flat_ids, tuple(sorted(str(p.get("id")) for p in ps)),
+                                            sum(1 for p in ps if p.get("surface") == "rock")))
         if complete:                            # (a window that failed is tried again later: not kept)
             with self.lock:
                 self.merged[mk] = out
@@ -2009,6 +2043,10 @@ def install():
         install_decisions(st)
     except Exception as e:                  # (no decisions: BeamNG.Earth before 1.10)
         log.debug("course painter: no decision archive hook (%s: %s)", type(e).__name__, e)
+    try:
+        install_short_log(st)
+    except Exception as e:
+        log.debug("course painter: no short plans log (%s: %s)", type(e).__name__, e)
     demmod.Dem.__init__ = dem_init
     mapdata.MapData.cell = cell
     if cells is not None:
@@ -2144,6 +2182,38 @@ def install_plancache(st):
             return out
         _bake_expect._earthgps = True
         pc.PlanCache._bake_expect = _bake_expect
+    return True
+
+
+def install_short_log(st):
+    """(1.7.30) Logs a cell BeamNG.Earth planned short of something (grading._Planner.short: an elevation or map
+    download not in yet; its own log of it needs BNGE_REVISIT_SITES): what is built there from those plans may differ
+    from what is built after the cell is planned whole (the user, 2026-11-18: the ground "adjusting" at speed). Once a
+    cell a process."""
+    import grading as gradingmod
+    P = getattr(gradingmod, "_Planner", None)
+    orig = getattr(P, "_plan_cell", None) if P is not None else None
+    if orig is None or getattr(orig, "_earthgps", False):
+        return False
+    said = set()
+
+    def _plan_cell(self, key, *a, **kw):
+        short = getattr(self, "short", None)
+        was = short is not None and key in short
+        out = orig(self, key, *a, **kw)
+        try:
+            if short is not None and not was and key in short and str(key) not in said:
+                said.add(str(key))
+                with st.lock:
+                    st.stats["short_plans"] = st.stats.get("short_plans", 0) + 1
+                log.info("course painter: BeamNG.Earth planned cell %s short of something (a download not in yet): "
+                         "what is built there now may differ from what is built later", key)
+        except Exception:
+            pass
+        return out
+    _plan_cell._earthgps = True
+    _plan_cell._orig = orig
+    P._plan_cell = _plan_cell
     return True
 
 
@@ -2946,10 +3016,17 @@ def watch_tiles(server, st=None):
     return True
 
 
-def _log_tail():
-    """The end of the server's log file (its root logger's file handlers), or None."""
-    for h in logging.getLogger().handlers + logging.getLogger("earthd").handlers:
-        fn = getattr(h, "baseFilename", None)
+def _log_tail(cache_dir=None):
+    """The end of the server's log file (BeamNG.Earth's own report's: reportsend.server_log_path, the launcher's
+    server.log; else its root logger's file handlers), or None."""
+    fns = [os.environ.get("BNGE_SERVER_LOG")]       # (BeamNG.Earth before 1.10: no reportsend)
+    try:
+        import reportsend
+        fns.append(reportsend.server_log_path(cache_dir or ""))
+    except Exception:
+        pass
+    fns += [getattr(h, "baseFilename", None) for h in logging.getLogger().handlers + logging.getLogger("earthd").handlers]
+    for fn in fns:
         if fn and os.path.isfile(fn):
             try:
                 with open(fn, "rb") as f:
@@ -3069,7 +3146,7 @@ def report_spot(server, aid, lat, lon, note="", conn=None, game=None):
             z.writestr(name, buf.getvalue())
         if drawn_facts:
             z.writestr("tiles.json", json.dumps(drawn_facts, indent=1, default=str))
-        tail = _log_tail()
+        tail = _log_tail(getattr(server, "cache_dir", None) or getattr(md, "cache_dir", None))
         if tail:
             z.writestr("server.log", tail)
         try:

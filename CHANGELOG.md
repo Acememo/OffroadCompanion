@@ -3,6 +3,17 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.30 (2026-11-18)
+
+- **Finding why the ground changes as you catch up to it.** A spot report at RM 5.6 (driving fast) showed one place
+  built from three different road plans in one session: the road pieces (a retaining wall left standing as a block,
+  the track's strip floating where the ground used to be), the ground block under the car (up to 4 m lower by a
+  bridge) and the plan the server holds now. The server's log now says when that happens and why: when a place's
+  roads change for BeamNG.Earth's builds after it was built (the course's windows arriving late, a bridge decided
+  differently, a stretch of rock split off late) and when BeamNG.Earth plans a place short of a download not in yet.
+- **Report this spot includes the server's log** (1.7.29 looked in the wrong place for it).
+- The ground is unchanged (version 23).
+
 ## 1.7.29 (2026-11-18)
 
 - **Report this spot shows ground that is drawn but not solid.** In BeamNG.Earth's usual mode the solid ground is

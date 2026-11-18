@@ -686,6 +686,30 @@ class TestInsideEarth(unittest.TestCase):
         self.assertTrue(all(ids[k] <= ids[k + 1] for k in range(len(ids) - 1)), "ids stay sorted")
         self.assertEqual(len(f.en), len(f.lonlat))
 
+    def test_roads_changed_logged(self):
+        """(1.7.30) A cell's roads handed to BeamNG.Earth's builds unlike before under the same course: logged (what
+        was built from the first keeps its ground); the same again, or the first time: nothing."""
+        st = self.earthpatch.state()
+        n0 = st.stats.get("roads_changed", 0)
+        k = "14/1/2"
+        with self.assertNoLogs("earthd.offroad", level="INFO"):
+            st.note_roads(k, "p1", (False, (), ("a",), 0))
+            st.note_roads(k, "p1", (False, (), ("a",), 0))
+            st.note_roads(k, "p2", (True, (), ("a", "b"), 0))         # (another course: its own first time)
+        with self.assertLogs("earthd.offroad", level="INFO") as cm:
+            st.note_roads(k, "p1", (True, ("br",), ("a", "b"), 1))
+        self.assertIn("complete now", cm.output[0])
+        self.assertIn("bridges made ground roads 0 -> 1", cm.output[0])
+        self.assertIn("track pieces 1 -> 2", cm.output[0])
+        self.assertEqual(st.stats["roads_changed"], n0 + 1)
+
+    def test_short_plans_hooked(self):
+        import grading
+        P = getattr(grading, "_Planner", None)
+        if P is None:
+            self.skipTest("no _Planner")
+        self.assertTrue(getattr(P._plan_cell, "_earthgps", False))
+
     def test_spot_report(self):
         """The app's "Report this spot" (earthpatch.report_spot): one zip with the place's map cells, the course's
         windows there and the ground round the car at each stage of the grading, the last the ground itself."""
@@ -741,7 +765,12 @@ class TestInsideEarth(unittest.TestCase):
         try:
             game = {"x0": 140.0, "y0": -4.0, "step": 2.0, "n": 3, "z": [1.0, 2.0, False, 1.0, 2.0, 3.0, 1, 2, 3],
                     "car": {"x": 150.0, "y": 6.0, "z": 2.5}}
-            path = ep.report_spot(Server(), 7, lat, lon, "walls here", conn=Conn(), game=game)
+            logf = os.path.join(tempfile.mkdtemp(prefix="egps-log-"), "server.log")
+            with open(logf, "w") as f:
+                f.write("a line of the server's log\n")
+            from unittest import mock
+            with mock.patch.dict(os.environ, {"BNGE_SERVER_LOG": logf}):
+                path = ep.report_spot(Server(), 7, lat, lon, "walls here", conn=Conn(), game=game)
         finally:
             ep.SPOT_HALF_M, ep.SPOT_ELEV_HALF_M, ep.SPOT_CELLS_M = old
         self.addCleanup(lambda: os.path.exists(path) and os.remove(path))
@@ -754,6 +783,7 @@ class TestInsideEarth(unittest.TestCase):
             gm = np.load(io.BytesIO(z.read("game.npz")))
             dr = np.load(io.BytesIO(z.read("drawn.npz")))
             tiles = __import__("json").loads(z.read("tiles.json"))
+            self.assertIn(b"a line of the server's log", z.read("server.log"), "the launcher's log (reportsend's)")
         # (1.7.29) the game's own ground, the far tiles drawn there
         self.assertEqual(gm["z"].shape, (3, 3))
         self.assertTrue(np.isnan(gm["z"][0, 2]) and gm["z"][2, 2] == 3.0, "row by row from the south; false: none")
