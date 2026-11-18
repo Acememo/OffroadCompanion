@@ -37,6 +37,13 @@ REACH_M = 15.0              # m out from the road's level the bank meets the nat
 BIN_M = 1.0                 # m of course between probes
 SAME_TOL_M = 0.5            # the caller's ground this near the probes' (relative to each one's natural ground)
 SOFT_TV = 17                # (the caller's ground off the probes': the bank fades out over SAME_FADE_M)
+# (terrain 24; the user, 2026-11-18: "Paved roads shouldn't get modified like this", RM 5.8 out of Ensenada: a bank of
+# up to 2.8 m filled against a paved road's own cut where the course's track runs alongside it) None within
+# PAVED24_IN_M of a paved road's asphalt, fading in over PAVED24_FADE_M (earthpatch.banks_at): the banks are for a
+# bare face beside the dirt track on a hillside; beside a paved road BeamNG.Earth's own grading and walls stay.
+PAVED24_TV = 24             # (shaping.NO_JOINS_TV)
+PAVED24_IN_M = 8.0
+PAVED24_FADE_M = 4.0
 SAME_FADE_M = 1.0
 OVER_TOL_M = 0.05           # only ground the grading left between the road's level and the natural ground is banked
 

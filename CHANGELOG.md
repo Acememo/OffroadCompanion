@@ -3,6 +3,24 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.31 (2026-11-18)
+
+- **Ground version 24: no more blocks, spikes or dug paved road edges where the course meets a paved road.** Four
+  spot reports from RM 5.3 to 5.8 out of Ensenada traced every one to the ramps the course painter built where the
+  course joins or leaves a paved road. Each was a straight slope from the road's level to the ground's, with side
+  slopes reaching up to 60 m from the track. Beside a road those side slopes filled 5 m into the next road's cutting
+  (the block by the bridge, its walls where the fill was cut off at that road's asphalt), left 4 m fills cut off along
+  the asphalt (the spikes) and dug a 3.6 m trench along a paved road's edge. Replayed on the reports' own data, keeping
+  the ramps narrow or small still left a 4 m fill. From ground version 24 there are no such ramps: the track meets a
+  paved road as BeamNG.Earth grades it, and the painter changes the ground beside a paved road by half a metre at
+  most and never on the asphalt. The cut banks beside the track also stay 8 m clear of paved roads. The dips under
+  bridges and the crossings in cuttings are unchanged. Older ground versions are unchanged.
+- **The ground drawn and the ground driven agree.** The four reports' measurements in the game matched the server's
+  ground everywhere but under bridge decks, and the server's log showed no place planned twice. The phantoms of
+  earlier sessions came from ground kept from before 1.7.29.
+- Still BeamNG.Earth's own: the stepped cut banks along some paved roads (its grading on a 1 m grid).
+- 1.7.31 lays ground version 24, so everyone on a BeamMP server should update together.
+
 ## 1.7.30 (2026-11-18)
 
 - **Finding why the ground changes as you catch up to it.** A spot report at RM 5.6 (driving fast) showed one place

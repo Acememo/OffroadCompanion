@@ -686,6 +686,32 @@ class TestInsideEarth(unittest.TestCase):
         self.assertTrue(all(ids[k] <= ids[k + 1] for k in range(len(ids) - 1)), "ids stay sorted")
         self.assertEqual(len(f.en), len(f.lonlat))
 
+    def test_banks_off_the_paved_roads(self):
+        """(terrain 24) The cut banks beside the track (banks.py) are none within banks.PAVED24_IN_M of a paved road's
+        asphalt (the residential road across the course at x 4200): beside a paved road BeamNG.Earth's own ground."""
+        from gpsd import banks
+        from unittest import mock
+        st = self.earthpatch.state()
+        c = st.current().paint
+        if c.tv < banks.PAVED24_TV:
+            self.skipTest("terrain before 24")
+        xs = np.array([4200.0, 4205.0, 4212.0, 4230.0, 4260.0])
+        la, lo = ll(xs, np.full_like(xs, 60.0))
+        graded = np.zeros(len(xs))
+
+        class G:
+            md = self.md
+
+            @staticmethod
+            def elev(a, b):
+                return np.zeros(np.size(a))
+        with mock.patch.object(banks, "banks", lambda *a, **k: np.asarray(a[5], np.float64) + 2.0):
+            out = st.banks_at(G(), None, la, lo, graded, graded, (c, {}), None)
+        self.assertEqual(float(out[0]), 0.0, "on the asphalt: none")
+        self.assertEqual(float(out[1]), 0.0, "on its side: none")
+        self.assertEqual(float(out[-1]), 2.0, "away from it: the bank")
+        self.assertTrue(np.all(np.diff(out) >= -1e-9), "fading in away from the road")
+
     def test_roads_changed_logged(self):
         """(1.7.30) A cell's roads handed to BeamNG.Earth's builds unlike before under the same course: logged (what
         was built from the first keeps its ground); the same again, or the first time: nothing."""

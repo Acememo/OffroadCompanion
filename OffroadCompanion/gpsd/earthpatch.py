@@ -999,6 +999,11 @@ class _State:
         def elev_fn(la, lo):
             return np.asarray(elev(np.asarray(la, np.float64), np.asarray(lo, np.float64)), np.float64)
         out = banks.banks(c, profs, lat, lon, base, graded, grade_fn, elev_fn, near=near)
+        md = getattr(grader, "md", None) or self.md
+        if getattr(c, "tv", 1) >= banks.PAVED24_TV and md is not None:
+            g0 = np.asarray(graded, np.float64).reshape(np.shape(out))
+            out = g0 + self.paved_clear(md, lat, lon, np.asarray(out, np.float64) - g0, banks.PAVED24_IN_M,
+                                        banks.PAVED24_FADE_M)
         n = int(np.count_nonzero(out != np.asarray(graded, np.float64).reshape(np.shape(out))))
         if n:
             with self.lock:

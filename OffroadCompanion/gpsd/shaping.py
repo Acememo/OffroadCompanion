@@ -154,6 +154,19 @@ XING_DECK_END_M = 12.0      # (corridor.AT_GRADE_REACH_M: nearer an abutment Bea
 GROUND_DECK_TV = 23
 DECK23_GROUND_M = 2.0
 
+# (terrain 24; the user, 2026-11-18, four spot reports from RM 5.3 - 5.8 out of Ensenada: "bad paved spikes", "We still
+# need to fix this paved block and prevent them from appearing elsewhere", "Paved roads shouldn't get modified like
+# this"). Every one was the ramps off the paved roads (join17, terrain 13's): a straight design surface from the road's
+# level to the ground's, its side slopes reaching REACH17_M (45 m full, gone 15 m further) from the track: into the
+# cutting of the road beside the track (a fill of 5 m standing in it by a bridge's approach, cut off at that road's
+# asphalt: the block's walls), along the road's edge (spikes where a 4 m fill was cleared off the asphalt; a trench of
+# 3.6 m dug beside the road). Replayed on the reports' own data, ramps kept to the track's corridor or to small changes
+# still filled 4 m there; none at all left the paved roads and their sides as BeamNG.Earth grades them (changed by 0.5 m
+# at most beside the asphalt, never on it), the track meeting a road as BeamNG.Earth grades it (the course's track is a
+# road in its map). From terrain 24: no ramps off the paved roads. The dips under the bridges and the crossings in
+# cuttings as before.
+NO_JOINS_TV = 24
+
 # (terrain 20; the user, 2026-11-14, screenshots of 1.7.22: "It still isn't smooth enough, it ruins some portions by
 # creating dirt walls", "the original weird spiky thing is half fixed": a wall along the asphalt where the track
 # leaves a road at a shallow angle, a street's crossing in town raised as a table with dirt walls round it, spikes
@@ -1245,7 +1258,7 @@ def _shape17(course, profiles, around, lat, lon, grade_fn, elev_fn, cleared, cac
             every.setdefault(k, p)
     decks = [x for x in decks17([p.get("ud") or () for p in every.values()]) if not (cleared and x["f"])]
     js = {}
-    for p in every.values():
+    for p in every.values() if getattr(course, "tv", 1) < NO_JOINS_TV else ():
         for jn in p.get("jn") or ():
             js[(int(jn[0]), int(jn[1]))] = jn
     v19 = getattr(course, "tv", 1) >= XING_TV

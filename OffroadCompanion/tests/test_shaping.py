@@ -739,6 +739,40 @@ class TestAtGrade(unittest.TestCase):
         self.assertTrue(np.array_equal(whole, np.minimum(dc, jc) + ja))
 
 
+@unittest.skipUnless(HAVE_NP, "numpy")
+class TestTerrain24(unittest.TestCase):
+    """Terrain 24 (the user, 2026-11-18, four spot reports: a block 5 m tall by a bridge's approach, spikes along the
+    asphalt, a paved road's edge dug and filled): no ramps off the paved roads; the dips under the bridges as before."""
+    setUp, elev, grade_with, profs = TestAtGrade.setUp, TestAtGrade.elev, TestAtGrade.grade_with, TestAtGrade.profs
+
+    def run_join(self, tv):
+        c = straight(tv=tv)
+        n = c.inner(0)[1] + 1
+        profs = self.profs(c, 380.0, 620.0)
+        profs[0]["jn"] = sh.joins(c, 0, [i <= 20 for i in range(n)])     # (the course leaves a paved road at x 200)
+        deck = self.grade_with(3.0, 380.0, 620.0)
+
+        def grade(lat, lon, nat):              # (past the road a bank 3 m up within 3 m: the ramp's work)
+            x, _ = self.xy(np.asarray(lat).ravel(), np.asarray(lon).ravel())
+            return np.clip(x - 205.0, 0.0, 3.0) + deck(lat, lon, nat)
+        gx, gy = np.meshgrid(np.arange(150.0, 700.0, 4.0), np.arange(-30.0, 30.0, 4.0))
+        la, lo = self.ll(gx.ravel(), gy.ravel())
+        return sh.shape(c, profs, la, lo, np.zeros(la.size), grade, self.elev, cache={}, parts=True)
+
+    def test_no_ramps_off_the_roads(self):
+        dc23, jc23, ja23 = self.run_join(23)[:3]
+        self.assertTrue(np.any(jc23) or np.any(ja23), "(terrain 23: the ramp)")
+        dc24, jc24, ja24 = self.run_join(24)[:3]
+        self.assertFalse(np.any(jc24) or np.any(ja24), "none")
+        np.testing.assert_array_equal(dc24, dc23, "the dip under the bridge as before")
+
+    def test_versions(self):
+        from gpsd import banks, terrain
+        self.assertEqual((sh.NO_JOINS_TV, banks.PAVED24_TV), (24, 24))
+        self.assertGreaterEqual(terrain.VERSION, 24)
+        self.assertIn(23, terrain.VERSIONS)
+
+
 def road_segs(c, k, lines, ll, hw=4.0):
     """relief.window_profile's road segments (plane metres of window k's context) for paved roads along lines
     (lists of plane xy points), and that plane."""

@@ -230,6 +230,11 @@ Now nothing is narrower than about 6 m or changes over less than about 3 m: whoo
 in long swells, the windrows and the turns' sand as wide soft mounds, the banked corner a smooth bowl with its lip just
 past the edge, and the tallest places easing into their limit instead of flattening off.
 
+**Ground version 24** keeps version 23's ground without the ramps off paved roads (where the course joins or leaves
+one: their side slopes reached far beside the road, filling and digging metres there) and keeps the cut banks beside
+the track 8 m clear of paved roads: the painter changes the ground beside a paved road by half a metre at most, never on
+its asphalt.
+
 **Ground version 23** keeps version 22's ground, except under bridges the course passes under off the roads: such a
 bridge is kept (and the track dug under it) only where the ground at its ends stands 2 m or more over the course's
 ground, as over a real gully or cutting. Before, a long enough deck on flat ground was kept on its length alone, and
