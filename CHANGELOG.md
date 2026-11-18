@@ -3,6 +3,19 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.29 (2026-11-18)
+
+- **Report this spot shows ground that is drawn but not solid.** In BeamNG.Earth's usual mode the solid ground is
+  invisible and the ground you see near the car is drawn by separate tiles. Two spot reports from Ensenada showed the
+  solid ground smooth where the screenshots showed ledges and trenches the car sinks into. A report now also holds the
+  game's own solid ground around the car (measured in the game), the drawn tiles there with when each arrived and on
+  which ground, and the end of the server's log, so the next report shows where the two come apart.
+- The RM 5.7 crossing out of Ensenada is the same as before 1.7.28: its ground has not changed since ground version
+  18. BeamNG.Earth plans the course's track there on its own, 8 m beside a paved road on a hillside, up to 5-6 m over
+  it with a stepped bank between, then down 5 m in 15 m to cross it. Not changed yet: the one rule that fixes it here
+  could raise or lower the track metres elsewhere.
+- The ground is unchanged (version 23): players on 1.7.28 and 1.7.29 drive the same ground on a BeamMP server.
+
 ## 1.7.28 (2026-11-18)
 
 - **Ground version 23: no more dirt walls where the course runs under a row of street bridges.** A spot report from

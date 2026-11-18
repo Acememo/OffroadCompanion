@@ -656,5 +656,27 @@ do
   M.uiSet('propDistance', 'far')
 end
 
+-- 1.7.29: the report carries the game's solid ground round the car (castRayStatic straight down)
+do
+  local orig = rawget(_G, 'castRayStatic')
+  local rays = 0
+  castRayStatic = function(from, dir, len)
+    rays = rays + 1
+    if from.x > 1000 then return len end                -- (east of x 1000: nothing hit)
+    return from.z - (2 + 0.1 * from.x)                  -- ground at z 2 + x / 10
+  end
+  local g = M._spotGround({ x = 1000, y = 50, z = 10 })
+  local n = math.floor(2 * M.SPOT_GROUND_HALF_M / M.SPOT_GROUND_STEP_M + 0.5) + 1
+  check(g and g.n == n and #g.z == n * n and rays == n * n, 'a ray every step round the car')
+  check(g and g.x0 == 1000 - M.SPOT_GROUND_HALF_M and g.y0 == 50 - M.SPOT_GROUND_HALF_M and g.car.z == 10,
+        'the grid from the car\'s south-west, the car itself')
+  check(g and math.abs(g.z[1] - (2 + 0.1 * g.x0)) < 1e-9, 'the ground hit (row by row from the south-west)')
+  check(g and g.z[n] == false, 'none hit: false')
+  castRayStatic = nil
+  check(M._spotGround({ x = 0, y = 0, z = 0 }) == nil, 'without castRayStatic: none')
+  check(M._spotGround(nil) == nil, 'without the car: none')
+  castRayStatic = orig
+end
+
 print(string.format('%d passed, %d failed', pass, fail))
 os.exit(fail == 0 and 0 or 1)

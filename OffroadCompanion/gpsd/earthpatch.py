@@ -304,6 +304,7 @@ class _State:
                     self.wins, self.rwins, self.plan_failed, self.plan_locks = {}, {}, {}, {}
                 self.rock_cells.clear()
                 self.course = plan
+                self.egps_plan_since = time.time()      # (a spot report's: when this ground came)
                 self.merged.clear()
                 self.bld.clear()
                 try:                    # (the roads planned again: the new track, the new setting's dirt road wear)
@@ -2825,10 +2826,20 @@ def refresh_geo(conn):
 #                      banks, the crossings' and bridges' shaping, the track's relief: the last is the ground)
 #   elev.npz           the road plans' own ground (grading's) SPOT_ELEV_HALF_M round, every SPOT_ELEV_STEP_M
 #   cells.pkl          the map cells there, BeamNG.Earth's own layers and the course's (track in, buildings cleared)
+#   game.npz           (1.7.29) the game's own physics ground round the car (the mod's rays down: main.lua spotGround):
+#                      x, y in the game's world (the anchor's frame), z the solid ground hit (NaN: none)
+#   drawn.npz          (1.7.29) what the game is drawing there: the far tiles' vertex heights (levels <= 1, the ground
+#                      drawn near the car in BeamNG.Earth's mesh mode: the physics block itself is not drawn) the server
+#                      sent the game, and those it holds built: tiles.json says which is which (the user, 2026-11-18:
+#                      "phantom terrain again almost everywhere", ground drawn where the car sinks through it)
+#   server.log         the end of the server's log
 SPOT = "offroad_spot"
 SPOT_HALF_M, SPOT_STEP_M = 80.0, 1.0
 SPOT_ELEV_HALF_M, SPOT_ELEV_STEP_M = 500.0, 4.0
 SPOT_CELLS_M = 600.0
+SPOT_DRAWN_MAX_LEVEL = 1
+SPOT_LOG_BYTES = 2 * 1024 * 1024
+SPOT_GAME_MAX = 20000           # the game's samples taken at most
 _RECORD = threading.local()
 
 
@@ -2845,9 +2856,114 @@ def spots_dir():
     return os.path.join(paintfile.base_dir(), "spots")
 
 
-def report_spot(server, aid, lat, lon, note=""):
+def _spot_game(game):
+    """The mod's physics samples (main.lua spotGround: {x0, y0, step, n, z = [n*n heights, row by row from the south,
+    false: no hit], car = {x, y, z}}) as arrays, or None."""
+    if not isinstance(game, dict):
+        return None
+    try:
+        x0, y0, step, n = float(game["x0"]), float(game["y0"]), float(game["step"]), int(game["n"])
+        zs = game["z"]
+        if n <= 0 or n * n > SPOT_GAME_MAX or not isinstance(zs, list) or len(zs) != n * n or not step > 0:
+            return None
+        z = np.array([float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else np.nan for v in zs],
+                     np.float64).reshape(n, n)
+        ax = np.arange(n, dtype=np.float64) * step
+        X, Y = np.meshgrid(x0 + ax, y0 + ax)
+        out = {"x": X, "y": Y, "z": z}
+        car = game.get("car")
+        if isinstance(car, dict):
+            out["car"] = np.array([float(car.get(k, np.nan)) for k in ("x", "y", "z")], np.float64)
+        return out
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _spot_drawn(server, conn, aid, e0, n0, half):
+    """The far tiles round (e0, n0) (anchor aid's frame, half m round) the server built (Server.tiles: TileInfo, its
+    grid the tile's vertex heights) at levels <= SPOT_DRAWN_MAX_LEVEL: ({name: grid}, [their facts]), "sent" those the
+    connection sent the game (Connection.sent: on screen)."""
+    import farfield
+    tiles = getattr(server, "tiles", None) or {}
+    sent = getattr(conn, "sent", None) or {}
+    grids, facts = {}, []
+    for ck, info in list(tiles.items()):
+        if not (isinstance(ck, tuple) and len(ck) == 2 and ck[0] == aid):
+            continue
+        try:
+            level, i, j = (int(v) for v in str(ck[1]).split("_"))
+        except ValueError:
+            continue
+        if level > SPOT_DRAWN_MAX_LEVEL:
+            continue
+        t = farfield.Tile(level, i, j)
+        x0, y0, x1, y1 = t.bbox
+        if x1 < e0 - half or x0 > e0 + half or y1 < n0 - half or y0 > n0 + half:
+            continue
+        g = getattr(info, "grid", None)
+        if g is None:
+            continue
+        name = f"t{len(grids)}"
+        grids[name] = np.asarray(g, np.float32)
+        when = getattr(tiles, "egps_when", {}).get(ck)
+        facts.append({"name": name, "key": str(ck[1]), "level": level, "bbox": [x0, y0, x1, y1],
+                      "came": None if when is None else when[0], "ground": None if when is None else when[1],
+                      "sent": str(ck[1]) in sent, "pos": [float(v) for v in (getattr(info, "pos", None) or [])],
+                      "err": getattr(info, "err", None), "sink": getattr(info, "sink", None),
+                      "skirt": getattr(info, "skirt", None), "stale": bool(getattr(info, "stale", False)),
+                      "seconds": getattr(info, "seconds", None)})
+    return grids, facts
+
+
+class _TileTimes(OrderedDict):
+    """Server.tiles (its far tiles built: (anchor, key) -> TileInfo) that remembers, for each, when it came and the GPS
+    ground then current (share_tag): a tile drawn from another ground than the physics block's shows in a spot report
+    (_spot_drawn). Everything else as the OrderedDict it replaces."""
+
+    def __init__(self, st, *a, **kw):
+        self._egps_st = st
+        self.egps_when = {}
+        super().__init__(*a, **kw)
+
+    def __setitem__(self, k, v):
+        super().__setitem__(k, v)
+        try:
+            self.egps_when[k] = (time.time(), share_tag(self._egps_st))
+            if len(self.egps_when) > 4 * max(1, len(self)) + 4096:
+                for old in [x for x in self.egps_when if x not in self]:
+                    del self.egps_when[old]
+        except Exception:
+            pass
+
+
+def watch_tiles(server, st=None):
+    """Server.tiles made a _TileTimes (once per server; the tiles held so far kept, their times unknown)."""
+    st = st if st is not None else _state
+    tiles = getattr(server, "tiles", None)
+    if tiles is None or isinstance(tiles, _TileTimes) or not isinstance(tiles, OrderedDict):
+        return False
+    server.tiles = _TileTimes(st, tiles)
+    return True
+
+
+def _log_tail():
+    """The end of the server's log file (its root logger's file handlers), or None."""
+    for h in logging.getLogger().handlers + logging.getLogger("earthd").handlers:
+        fn = getattr(h, "baseFilename", None)
+        if fn and os.path.isfile(fn):
+            try:
+                with open(fn, "rb") as f:
+                    f.seek(max(0, os.path.getsize(fn) - SPOT_LOG_BYTES))
+                    return f.read()
+            except OSError:
+                return None
+    return None
+
+
+def report_spot(server, aid, lat, lon, note="", conn=None, game=None):
     """The spot report round (lat, lon) (SPOT's note) from this server process's state (BeamNG.Earth's Server, anchor
-    aid): the path of the zip written."""
+    aid; conn: the game's connection, its far tiles sent; game: the mod's physics samples): the path of the zip
+    written."""
     import io
     import json
     import pickle
@@ -2905,6 +3021,12 @@ def report_spot(server, aid, lat, lon, note=""):
                     for who, layers in (("earth", own), ("course", ours))}
             except Exception as ex:
                 errors.append(f"cell {key}: {type(ex).__name__}: {ex}")
+    gm = _spot_game(game)
+    drawn, drawn_facts = {}, []
+    try:
+        drawn, drawn_facts = _spot_drawn(server, conn, aid, float(e0), float(n0), SPOT_HALF_M)
+    except Exception as ex:
+        errors.append(f"drawn tiles: {type(ex).__name__}: {ex}")
     plan = st.current() if st is not None else None
     c = getattr(plan, "paint", None) if plan is not None else None
     info = {"lat": lat, "lon": lon, "note": str(note or "")[:500], "time": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -2912,7 +3034,10 @@ def report_spot(server, aid, lat, lon, note=""):
             "offroad": _offroad_version(),
             "code": gps_code_id(), "earth": _earth_version(), "terrain": terrain.VERSION, "errors": errors,
             "wear": [os.environ.get(k) for k, _v, _n in DIRT_WEAR_ENV],
-            "stats": dict(getattr(st, "stats", {}) or {})}
+            "stats": dict(getattr(st, "stats", {}) or {}),
+            "near_visual": getattr(server, "near_visual", None), "share_tag": share_tag(st),
+            "now": time.time(), "course_since": getattr(st, "egps_plan_since", None),
+            "game_samples": None if gm is None else int(np.isfinite(gm["z"]).sum()), "drawn_tiles": len(drawn_facts)}
     if c is not None:
         info.update(course=c.name, cid=c.cid, tv=getattr(c, "tv", None), rough=getattr(c, "rough", None),
                     scale=getattr(c, "scale", None), ruts=getattr(c, "ruts", None))
@@ -2936,10 +3061,17 @@ def report_spot(server, aid, lat, lon, note=""):
                     f = os.path.join(wdir, f"{what}{k:06d}.json")
                     if os.path.isfile(f):
                         z.write(f, f"windows/{what}{k:06d}.json")
-        for name, arrs in (("grid.npz", grid), ("elev.npz", elev)):
+        for name, arrs in (("grid.npz", grid), ("elev.npz", elev), ("game.npz", gm), ("drawn.npz", drawn)):
+            if not arrs:
+                continue
             buf = io.BytesIO()
             np.savez_compressed(buf, **arrs)
             z.writestr(name, buf.getvalue())
+        if drawn_facts:
+            z.writestr("tiles.json", json.dumps(drawn_facts, indent=1, default=str))
+        tail = _log_tail()
+        if tail:
+            z.writestr("server.log", tail)
         try:
             z.writestr("cells.pkl", pickle.dumps(cells, protocol=4))
         except Exception as ex:
@@ -2959,6 +3091,10 @@ def _install_geo_reset():
     orig = em.Connection.dispatch
 
     def dispatch(self, msg, *a, **kw):
+        try:
+            watch_tiles(getattr(self, "s", None))
+        except Exception:
+            pass
         if isinstance(msg, dict) and msg.get("type") == SPOT:
             server, aid = getattr(self, "s", None), getattr(self, "active", None)
             try:
@@ -2969,7 +3105,8 @@ def _install_geo_reset():
             def run():
                 try:
                     log.info("course painter: spot report saved: %s", report_spot(server, aid, la_, lo_,
-                                                                                  msg.get("note")))
+                                                                                  msg.get("note"), conn=self,
+                                                                                  game=msg.get("ground")))
                 except Exception as e:
                     log.warning("course painter: spot report failed: %s: %s", type(e).__name__, e)
             threading.Thread(target=run, name="spot-report", daemon=True).start()

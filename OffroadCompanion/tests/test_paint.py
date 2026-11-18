@@ -708,10 +708,25 @@ class TestInsideEarth(unittest.TestCase):
         an.frame, an.hm_zoom = frame, 17
         grader = grading.Grader(frame, md, lambda a, b: ground(a, b))
 
+        import farfield
+        size = farfield.Tile(0, 0, 0).size
+        t0 = farfield.Tile(0, int(150.0 // size), int(6.0 // size))           # (the tile under the spot)
+        far = farfield.Tile(0, int(150.0 // size) + 20, 0)                       # (one far off)
+
+        class Info:
+            def __init__(self, z):
+                self.pos, self.err, self.sink, self.skirt, self.stale, self.seconds = [0, 0, z], 0.1, 0.5, 2.0, False, 1.0
+                self.grid = np.full((65, 65), z, np.float32)
+
+        class Conn:
+            sent = {t0.key: t0}
+
         class Server:
             anchors = {7: an}
             dem = Dem()
             mapdata = md
+            near_visual = "mesh"
+            tiles = {(7, t0.key): Info(3.0), (7, far.key): Info(9.0), (8, t0.key): Info(5.0)}
 
             def ground(self, fr, la, lo, z):
                 return np.asarray(z, np.float64)
@@ -724,7 +739,9 @@ class TestInsideEarth(unittest.TestCase):
         old = ep.SPOT_HALF_M, ep.SPOT_ELEV_HALF_M, ep.SPOT_CELLS_M
         ep.SPOT_HALF_M, ep.SPOT_ELEV_HALF_M, ep.SPOT_CELLS_M = 20.0, 60.0, 200.0
         try:
-            path = ep.report_spot(Server(), 7, lat, lon, "walls here")
+            game = {"x0": 140.0, "y0": -4.0, "step": 2.0, "n": 3, "z": [1.0, 2.0, False, 1.0, 2.0, 3.0, 1, 2, 3],
+                    "car": {"x": 150.0, "y": 6.0, "z": 2.5}}
+            path = ep.report_spot(Server(), 7, lat, lon, "walls here", conn=Conn(), game=game)
         finally:
             ep.SPOT_HALF_M, ep.SPOT_ELEV_HALF_M, ep.SPOT_CELLS_M = old
         self.addCleanup(lambda: os.path.exists(path) and os.remove(path))
@@ -734,6 +751,28 @@ class TestInsideEarth(unittest.TestCase):
             info = __import__("json").loads(z.read("info.json"))
             g = np.load(io.BytesIO(z.read("grid.npz")))
             cells = pickle.loads(z.read("cells.pkl"))
+            gm = np.load(io.BytesIO(z.read("game.npz")))
+            dr = np.load(io.BytesIO(z.read("drawn.npz")))
+            tiles = __import__("json").loads(z.read("tiles.json"))
+        # (1.7.29) the game's own ground, the far tiles drawn there
+        self.assertEqual(gm["z"].shape, (3, 3))
+        self.assertTrue(np.isnan(gm["z"][0, 2]) and gm["z"][2, 2] == 3.0, "row by row from the south; false: none")
+        self.assertEqual(float(gm["x"][0, 1]), 142.0)
+        np.testing.assert_array_equal(gm["car"], [150.0, 6.0, 2.5])
+        self.assertEqual([(d["key"], d["sent"]) for d in tiles], [(t0.key, True)], "this anchor's, near: on screen")
+        self.assertEqual(float(dr[tiles[0]["name"]][0, 0]), 3.0)
+        self.assertEqual((info["near_visual"], info["drawn_tiles"], info["game_samples"]), ("mesh", 1, 8))
+        self.assertIsNone(tiles[0]["came"], "(held before it was watched: when unknown)")
+        # (the server's tiles watched: each one's arrival and the GPS ground then)
+        srv = Server()
+        srv.tiles = __import__("collections").OrderedDict(srv.tiles)
+        self.assertTrue(ep.watch_tiles(srv) and not ep.watch_tiles(srv), "once")
+        self.assertIn((7, far.key), srv.tiles, "the tiles held kept")
+        srv.tiles[(7, t0.key)] = Info(4.0)
+        when, tag = srv.tiles.egps_when[(7, t0.key)]
+        self.assertEqual(tag, ep.share_tag(ep.state()))
+        self.assertLessEqual(abs(when - __import__("time").time()), 5.0)
+        self.assertEqual(ep._spot_game({"x0": 0, "y0": 0, "step": 2, "n": 2, "z": [1, 2]}), None, "a short grid: none")
         self.assertEqual(info["note"], "walls here")
         self.assertEqual(info["errors"], [])
         self.assertAlmostEqual(info["s"], 1150.0, delta=15.0)

@@ -808,8 +808,10 @@ players' origin (when its shared generation is on); afterwards it does again.
   zoomed in, as wide as the track), else the course file's line. Streets and names can be hidden in Settings.
 - **Report this spot** (under the course's buttons, with the course painter): saves the ground around the car in a
   zip in the Offroad Companion folder's `spots` folder (the map data there, the course's planned ground, and the
-  heights at each step: BeamNG.Earth's grading, the cut banks, the crossings' shaping, the track's terrain). Send the
-  newest one with a screenshot of what looks wrong.
+  heights at each step: BeamNG.Earth's grading, the cut banks, the crossings' shaping, the track's terrain). From
+  1.7.29 it also holds the game's own solid ground around the car, the ground tiles the game is drawing there (when
+  each came and on which ground) and the end of the server's log, so ground that is drawn but not solid shows up.
+  Send the newest one with a screenshot of what looks wrong.
 - **▾** (end of the tabs) hides the app to a small button; a key can be bound to it (Options, Controls).
 - **App size** (Settings, top): − and + scale the whole app, its text, buttons, turn notes and map labels, from 70 % to
   250 % in 10 % steps (before 1.7.6 this followed the app's width). Resizing the app in the game's UI editor changes

@@ -36,8 +36,8 @@ M.CHECK_S = 0.2
 M.REROUTE_S = 8
 M.SETTINGS_FILE = '/settings/offroadCompanion.json'
 M.OLD_SETTINGS_FILE = '/settings/earthGps.json'   -- (the project was BeamNG.Earth GPS before 1.2.0)
-M.VERSION = '1.7.28'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
-M.BUILD = '2026-11-18 11:05'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
+M.VERSION = '1.7.29'           -- (OffroadCompanion/VERSION: the same; the release zips are named after it)
+M.BUILD = '2026-11-18 12:06'       -- (the app's own, app.js APP_BUILD, and the companion's copy of the mod are compared: a stale copy shows)
 
 local settings = { lang = 'en', units = 'auto', ribbon = true, autoRoute = true, zoom = 600, paint = true, paintSize = 1.0,
                    clearCourse = true, clearRoute = true, streets = true, markers = 'checkpoints', ruts = 'off', rough = 'auto',
@@ -333,7 +333,32 @@ end
 M.GEO_RESET = 'offroad_geo_reset'
 M.SPOT = 'offroad_spot'               -- (the app's Report this spot: earthpatch.py SPOT)
 M.SPOT_NOTE_S = 20
+-- (1.7.29) the game's own solid ground round the car goes with the report (the user, 2026-11-18: "phantom terrain
+-- again almost everywhere": the ground the server makes, the ground the game draws and the one it drives on, side by
+-- side): a ray straight down every SPOT_GROUND_STEP_M, SPOT_GROUND_HALF_M round the car (castRayStatic: the terrain
+-- block and the static meshes that collide, never the vehicles or the drawn-only far tiles)
+M.SPOT_GROUND_HALF_M, M.SPOT_GROUND_STEP_M = 40, 2
+M.SPOT_GROUND_UP_M, M.SPOT_GROUND_LEN_M = 150, 400
 local spotSent = nil
+
+local function spotGround(car)
+  local ray = rawget(_G, 'castRayStatic')
+  if type(ray) ~= 'function' or not car or not car.x or not car.y or not car.z then return nil end
+  local half, step = M.SPOT_GROUND_HALF_M, M.SPOT_GROUND_STEP_M
+  local n = math.floor(2 * half / step + 0.5) + 1
+  local x0, y0 = car.x - half, car.y - half
+  local top, len = car.z + M.SPOT_GROUND_UP_M, M.SPOT_GROUND_LEN_M
+  local down = vec3(0, 0, -1)
+  local zs = {}
+  for j = 0, n - 1 do
+    for i = 0, n - 1 do
+      local ok, d = pcall(ray, vec3(x0 + i * step, y0 + j * step, top), down, len)
+      zs[#zs + 1] = (ok and type(d) == 'number' and d < len) and (top - d) or false
+    end
+  end
+  return { x0 = x0, y0 = y0, step = step, n = n, z = zs, car = { x = car.x, y = car.y, z = car.z } }
+end
+M._spotGround = spotGround
 local function refreshRoads()
   paint.refreshedAt = clock
   local okR, roads = pcall(require, 'beamngEarth/roads')
@@ -1018,7 +1043,8 @@ function M.uiTrackAction(action)
     if not car or not (okN and type(net) == 'table' and type(net.send) == 'function') then
       return { ok = false, error = 'not in BeamNG.Earth' }
     end
-    local okS = pcall(net.send, { type = M.SPOT, lat = car.lat, lon = car.lon,
+    local okG, ground = pcall(spotGround, car)
+    local okS = pcall(net.send, { type = M.SPOT, lat = car.lat, lon = car.lon, ground = okG and ground or nil,
                                   note = (crs.track.name or 'Course') .. (crs.s and string.format(' at %.0f m', crs.s) or '') })
     spotSent = okS and { at = clock } or nil
     return { ok = okS }
