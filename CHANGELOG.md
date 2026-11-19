@@ -3,6 +3,20 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.34 (2026-11-18)
+
+- **Ground version 26: no more cliffs where the course meets a paved road far below it.** A spot report at RM 5.6 out
+  of Ensenada showed the track ending at a 6 to 7 m cliff over the motorway link's hairpin, on both sides of the
+  crossing. BeamNG.Earth digs a paved road down to its own smooth profile, there 7 m into the elevation data. It takes
+  a side road's end to the height of the road it joins only up to 6 m off, and only within 3 m of its carriageway, so
+  the track kept the ground's height right to the asphalt's edge. From ground version 26 a track run that ends at a
+  paved road 3 to 15 m off its height is brought to the road's height along the track: a ramp, 10 % steep on average,
+  that BeamNG.Earth cuts or fills with its own banks. Replayed on the report, the track now runs down to the hairpin
+  at 28 % at most where it stood 6 to 7 m over it. Smaller steps are left to BeamNG.Earth as before, and no paved road
+  is changed by it (replayed on six reports). Older ground versions are unchanged.
+- 1.7.34 lays ground version 26, so everyone on a BeamMP server should update together (server hosts: replace the
+  server files too).
+
 ## 1.7.33 (2026-11-18)
 
 - **Ground version 25: the course painter no longer changes the paved roads.** A spot report at RM 5.8 out of Ensenada

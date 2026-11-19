@@ -61,6 +61,20 @@ PAVED_EDGE_IN_M = 0.5
 # where the course is on or across a paved road, the road is the course's.
 PAVED_GAP_TV = 25
 PAVED_GAP_M = 2.0
+# (terrain 26; the user, 2026-11-18, a spot report at RM 5.6 out of Ensenada: the track stopping at a cliff over a paved
+# hairpin) BeamNG.Earth digs a paved road down to its own smoothed profile, there 7 m into the elevation data, and takes
+# a side road's end to the height of the road it joins only up to JUNCTION_MAX_M (6 m: "bad data"); past that the track
+# kept the ground's height to the asphalt's edge, a cliff (BeamNG.Earth's reach, 3 m past its carriageway, missed some
+# ends cut back from a wider roads layer's width too). From 26 a track run ending at a paved road (PAVED_GAP_M off it)
+# DEEP_JOIN_MIN_M to DEEP_JOIN_MAX_M off its height is eased to it along the track (earthpatch.install_deep_joins: in
+# BeamNG.Earth's road plans, so its own grading cuts or fills the track's ramp, with its own banks), over
+# JUNCTION_TAPER_M or DEEP_JOIN_GRADE on average, whichever is longer. Replayed on the report: the track down to the
+# hairpin at 28 % at most, where it stood 6-7 m over it.
+DEEP_JOIN_TV = 26
+DEEP_JOIN_REACH_M = 6.0      # m past BeamNG.Earth's carriageway edge a track run's end still joins it
+DEEP_JOIN_MIN_M = 3.0        # m: an end this close to the road's height is left to BeamNG.Earth's own snap and blend
+DEEP_JOIN_MAX_M = 15.0
+DEEP_JOIN_GRADE = 0.10
 SIDE_M = 16.0
 SIDE_STEP_M = 2.0
 RISE_M = 1.0                # the ground within RISE_M + RISE_GRADE x offset of the track's height is room

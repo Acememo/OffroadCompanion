@@ -21,7 +21,7 @@ data). Pure Python.
 """
 import hashlib
 
-VERSION = 25                # (2: natural cut banks beside the track where BeamNG.Earth stood a bare step: banks.py;
+VERSION = 26                # (2: natural cut banks beside the track where BeamNG.Earth stood a bare step: banks.py;
                             # 3: the ground's surfaces along the course, sand, mud, loose and packed dirt: surfaces.py;
                             # 4: the track round the trees, courseroads.weave_shifts; grass and scrub on the track
                             # where the land around has them, the wheel paths bare: surfaces.py; washes rarer and
@@ -69,8 +69,11 @@ VERSION = 25                # (2: natural cut banks beside the track where BeamN
                             # BeamNG.Earth grades them): shaping.NO_JOINS_TV, banks.PAVED24_TV;
                             # 25: the track handed to BeamNG.Earth stops PAVED_GAP_M short of every paved road's
                             # carriageway (the road untouched where the course is on or across it):
-                            # courseroads.PAVED_GAP_TV)
-VERSIONS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25)  # the versions this code can still make
+                            # courseroads.PAVED_GAP_TV;
+                            # 26: a track run ending at a paved road more than 6 m off its height (up to 15 m) eased to
+                            # it in BeamNG.Earth's road plans (a ramp it cuts or fills; before: a cliff at the
+                            # asphalt's edge): courseroads.DEEP_JOIN_TV)
+VERSIONS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)  # the versions this code can still make
 # What a server's caches of the course's ground (BeamNG.Earth's road plans, graded blocks, revisits and tiles: share_tag)
 # are kept under, with the course's plan and BeamNG.Earth's version: changed only by an update that changes the ground
 # of a terrain version already made (none should: a ground change is a new terrain version), so an update that does

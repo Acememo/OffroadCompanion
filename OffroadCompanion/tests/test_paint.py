@@ -800,6 +800,82 @@ class TestInsideEarth(unittest.TestCase):
         with mock.patch.object(terrain, "GROUND_CACHE", terrain.GROUND_CACHE + "x"):
             self.assertNotEqual(self.earthpatch.share_tag(st), tag, "GROUND_CACHE changed: another")
 
+    def _joins(self, dz, *, paved=True, gap=2.0, n_plans=4, seg_m=20.0, step=2.0):
+        """(fake BeamNG.Earth plans) A track along x ending gap m past the carriageway of a road along y at x 0, its
+        height dz off the road's; the track in n_plans stretches end to end."""
+        import types
+        from gpsd import courseroads as cr
+        ep = self.earthpatch
+
+        def plan(xy, z, half, rid):
+            xy = np.asarray(xy, np.float64)
+            return types.SimpleNamespace(xy=xy, z=np.asarray(z, np.float64), road_half=half, rid=rid,
+                                         bbox=(xy[:, 0].min() - 5, xy[:, 1].min() - 5, xy[:, 0].max() + 5,
+                                               xy[:, 1].max() + 5))
+        road = plan([[0.0, -100.0], [0.0, 100.0]], [100.0, 100.0], 4.0, 1)
+        tracks, x0 = [], 4.0 + gap
+        for k in range(n_plans):
+            xs = np.arange(x0 + k * seg_m, x0 + (k + 1) * seg_m + 1e-9, step)
+            tracks.append(plan(np.c_[xs, np.zeros(len(xs))], np.full(len(xs), 100.0 + dz), 4.0, 100 + k))
+        specs = [types.SimpleNamespace(kind="asphalt" if paved else "dirt")] + \
+            [types.SimpleNamespace(kind="dirt")] * n_plans
+        g = types.SimpleNamespace(JUNCTION_TAPER_M=40.0)
+        n = ep.deep_joins([road] + tracks, specs, {100 + k for k in range(n_plans)}, {"asphalt"}, g)
+        xs = np.concatenate([p.xy[:, 0] if k == 0 else p.xy[1:, 0] for k, p in enumerate(tracks)])
+        zs = np.concatenate([p.z if k == 0 else p.z[1:] for k, p in enumerate(tracks)])
+        return n, xs, zs, cr
+
+    def test_track_eased_down_to_a_paved_road(self):
+        """(terrain 26) A track run ending at a paved road 7 m below it (past BeamNG.Earth's 6 m snap: a cliff) is
+        eased down to the road's height along the track, across its plans' stretches, at DEEP_JOIN_GRADE on average."""
+        n, xs, zs, cr = self._joins(7.0)
+        self.assertEqual(n, 1)
+        self.assertAlmostEqual(zs[0], 100.0, places=6, msg="the end at the road's height")
+        span = 7.0 / cr.DEEP_JOIN_GRADE
+        self.assertTrue(np.all(np.diff(zs) >= -1e-9), "climbing away from the road all the way")
+        far = xs - xs[0] >= span
+        self.assertTrue(far.any() and np.allclose(zs[far], 107.0), "past the ease: as it was")
+        grade = np.diff(zs) / np.diff(xs)
+        self.assertLessEqual(grade.max(), cr.DEEP_JOIN_GRADE * np.pi / 2 + 0.01)
+        n, xs, zs, _ = self._joins(-9.0, gap=4.5)
+        self.assertEqual(n, 1, "below it, past BeamNG.Earth's 3 m reach: up to it")
+        self.assertAlmostEqual(zs[0], 100.0, places=6)
+
+    def test_track_joins_left_to_beamng_earth(self):
+        """(terrain 26) A step BeamNG.Earth's own snap and blend take (under DEEP_JOIN_MIN_M), one too big to be a
+        junction (over DEEP_JOIN_MAX_M), a dirt road, an end far from the road, and where the track goes on: unchanged."""
+        for kw in ({"dz": 2.0}, {"dz": 20.0}, {"dz": 7.0, "paved": False}, {"dz": 7.0, "gap": 9.0}):
+            n, _xs, zs, _ = self._joins(**kw)
+            self.assertEqual(n, 0, kw)
+            self.assertTrue(np.allclose(zs, 100.0 + kw["dz"]), kw)
+
+    def test_deep_joins_hooked(self):
+        """(terrain 26) grading.snap_junctions wrapped once a process: BeamNG.Earth's own snap first, then the track's
+        joins, from terrain 26 only."""
+        import grading
+        import types
+        from unittest import mock
+        from gpsd import courseroads as cr
+        ep = self.earthpatch
+        st = ep.state()
+        self.assertTrue(getattr(grading.snap_junctions, "_earthgps", False))
+        self.assertFalse(ep.install_deep_joins(st), "once")
+        calls = []
+        plan = st.current()
+        for tv, want in ((cr.DEEP_JOIN_TV - 1, 0), (cr.DEEP_JOIN_TV, 1)):
+            fake = types.SimpleNamespace(paint=types.SimpleNamespace(tv=tv), clearing=plan.clearing, key=plan.key)
+            with mock.patch.object(ep, "deep_joins", lambda *a: calls.append("ours") or 0), mock_current(st, fake):
+                saved = grading.snap_junctions
+                try:
+                    st2 = types.SimpleNamespace(current=lambda: fake, track_rids=set(), stats={}, lock=st.lock)
+                    with mock.patch.object(grading, "snap_junctions", lambda p, s: calls.append("earth")):
+                        self.assertTrue(ep.install_deep_joins(st2))
+                        n0 = len(calls)
+                        grading.snap_junctions(["plan"], ["spec"])
+                        self.assertEqual(calls[n0:], ["earth"] + ["ours"] * want, tv)
+                finally:
+                    grading.snap_junctions = saved
+
     def test_provisional_wait_longer_under_a_course(self):
         """(1.7.33) While a course is painted, a follow block's running graded build gets PROVISIONAL_EXTRA_S more
         before BeamNG.Earth sends an ungraded stand-in (swapped for the graded one under the car later)."""

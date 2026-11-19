@@ -230,6 +230,12 @@ Now nothing is narrower than about 6 m or changes over less than about 3 m: whoo
 in long swells, the windrows and the turns' sand as wide soft mounds, the banked corner a smooth bowl with its lip just
 past the edge, and the tallest places easing into their limit instead of flattening off.
 
+**Ground version 26** keeps version 25's ground, but where a track run ends at a paved road 3 to 15 m above or below
+it (BeamNG.Earth digs paved roads down to their own smooth profile, metres into the hills, and takes a side road to
+the road's height only up to 6 m off), the track is brought to the road's height along a ramp, 10 % steep on average,
+which BeamNG.Earth cuts or fills with its own banks. Before, the track kept the ground's height to the asphalt's edge:
+a cliff.
+
 **Ground version 25** keeps version 24's ground, but the track it hands BeamNG.Earth stops 2 m short of every paved
 road's asphalt. Where the course runs along a paved road you drive the road itself, and where it crosses one the road is
 the crossing. Before, a run of track that bent onto a paved road's edge, or ran beside one, overlapped its asphalt, and

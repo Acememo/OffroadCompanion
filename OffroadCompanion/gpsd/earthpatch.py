@@ -252,6 +252,7 @@ class _State:
         self.plan_locks = {}        # (what, k) -> this process's lock while it plans the window
         self.merged = OrderedDict()  # (cell key str, cid) -> Features
         self.handed = OrderedDict()  # (cell key str, plan key) -> what its roads were given as (note_roads)
+        self.track_rids = set()      # BeamNG.Earth's road ids (grading.road_id) of the track's pieces (install_deep_joins)
         self.segs = OrderedDict()   # cell key str -> (lonlat segments (M, 4), half widths (M,))
         self.dems = []              # Dem instances made in this process (BeamNG.Earth's own first)
         self.own_dem = None
@@ -1313,6 +1314,11 @@ class _State:
                         self.piece_s[str(p["id"])] = (float(p["i0"]) * courseroads.STEP_M, shade.get(str(p["id"])))
                 while len(self.piece_s) > 20000:
                     self.piece_s.popitem(last=False)
+        if ps:
+            import zlib                         # (grading.road_id: install_deep_joins)
+            rids = {zlib.crc32(str(p["id"]).encode()) & 0x7FFFFFFF for p in ps}
+            with self.lock:
+                self.track_rids |= rids
         if not ps:
             out = base
         else:
@@ -2126,6 +2132,10 @@ def install():
         install_short_log(st)
     except Exception as e:
         log.debug("course painter: no short plans log (%s: %s)", type(e).__name__, e)
+    try:
+        install_deep_joins(st)
+    except Exception as e:
+        log.debug("course painter: no deep joins (%s: %s)", type(e).__name__, e)
     demmod.Dem.__init__ = dem_init
     mapdata.MapData.cell = cell
     if cells is not None:
@@ -2265,6 +2275,113 @@ def install_plancache(st):
         _bake_expect._earthgps = True
         pc.PlanCache._bake_expect = _bake_expect
     return True
+
+
+def install_deep_joins(st):
+    """(terrain 26: courseroads.DEEP_JOIN_TV) Wraps grading.snap_junctions: after BeamNG.Earth's own snap, each end of
+    the course's track (its road plans: st.track_rids) that BeamNG.Earth left off a paved road's height (past its
+    JUNCTION_MAX_M, or past its 3 m reach from a carriageway narrower than the roads layer's) is eased to it along the
+    track (deep_joins). BeamNG.Earth's grading then cuts or fills the track's ramp from that profile with its own banks.
+    Once a process."""
+    import grading as gradingmod
+    orig = getattr(gradingmod, "snap_junctions", None)
+    if orig is None or getattr(orig, "_earthgps", False):
+        return False
+    try:
+        import roads as roadsmod
+        built = set(roadsmod.BUILT)
+    except Exception:
+        return False
+
+    def snap_junctions(plans, specs, *a, **kw):
+        out = orig(plans, specs, *a, **kw)
+        try:
+            plan = st.current()
+            c = plan.paint if plan is not None else None
+            if c is not None and getattr(c, "tv", 1) >= courseroads.DEEP_JOIN_TV and plans:
+                n = deep_joins(plans, specs, st.track_rids, built, gradingmod)
+                if n:
+                    with st.lock:
+                        st.stats["deep_joins"] = st.stats.get("deep_joins", 0) + n
+        except Exception as e:
+            log.warning("course painter: the track's joins to paved roads: %s: %s", type(e).__name__, e)
+        return out
+    snap_junctions._earthgps = True
+    snap_junctions._orig = orig
+    gradingmod.snap_junctions = snap_junctions
+    return True
+
+
+def _nearest_xyz(xy, z, x, y):
+    """(distance, height) of the point of the polyline xy (n, 2+) with heights z (n,) nearest (x, y). Pure."""
+    xy = np.asarray(xy, np.float64)[:, :2]
+    z = np.asarray(z, np.float64)
+    if len(xy) == 1:
+        return float(np.hypot(xy[0, 0] - x, xy[0, 1] - y)), float(z[0])
+    a, b = xy[:-1], xy[1:]
+    v = b - a
+    t = np.clip(((x - a[:, 0]) * v[:, 0] + (y - a[:, 1]) * v[:, 1]) / np.maximum((v * v).sum(axis=1), 1e-12), 0, 1)
+    d = np.hypot(a[:, 0] + t * v[:, 0] - x, a[:, 1] + t * v[:, 1] - y)
+    i = int(np.argmin(d))
+    return float(d[i]), float(z[i] + t[i] * (z[i + 1] - z[i]))
+
+
+def deep_joins(plans, specs, ours, built, g):
+    """install_deep_joins' pass over one cell's road plans (BeamNG.Earth's Plans and Specs, its grading module g); the
+    number of the track's ends eased (in place). An end within courseroads.DEEP_JOIN_REACH_M of a paved road's
+    carriageway (BeamNG.Earth's own reach is 3 m from its carriageway, which can be narrower or wider than the roads
+    layer's width the track was cut back from) more than DEEP_JOIN_MIN_M and at most DEEP_JOIN_MAX_M off its height
+    there; the ease runs on along the track's plans joined end to end (BeamNG.Earth plans a road in stretches)."""
+    tracks = [p for p in plans if p.rid in ours and len(p.xy) >= 2]
+    if not tracks:
+        return 0
+    paved = [p for p, sp in zip(plans, specs) if p.rid not in ours and getattr(sp, "kind", None) in built]
+    if not paved:
+        return 0
+    reach, lo, hi = courseroads.DEEP_JOIN_REACH_M, courseroads.DEEP_JOIN_MIN_M, courseroads.DEEP_JOIN_MAX_M
+    exy = np.array([[np.asarray(p.xy, np.float64)[e, :2] for e in (0, -1)] for p in tracks]).reshape(-1, 2)
+
+    def at(pt):                 # (the track plans' ends at pt: [(plan index, end)])
+        hit = np.flatnonzero(np.hypot(exy[:, 0] - pt[0], exy[:, 1] - pt[1]) < 0.3)
+        return [(int(h) // 2, 0 if h % 2 == 0 else -1) for h in hit]
+    n = 0
+    for k0, p0 in enumerate(tracks):
+        xy0 = np.asarray(p0.xy, np.float64)
+        for end in (0, -1):
+            x, y = float(xy0[end, 0]), float(xy0[end, 1])
+            if len(at((x, y))) > 1:
+                continue                                    # (an end the track goes on from: no junction)
+            best = None
+            for q in paved:
+                b = q.bbox
+                if x < b[0] - reach or x > b[2] + reach or y < b[1] - reach or y > b[3] + reach:
+                    continue
+                d, zq = _nearest_xyz(q.xy, q.z, x, y)
+                if d - q.road_half <= reach and (best is None or d - q.road_half < best[0]):
+                    best = (d - q.road_half, zq)
+            if best is None:
+                continue
+            dz = best[1] - float(p0.z[end])
+            if not lo < abs(dz) <= hi:
+                continue
+            span = max(float(g.JUNCTION_TAPER_M), abs(dz) / courseroads.DEEP_JOIN_GRADE)
+            k, e, s0, seen = k0, end, 0.0, set()
+            while k is not None and k not in seen and s0 < span:
+                seen.add(k)
+                p = tracks[k]
+                xy = np.asarray(p.xy, np.float64)[:, :2]
+                z = np.asarray(p.z, np.float64)
+                seg = np.hypot(*np.diff(xy, axis=0).T)
+                s = s0 + np.r_[0.0, np.cumsum(seg)]
+                s = s if e == 0 else s0 + (s[-1] - s0) - (s - s0)
+                w = 0.5 * (1.0 + np.cos(np.pi * np.clip(s / span, 0.0, 1.0)))
+                p.z = z + dz * w
+                s0 += float(seg.sum())
+                far = xy[-1] if e == 0 else xy[0]
+                nxt = [(kk, ee) for kk, ee in at(far) if kk != k]
+                k, e = nxt[0] if len(nxt) == 1 else (None, None)
+            n += 1
+    return n
 
 
 def install_short_log(st):
