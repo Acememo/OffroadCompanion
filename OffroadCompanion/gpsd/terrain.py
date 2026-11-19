@@ -21,7 +21,7 @@ data). Pure Python.
 """
 import hashlib
 
-VERSION = 24                # (2: natural cut banks beside the track where BeamNG.Earth stood a bare step: banks.py;
+VERSION = 25                # (2: natural cut banks beside the track where BeamNG.Earth stood a bare step: banks.py;
                             # 3: the ground's surfaces along the course, sand, mud, loose and packed dirt: surfaces.py;
                             # 4: the track round the trees, courseroads.weave_shifts; grass and scrub on the track
                             # where the land around has them, the wheel paths bare: surfaces.py; washes rarer and
@@ -66,8 +66,16 @@ VERSION = 24                # (2: natural cut banks beside the track where BeamN
                             # ends stands DECK23_GROUND_M over the course's, else a crossing at grade:
                             # shaping.GROUND_DECK_TV;
                             # 24: no ramps off the paved roads, no cut banks by a paved road (their sides as
-                            # BeamNG.Earth grades them): shaping.NO_JOINS_TV, banks.PAVED24_TV)
-VERSIONS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24)  # the versions this code can still make
+                            # BeamNG.Earth grades them): shaping.NO_JOINS_TV, banks.PAVED24_TV;
+                            # 25: the track handed to BeamNG.Earth stops PAVED_GAP_M short of every paved road's
+                            # carriageway (the road untouched where the course is on or across it):
+                            # courseroads.PAVED_GAP_TV)
+VERSIONS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25)  # the versions this code can still make
+# What a server's caches of the course's ground (BeamNG.Earth's road plans, graded blocks, revisits and tiles: share_tag)
+# are kept under, with the course's plan and BeamNG.Earth's version: changed only by an update that changes the ground
+# of a terrain version already made (none should: a ground change is a new terrain version), so an update that does
+# not keeps every place built before it (1.7.33; before it every update built them all again)
+GROUND_CACHE = "1"
 
 
 def seal(cid, paint=True, clear=True, rough="on", ruts="auto", dangers=(), tv=VERSION, earth=None):

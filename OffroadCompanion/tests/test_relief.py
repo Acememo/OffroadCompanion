@@ -719,3 +719,63 @@ class TestTerrain22(unittest.TestCase):
         dz0 = self.field(la, lo)
         dz = rf.dirt_carry(self.course, self.profs, la, lo, dz0, ends, hws, self.field)
         np.testing.assert_allclose(dz, 0.6 * (1.0 - rf._smooth(t / rf.DIRT_CARRY_M)), atol=1e-6)
+
+
+@unittest.skipUnless(HAVE_NP, "numpy")
+class TestTerrain25(unittest.TestCase):
+    """(terrain 25) The track's pieces handed to BeamNG.Earth stop courseroads.PAVED_GAP_M short of every paved road's
+    carriageway (relief.off_paved): its blend no longer lifts the asphalt where a run bent onto the road's edge."""
+
+    def setUp(self):
+        self.ll, self.xy = frame()
+
+    def road(self, x0, y0, x1, y1, hw=3.5):
+        la0, lo0 = self.ll(x0, y0)
+        la1, lo1 = self.ll(x1, y1)
+        return np.array([[lo0, la0, lo1, la1]]), np.array([hw])
+
+    def piece(self, xs, ys, pid="~egpsctest000001000", i0=100):
+        la, lo = self.ll(np.asarray(xs, float), np.asarray(ys, float))
+        return {"id": pid, "w": 8.0, "i0": i0, "ll": [[float(a), float(b)] for a, b in zip(lo, la)],
+                "z": [float(v) for v in np.arange(len(xs))], "off": [0.0] * len(xs)}
+
+    def test_margin(self):
+        ends, hws = self.road(0.0, -100.0, 0.0, 100.0)
+        la, lo = self.ll(np.array([0.0, 3.5, 10.0, 0.0]), np.array([0.0, 0.0, 0.0, 130.0]))
+        np.testing.assert_allclose(rf.paved_margin(lo, la, ends, hws), [-3.5, 0.0, 6.5, 30.0 - 3.5], atol=1e-3)
+        self.assertTrue(np.all(np.isinf(rf.paved_margin(lo, la, np.zeros((0, 4)), np.zeros(0)))))
+
+    def test_crossing_split_at_the_gap(self):
+        ends, hws = self.road(0.0, -100.0, 0.0, 100.0)
+        p = self.piece(np.arange(-40.0, 41.0, 10.0), np.zeros(9))
+        got = rf.off_paved(p, ends, hws)
+        self.assertEqual(len(got), 2, "a run each side")
+        self.assertEqual(got[0]["id"], p["id"])
+        self.assertEqual(got[1]["id"], p["id"] + "~1")
+        self.assertEqual(got[0]["i0"], 100)
+        self.assertEqual(got[1]["i0"], 105, "from its first whole sample")
+        gap = cr.PAVED_GAP_M
+        for q in got:
+            n = len(q["ll"])
+            self.assertTrue(len(q["z"]) == len(q["off"]) == n)
+            m = rf.paved_margin([v[0] for v in q["ll"]], [v[1] for v in q["ll"]], ends, hws)
+            self.assertTrue(np.all(m >= gap - 0.01), "nothing on the road nor its gap")
+            self.assertAlmostEqual(float(m.min()), gap, delta=0.02, msg="ends exactly the gap from the asphalt")
+        x0, _ = self.xy(got[0]["ll"][-1][1], got[0]["ll"][-1][0])
+        self.assertAlmostEqual(float(x0), -3.5 - gap, delta=0.02)
+        self.assertAlmostEqual(got[0]["z"][-1], 3.0 + (10.0 - 3.5 - gap) / 10.0, delta=0.01, msg="height in between")
+        self.assertEqual(got[0]["ll"][:4], p["ll"][:4], "the rest as it was")
+
+    def test_along_the_road_dropped_and_far_untouched(self):
+        ends, hws = self.road(-200.0, 0.0, 200.0, 0.0)
+        along = self.piece(np.arange(-50.0, 51.0, 10.0), np.full(11, 4.0))      # (on the road's edge all along)
+        self.assertEqual(rf.off_paved(along, ends, hws), [], "a run on the road's edge: none")
+        far = self.piece(np.arange(-50.0, 51.0, 10.0), np.full(11, 30.0))
+        self.assertIs(rf.off_paved(far, ends, hws)[0], far, "away from it: the same piece")
+        short = self.piece([0.0, 0.0], [6.0, 4.0])         # (a stub 0.5 m long once cut)
+        self.assertEqual(rf.off_paved(short, ends, hws), [], "a stub under 2 m: none")
+
+    def test_terrain_25(self):
+        from gpsd import terrain
+        self.assertIn(cr.PAVED_GAP_TV, terrain.VERSIONS)
+        self.assertGreaterEqual(terrain.VERSION, cr.PAVED_GAP_TV)

@@ -582,6 +582,7 @@ class _State:
         with self.lock:
             self.plan_failed[fk] = time.monotonic()
             self.stats["relief_road_misses"] = self.stats.get("relief_road_misses", 0) + 1
+        _fault()                    # (built without its rock stretches: not kept for the next visit)
         log.warning("course painter: relief window %d not ready for a cell's roads after %.0f s: its rock stretches "
                     "come later (the ground built before them may change)", k, RELIEF_ROADS_WAIT_S)
         return None
@@ -1183,6 +1184,34 @@ class _State:
             self.wins[k] = ps["pieces"]
         return ps["pieces"]
 
+    def pieces_off_paved(self, md, ps):
+        """(terrain 25) The track's pieces off BeamNG.Earth's paved roads (courseroads.off_paved), with the paved roads
+        round each piece (the same whichever cell asks)."""
+        out = []
+        for p in ps:
+            ll = np.asarray(p.get("ll") or (), np.float64).reshape(-1, 2)
+            if len(ll) < 2:
+                out.append(p)
+                continue
+            pad = (courseroads.PAVED_GAP_M + 30.0) / 111320.0
+            padlo = pad / max(0.05, math.cos(math.radians(float(ll[:, 1].mean()))))
+            ends, hws = [], []
+            for key in self.mapcells.cells_for_bbox(float(ll[:, 1].min()) - pad, float(ll[:, 0].min()) - padlo,
+                                                    float(ll[:, 1].max()) + pad, float(ll[:, 0].max()) + padlo):
+                e, hw, pv = self.cell_roads(md, key, "demand")
+                if len(e) and pv.any():
+                    ends.append(e[pv])
+                    hws.append(hw[pv])
+            if not ends:
+                out.append(p)
+                continue
+            got = relief.off_paved(p, np.concatenate(ends), np.concatenate(hws))
+            if got != [p]:
+                with self.lock:
+                    self.stats["paved_trimmed"] = self.stats.get("paved_trimmed", 0) + 1
+            out.extend(got)
+        return out
+
     def note_roads(self, key, pkey, fp):
         """(1.7.30) Logs a cell whose roads layer, as BeamNG.Earth's builds get it (kind demand), is not the one this
         process gave them before under the same course: what was built from the first (road tiles, their walls and
@@ -1265,6 +1294,8 @@ class _State:
                 complete = complete and done
             else:
                 complete = False
+        if ps and getattr(course, "tv", 1) >= courseroads.PAVED_GAP_TV:
+            ps = self.pieces_off_paved(md, ps)
         if ps:                                  # (where each piece starts along the course, its shade: strip_look)
             shade = {}
             try:
@@ -2133,12 +2164,15 @@ def gps_code_id():
 
 
 def share_tag(st):
-    """The GPS ground this server builds (its plan and the painter's code), "-" when it paints and clears nothing (as
-    BeamNG.Earth's own tiles)."""
+    """The GPS ground this server builds (its plan, terrain.GROUND_CACHE and BeamNG.Earth's version), "-" when it
+    paints and clears nothing (as BeamNG.Earth's own tiles). Before 1.7.33 the painter's code (gps_code_id) in place of
+    GROUND_CACHE: every update, whatever it changed, made every place's plans, blocks and tiles new (the first drive
+    after one built all of it again, its blocks sent provisional and then graded under the car: the user, 2026-11-18,
+    "the terrain is changing under me now and sometimes it bumps me")."""
     plan = st.current() if st is not None else None
     if plan is None:
         return "-"
-    return hashlib.sha1(f"{plan.key}|{gps_code_id()}".encode()).hexdigest()[:12]
+    return hashlib.sha1(f"{plan.key}|{terrain.GROUND_CACHE}|{_earth_version()}".encode()).hexdigest()[:12]
 
 
 def _check_reply(st, head):
@@ -3205,12 +3239,52 @@ def report_spot(server, aid, lat, lon, note="", conn=None, game=None):
     return path
 
 
+# (1.7.33) A follow block the mod asked for whose graded build is running gets BeamNG.Earth's PROVISIONAL_RUNNING_S
+# (7 s) before an ungraded stand-in is sent, and then the graded one in its place under the car: with a course painted
+# the two differ by the track's cuts and fills, metres (the user, 2026-11-18: "the terrain is changing under me now and
+# sometimes it bumps me and makes me lose control of the car": 8 blocks swapped 0.3-6 s after their stand-ins). While a
+# course is painted that wait is PROVISIONAL_EXTRA_S longer (EARTHGPS_PROVISIONAL_EXTRA_S; 0: BeamNG.Earth's own).
+PROVISIONAL_EXTRA_S = 7.0
+
+
+def _install_provisional(em):
+    """Hooks earthd.Connection.provisional_follow (BeamNG.Earth 1.9+): PROVISIONAL_EXTRA_S more for a running graded
+    build while a course is painted."""
+    P = getattr(em, "Connection", None)
+    orig = getattr(P, "provisional_follow", None) if P is not None else None
+    if orig is None or not hasattr(em, "PROVISIONAL_RUNNING_S") or getattr(orig, "_earthgps", False):
+        return False
+    base = float(em.PROVISIONAL_RUNNING_S)
+    try:
+        extra = max(0.0, float(os.environ.get("EARTHGPS_PROVISIONAL_EXTRA_S", PROVISIONAL_EXTRA_S)))
+    except ValueError:
+        extra = PROVISIONAL_EXTRA_S
+
+    async def provisional_follow(self, *a, **kw):
+        st = _state
+        try:
+            c = st.current() if st is not None else None
+            painted = c is not None and (c.paint is not None or bool(c.clearing))
+        except Exception:
+            painted = False
+        em.PROVISIONAL_RUNNING_S = base + (extra if painted else 0.0)
+        return await orig(self, *a, **kw)
+    provisional_follow._earthgps = True
+    provisional_follow._orig = orig
+    P.provisional_follow = provisional_follow
+    return True
+
+
 def _install_geo_reset():
     """BeamNG.Earth's connections (earthd.Connection, this server process) answer GEO_RESET (refresh_geo); every other
     message as before."""
     em = sys.modules.get("earthd")
     if em is None or not hasattr(em, "Connection"):
         return False                        # (not imported yet: asked again on the next beat)
+    try:
+        _install_provisional(em)
+    except Exception as e:
+        log.debug("course painter: no provisional block hook (%s: %s)", type(e).__name__, e)
     if getattr(em.Connection.dispatch, "_earthgps", False):
         return True
     orig = em.Connection.dispatch

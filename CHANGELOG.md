@@ -3,6 +3,30 @@
 Newest first. Release-by-release notes start with 1.5.5. Before that, per-release notes weren't kept, so 1.0 to 1.5.4
 are summarised by what came in, roughly in order.
 
+## 1.7.33 (2026-11-18)
+
+- **Ground version 25: the course painter no longer changes the paved roads.** A spot report at RM 5.8 out of Ensenada
+  showed a paved road about a metre higher for 20 m behind the car. Replayed on the report's data, the road came out at
+  its own height without the course and a metre higher with it, though none of the painter's own steps touched it. The
+  cause was BeamNG.Earth's blend of the track's ground into the road's, where a run of track bent onto the road's edge
+  or ran beside it. From ground version 25 the track handed to BeamNG.Earth stops 2 m short of every paved road's
+  asphalt, ending exactly there so that BeamNG.Earth still takes it to the road's height. Where the course follows a
+  paved road you drive the road, and where it crosses one the road is the crossing. On the four reports replayed, the
+  asphalt now differs from BeamNG.Earth's own by 0.4 m at most (1.4 m before). Older ground versions are unchanged.
+- **Fewer ground swaps under the car.** In the same report, BeamNG.Earth had sent eight blocks of ground as ungraded
+  stand-ins (its "provisional" blocks, sent when the graded block is not ready about 9 s after the game asks). It then
+  swapped in the graded block 0.3 to 6 s later, under the car: on the course the two differ by the track's cuts and
+  fills, metres in places. That was the ground changing under you and the bumps. While a course is loaded, the graded
+  block now gets 7 s more before a stand-in is sent. The setting EARTHGPS_PROVISIONAL_EXTRA_S changes that wait (0 for
+  BeamNG.Earth's own).
+- **The course's ground is kept across updates.** Until now every update of Offroad Companion, whatever it changed, made
+  the server build every place along the course again: all the first drive's blocks were new, and so were its stand-ins.
+  Now the course's ground is kept until an update actually changes it. 1.7.33 lays version 25, so this first drive
+  still builds again.
+- A cell's roads built while its relief window was still missing are no longer kept for the next visit.
+- 1.7.33 lays ground version 25, so everyone on a BeamMP server should update together (server hosts: replace the
+  server files too).
+
 ## 1.7.32 (2026-11-18)
 
 - **BeamNG.Earth 1.10.1-beta** is the version inside the .exe: fewer server pauses and freezes in BeamMP, cars slowed

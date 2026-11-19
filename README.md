@@ -230,6 +230,13 @@ Now nothing is narrower than about 6 m or changes over less than about 3 m: whoo
 in long swells, the windrows and the turns' sand as wide soft mounds, the banked corner a smooth bowl with its lip just
 past the edge, and the tallest places easing into their limit instead of flattening off.
 
+**Ground version 25** keeps version 24's ground, but the track it hands BeamNG.Earth stops 2 m short of every paved
+road's asphalt. Where the course runs along a paved road you drive the road itself, and where it crosses one the road is
+the crossing. Before, a run of track that bent onto a paved road's edge, or ran beside one, overlapped its asphalt, and
+BeamNG.Earth blended the track's ground into the road's there: the asphalt stood up to a metre and a half higher. The
+track still reaches the road's height where it meets it (BeamNG.Earth takes a road ending within 3 m of another to
+its height).
+
 **Ground version 24** keeps version 23's ground without the ramps off paved roads (where the course joins or leaves
 one: their side slopes reached far beside the road, filling and digging metres there) and keeps the cut banks beside
 the track 8 m clear of paved roads: the painter changes the ground beside a paved road by half a metre at most, never on
@@ -710,6 +717,10 @@ and 1.6.0 (and 1.5.x). With 1.10:
   whatever it says (the course painter's track terrain settings decide where). Its other switches change BeamNG.Earth's
   ground for everyone who turns them on: on a BeamMP server, keep them the same on every computer. Its **Restart world
   server** button works with the .exe (the course painter starts again with the server).
+- While a course is loaded, a block of ground whose graded build is still running gets 7 s more before BeamNG.Earth
+  sends an ungraded stand-in, which it swaps for the graded block under the car when that is done (on the course the
+  two differ by the track's cuts and fills: a bump that can throw the car). The course's ground is kept across updates
+  that leave it as it was, so the first drive after an update no longer builds every place again.
 
 With 1.8:
 

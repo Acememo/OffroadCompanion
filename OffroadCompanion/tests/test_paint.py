@@ -43,6 +43,11 @@ def route_clear():
     return corridor.ROUTE_CLEAR_M
 
 
+def mock_current(st, plan):
+    from unittest import mock
+    return mock.patch.object(st, "current", lambda *a, **k: plan)
+
+
 def ll(x, y):
     return LAT0 + y / KY, LON0 + x / KX
 
@@ -749,6 +754,75 @@ class TestInsideEarth(unittest.TestCase):
         self.assertEqual(float(out[1]), 0.0, "on its side: none")
         self.assertEqual(float(out[-1]), 2.0, "away from it: the bank")
         self.assertTrue(np.all(np.diff(out) >= -1e-9), "fading in away from the road")
+
+    def test_track_stops_short_of_the_paved_roads(self):
+        """(terrain 25) The track handed to BeamNG.Earth (roads_for) has no point within courseroads.PAVED_GAP_M of a
+        paved road's carriageway (the residential road across the course at x 4200), and runs right up to that gap
+        either side of it (BeamNG.Earth's junction snap still takes it to the road's height)."""
+        from gpsd import courseroads as cr, relief as rf
+        st = self.earthpatch.state()
+        c = st.current().paint
+        if c.tv < cr.PAVED_GAP_TV:
+            self.skipTest("terrain before 25")
+        with st.lock:
+            st.merged.clear()
+        ends, hws = [], []
+        pts = []
+        for key in self.mapcells.cells_for_bbox(*ll(4100, -60), *ll(4300, 60)):
+            e, hw, pv = st.cell_roads(self.md, key, "demand")
+            ends.append(e[pv])
+            hws.append(hw[pv])
+            base = st.orig_cell(self.md, key, ("roads",), "demand").layers.get("roads")
+            f = st.roads_for(self.md, key, base, "demand")
+            for i in range(len(f)):
+                if str(f.ids[i]).startswith(cr.ID_PREFIX):
+                    pts.append(np.asarray(f.parts(i)[0][0], np.float64))
+        ends, hws = np.concatenate(ends), np.concatenate(hws)
+        self.assertTrue(len(ends) and pts)
+        p = np.concatenate(pts)
+        m = rf.paved_margin(p[:, 0], p[:, 1], ends, hws)
+        self.assertGreaterEqual(float(m.min()), cr.PAVED_GAP_M - 0.02, "none on the asphalt nor its gap")
+        x, y = xy(p[:, 1], p[:, 0])
+        near = np.abs(y) < 20
+        self.assertTrue(np.any(near & (x < 4200) & (m < cr.PAVED_GAP_M + 0.05)), "up to the gap west of it")
+        self.assertTrue(np.any(near & (x > 4200) & (m < cr.PAVED_GAP_M + 0.05)), "and east of it")
+
+    def test_ground_tag_kept_across_updates(self):
+        """(1.7.33) The caches of the course's ground are keyed by its plan, terrain.GROUND_CACHE and BeamNG.Earth's
+        version, not the painter's code: an update that leaves the ground as it was keeps every place built before."""
+        from unittest import mock
+        from gpsd import terrain
+        st = self.earthpatch.state()
+        tag = self.earthpatch.share_tag(st)
+        self.assertNotEqual(tag, "-")
+        with mock.patch.object(self.earthpatch, "gps_code_id", lambda: "another-build"):
+            self.assertEqual(self.earthpatch.share_tag(st), tag, "the painter's code changed: the same")
+        with mock.patch.object(terrain, "GROUND_CACHE", terrain.GROUND_CACHE + "x"):
+            self.assertNotEqual(self.earthpatch.share_tag(st), tag, "GROUND_CACHE changed: another")
+
+    def test_provisional_wait_longer_under_a_course(self):
+        """(1.7.33) While a course is painted, a follow block's running graded build gets PROVISIONAL_EXTRA_S more
+        before BeamNG.Earth sends an ungraded stand-in (swapped for the graded one under the car later)."""
+        import asyncio
+        import types
+        ep = self.earthpatch
+        seen = []
+
+        class Connection:
+            async def provisional_follow(self, anchor, cx, cy, job):
+                seen.append(em.PROVISIONAL_RUNNING_S)
+                return None
+        em = types.SimpleNamespace(Connection=Connection, PROVISIONAL_RUNNING_S=7.0)
+        self.assertTrue(ep._install_provisional(em))
+        self.assertFalse(ep._install_provisional(em), "once")
+        asyncio.run(Connection().provisional_follow(None, 0, 0, None))
+        self.assertEqual(seen[-1], 7.0 + ep.PROVISIONAL_EXTRA_S, "a course painted: longer")
+        st = ep.state()
+        with mock_current(st, None):
+            asyncio.run(Connection().provisional_follow(None, 0, 0, None))
+        self.assertEqual(seen[-1], 7.0, "no course: BeamNG.Earth's own")
+        self.assertFalse(ep._install_provisional(types.SimpleNamespace(Connection=type("C", (), {}))),
+                         "an Earth without provisional blocks: no hook")
 
     def test_roads_changed_logged(self):
         """(1.7.30) A cell's roads handed to BeamNG.Earth's builds unlike before under the same course: logged (what

@@ -1214,3 +1214,95 @@ def rocks(course, profiles, bounds, auto=False):
                 out["rank"].append(float(_hash(qa, qo, 90 + slot)) * 0.2)
                 out["scale"].append(0.85 + 0.3 * float(_hash(qa, qo, 100 + slot)))
     return {k: np.asarray(v, np.float64) for k, v in out.items()}
+
+
+# -- the track off the paved roads (terrain 25: courseroads.PAVED_GAP_TV) --------------------------------------------
+def paved_margin(lon, lat, ends, hws):
+    """Per point: its distance (m) past the nearest paved road's carriageway edge (negative on it). ends (M, 4) lon0,
+    lat0, lon1, lat1 of the roads' segments, hws (M,) their half widths (m). inf with no roads. Pure."""
+    lon = np.asarray(lon, np.float64).ravel()
+    lat = np.asarray(lat, np.float64).ravel()
+    out = np.full(len(lon), np.inf)
+    ends = np.asarray(ends, np.float64).reshape(-1, 4)
+    if not len(lon) or not len(ends):
+        return out
+    lat0, lon0 = float(lat.mean()), float(lon.mean())
+    kx = math.radians(1.0) * courseroads.R_EARTH * math.cos(math.radians(lat0))
+    ky = math.radians(1.0) * courseroads.R_EARTH
+    px, py = (lon - lon0) * kx, (lat - lat0) * ky
+    ax, ay = (ends[:, 0] - lon0) * kx, (ends[:, 1] - lat0) * ky
+    dx, dy = (ends[:, 2] - lon0) * kx - ax, (ends[:, 3] - lat0) * ky - ay
+    L2 = np.maximum(dx * dx + dy * dy, 1e-12)
+    hws = np.asarray(hws, np.float64).ravel()
+    for i in range(0, len(px), 256):
+        qx, qy = px[i:i + 256, None], py[i:i + 256, None]
+        t = np.clip(((qx - ax) * dx + (qy - ay) * dy) / L2, 0.0, 1.0)
+        d = np.hypot(ax + t * dx - qx, ay + t * dy - qy) - hws
+        out[i:i + 256] = d.min(axis=1)
+    return out
+
+
+def off_paved(p, ends, hws, gap=None):
+    """Piece p without its stretches within gap (m) of a paved road's carriageway (paved_margin): split into its runs
+    off them ("id~n" from the second on, i0 their first whole sample's). A run cut there ends on the line exactly gap
+    from the carriageway (its heights and offsets there in between its samples'), so BeamNG.Earth's junction snap
+    (JUNCTION_REACH_M 3 m past the edge) still takes it to the road's height; a run shorter than 2 m is dropped. Pure."""
+    gap = courseroads.PAVED_GAP_M if gap is None else gap
+    ll = np.asarray(p.get("ll") or (), np.float64).reshape(-1, 2)
+    n = len(ll)
+    if n < 2:
+        return [p]
+    m = paved_margin(ll[:, 0], ll[:, 1], ends, hws)
+    keep = m >= gap
+    if keep.all():
+        return [p]
+    lists = [k for k, v in p.items() if isinstance(v, list) and len(v) == n and k != "ll"]
+
+    def cut(i, j):          # (the point between samples i (kept) and j (not), gap from the carriageway)
+        lo, hi = 0.0, 1.0
+        for _ in range(12):
+            f = (lo + hi) / 2
+            q = ll[i] + (ll[j] - ll[i]) * f
+            if paved_margin(q[:1], q[1:], ends, hws)[0] >= gap:
+                lo = f
+            else:
+                hi = f
+        return lo
+
+    def at(i, j, f):
+        pt = {"ll": [round(float(ll[i][0] + (ll[j][0] - ll[i][0]) * f), 7),
+                     round(float(ll[i][1] + (ll[j][1] - ll[i][1]) * f), 7)]}
+        for k in lists:
+            a, b = p[k][i], p[k][j]
+            pt[k] = round(float(a) + (float(b) - float(a)) * f, 2) if isinstance(a, (int, float)) else a
+        return pt
+
+    out = []
+    i = 0
+    while i < n:
+        if not keep[i]:
+            i += 1
+            continue
+        j = i
+        while j + 1 < n and keep[j + 1]:
+            j += 1
+        pts = [{"ll": p["ll"][q], **{k: p[k][q] for k in lists}} for q in range(i, j + 1)]
+        if i > 0:
+            pts.insert(0, at(i, i - 1, cut(i, i - 1)))
+        if j < n - 1:
+            pts.append(at(j, j + 1, cut(j, j + 1)))
+        xy = np.asarray([pt["ll"] for pt in pts], np.float64)
+        kx = math.radians(1.0) * courseroads.R_EARTH * math.cos(math.radians(float(xy[:, 1].mean())))
+        run = float(np.hypot(np.diff(xy[:, 0]) * kx, np.diff(xy[:, 1]) * math.radians(1.0) * courseroads.R_EARTH).sum())
+        if len(pts) >= 2 and run >= 2.0:
+            q = {k: v for k, v in p.items() if k not in lists and k != "ll"}
+            q["ll"] = [pt["ll"] for pt in pts]
+            for k in lists:
+                q[k] = [pt[k] for pt in pts]
+            if out:
+                q["id"] = f"{p['id']}~{len(out)}"
+            if "i0" in p:
+                q["i0"] = int(p["i0"]) + i
+            out.append(q)
+        i = j + 1
+    return out

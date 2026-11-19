@@ -54,6 +54,13 @@ JOIN_MAX = 5
 # A dirt road is still joined at its middle (the track becomes that road). Crossings are untouched.
 PAVED_EDGE_TV = 11
 PAVED_EDGE_IN_M = 0.5
+# (terrain 25; the user, 2026-11-18, a spot report at RM 5.8 out of Ensenada: "It still modifying that paved road") A
+# run's ends bent onto a paved road's edge, and a run beside one, overlapped its carriageway: BeamNG.Earth blends the
+# track's ground into the road's there (replayed: the asphalt up to 1 m higher with the track than without it). The
+# track handed to BeamNG.Earth stops PAVED_GAP_M short of every paved road's carriageway (earthpatch.pieces_off_paved):
+# where the course is on or across a paved road, the road is the course's.
+PAVED_GAP_TV = 25
+PAVED_GAP_M = 2.0
 SIDE_M = 16.0
 SIDE_STEP_M = 2.0
 RISE_M = 1.0                # the ground within RISE_M + RISE_GRADE x offset of the track's height is room
@@ -736,3 +743,4 @@ def piece_box(p):
     xs = [q[0] for q in p["ll"]]
     ys = [q[1] for q in p["ll"]]
     return min(xs), min(ys), max(xs), max(ys)
+
